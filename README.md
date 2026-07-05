@@ -8,8 +8,9 @@ decoding, public domain / MIT-0) and [Dear ImGui](https://github.com/ocornut/img
 (UI, MIT) behind an original API. Snoredacity — and any future app — builds on
 SND instead of on JUCE.
 
-This repo's folder/remote is still named `app-template`; SND is the name of
-what it's becoming.
+The CMake project/binary are still named `app-template` internally (from
+before this had its own repo) — harmless, but worth renaming to `snd` whenever
+someone's next in there.
 
 ## Why this exists
 
