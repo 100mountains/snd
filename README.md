@@ -32,6 +32,21 @@ Early — this repo currently proves the foundation actually builds and runs:
 one placeholder binary that opens an audio device and a blank window, calling
 miniaudio and Dear ImGui directly. SND's own wrapper API doesn't exist yet.
 
+It also has a `--selftest` mode that decodes and plays a bundled test file,
+records briefly from the input device, and reports pass/fail with an exit
+code — a real (if basic) check that the audio path actually works, not just
+that it compiles. A VST/plugin-load check is listed but skipped until plugin
+hosting exists.
+
+## Testing this repo
+
+`tools/build.sh` configures, builds, and runs `--selftest` in one command.
+That's the only build/test automation this repo has, and deliberately so:
+**there is no CI here, and there won't be.** A previous project's GitHub
+Actions setup ran unexpectedly often and produced a surprise bill — this repo
+only builds when someone runs the script by hand. `tools/build.sh --no-test`
+skips the selftest if you just want a build.
+
 ## What's vendored vs. original
 
 - **Vendored, unmodified** (never forked, pulled in via CMake `FetchContent`):
@@ -43,9 +58,16 @@ miniaudio and Dear ImGui directly. SND's own wrapper API doesn't exist yet.
 ## Build
 
 ```sh
+tools/build.sh            # configure + build + run --selftest
+tools/build.sh --no-test  # configure + build only
+```
+
+Or by hand (same steps `tools/build.sh` runs — this is what to use on Windows):
+
+```sh
 cmake -S . -B build
 cmake --build build
-./build/app-template        # path varies by generator/platform
+./build/app-template --selftest   # or without the flag to see the window
 ```
 
 ## Dev workflow

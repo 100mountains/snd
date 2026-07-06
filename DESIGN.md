@@ -28,6 +28,11 @@ and runs (`main.cpp` calls miniaudio and Dear ImGui directly — see `README.md`
 SND's own wrapper API (`include/snd/`) doesn't exist yet. This section describes
 the intended direction, not current implementation status.
 
+SND is being built as its own thing right now, independent of any specific app.
+Snoredacity is the anticipated first consumer, not the thing currently being
+worked on — decisions here should be driven by what makes SND a coherent,
+reusable foundation, not narrowed to one downstream app's requirements.
+
 ## Why Not JUCE
 
 JUCE is dual-licensed: free under AGPLv3 (which obligates any app built on it to
@@ -111,6 +116,30 @@ consumers, no docs/issue/PR overhead, and freedom to redesign as real usage
 private → public is a one-click decision that can be made anytime later; the
 reverse isn't, so there's no cost to deferring that choice.
 
+## Testing And Verification: No CI, Ever
+
+This repo has no GitHub Actions workflow and none should be added. A prior
+project's CI ran automatically far more often than intended and produced a
+surprise bill before anyone noticed — private-repo Actions minutes are
+metered, and it's easy for a workflow trigger to run far more often than
+whoever set it up expected. SND avoids that risk entirely rather than trying
+to configure around it: `tools/build.sh` is a local, manually-run, one-shot
+script (configure, build, run `--selftest`) — nothing runs unless someone runs
+it by hand, on their own machine, on purpose.
+
+The app binary has a `--selftest` mode (see `main.cpp`) that exercises the
+real audio path headlessly: decode-and-play a bundled test file, record
+briefly from the input device, and report pass/fail with a matching process
+exit code. This is the model going forward as SND grows — verification lives
+in the app itself as a runnable check, not in a separate test framework or
+remote pipeline. New capabilities should extend `--selftest` with a real
+check of the actual behaviour (not just "did it compile"), the same way
+Murk's own Debug build supports a `--selftest` flag for its own smoke checks.
+
+A VST/plugin-load check is listed in `--selftest`'s output but skipped, since
+plugin hosting doesn't exist yet (see above). Add that check for real once
+plugin hosting lands, rather than leaving it as a permanent stub.
+
 ## Fundamental Model
 
 Not yet established beyond the vendored/original split above. Once SND has
@@ -127,3 +156,4 @@ separate — matching the same discipline JUCE and miniaudio already apply.
 - Never fork a vendored dependency just to rename it — wrap it instead.
 - Keep the audio-I/O layer and any future plugin-hosting layer separable, the
   way JUCE itself does.
+- No CI. Verification is `tools/build.sh` and `--selftest`, run by hand.

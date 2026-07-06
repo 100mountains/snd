@@ -52,6 +52,12 @@ target_include_directories(app-template PRIVATE
     ${imgui_SOURCE_DIR}/backends
 )
 
+# Lets --selftest find test/assets/tone.wav regardless of the build directory
+# or working directory it's run from.
+target_compile_definitions(app-template PRIVATE
+    SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
+)
+
 target_link_libraries(app-template PRIVATE glfw)
 
 if(APPLE)
