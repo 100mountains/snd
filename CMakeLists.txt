@@ -1,14 +1,19 @@
-cmake_minimum_required(VERSION 3.22)
-project(app-template LANGUAGES C CXX)
+cmake_minimum_required(VERSION 3.25)
+project(snd LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(APPLE)
+    enable_language(OBJC OBJCXX)
+endif()
 
 include(FetchContent)
 
-# miniaudio -- single-header audio I/O + decoding (public domain / MIT-0)
-# Pinned to a release tag, not a floating branch, so every build uses the same
-# code until someone deliberately bumps this.
+# ---------------------------------------------------------------------------
+# Vendored dependencies -- all pinned to release tags, all unmodified.
+# ---------------------------------------------------------------------------
+
+# miniaudio -- audio device I/O + decoding (public domain / MIT-0)
 FetchContent_Declare(
     miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
@@ -16,7 +21,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniaudio)
 
-# Dear ImGui -- immediate-mode UI (MIT). Pinned (plain release, not -docking).
+# Dear ImGui -- immediate-mode UI (MIT). Plain release, not -docking.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -24,7 +29,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
-# GLFW -- cross-platform windowing (zlib license). Pinned.
+# GLFW -- cross-platform windowing (zlib)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -36,8 +41,53 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
-add_executable(app-template
-    main.cpp
+# Steinberg VST3 SDK (MIT) -- used for its hosting utilities (Module,
+# PlugProvider, HostProcessData, ParameterChanges) and to build the test
+# plugin. Samples/utilities/VSTGUI all disabled; only the library targets
+# (base, pluginterfaces, sdk_common, sdk, sdk_hosting) get built.
+set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
+set(SMTG_ADD_VST3_UTILITIES OFF CACHE BOOL "" FORCE)
+set(SMTG_ENABLE_IOS_TARGETS OFF CACHE BOOL "" FORCE)
+set(SMTG_CREATE_MODULE_INFO OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    vst3sdk
+    GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
+    GIT_TAG v3.8.0_build_66
+    GIT_SHALLOW TRUE
+    GIT_SUBMODULES "base" "cmake" "pluginterfaces" "public.sdk"
+)
+FetchContent_MakeAvailable(vst3sdk)
+
+# ---------------------------------------------------------------------------
+# The snd library
+# ---------------------------------------------------------------------------
+
+set(SND_VST3_HOSTING_EXTRA
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/plugprovider.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp
+)
+if(APPLE)
+    list(APPEND SND_VST3_HOSTING_EXTRA
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_mac.mm)
+    set_source_files_properties(
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_mac.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+elseif(WIN32)
+    list(APPEND SND_VST3_HOSTING_EXTRA
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_win32.cpp)
+else()
+    list(APPEND SND_VST3_HOSTING_EXTRA
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_linux.cpp)
+endif()
+
+add_library(snd STATIC
+    src/audio.cpp
+    src/ui.cpp
+    src/plugin_host.cpp
+    src/plugin_host/vst3/vst3_format.cpp
+    ${SND_VST3_HOSTING_EXTRA}
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -46,31 +96,101 @@ add_executable(app-template
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
-target_include_directories(app-template PRIVATE
-    ${miniaudio_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}
-    ${imgui_SOURCE_DIR}/backends
+if(APPLE)
+    target_sources(snd PRIVATE src/plugin_host/au/au_format.mm)
+endif()
+
+target_include_directories(snd
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${miniaudio_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends
 )
 
-# Lets --selftest find test/assets/tone.wav regardless of the build directory
-# or working directory it's run from.
-target_compile_definitions(app-template PRIVATE
-    SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
-)
-
-target_link_libraries(app-template PRIVATE glfw)
+target_link_libraries(snd PUBLIC glfw sdk_hosting)
 
 if(APPLE)
-    target_link_libraries(app-template PRIVATE
+    target_link_libraries(snd PUBLIC
         "-framework OpenGL"
         "-framework CoreAudio"
         "-framework CoreFoundation"
         "-framework AudioToolbox"
         "-framework AudioUnit")
 elseif(WIN32)
-    target_link_libraries(app-template PRIVATE opengl32)
+    target_link_libraries(snd PUBLIC opengl32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)
-    target_link_libraries(app-template PRIVATE OpenGL::GL Threads::Threads m dl)
+    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl)
 endif()
+
+# ---------------------------------------------------------------------------
+# TestGain -- minimal known-good VST3 plugin owned by SND, used by --selftest
+# so tests never depend on what happens to be installed on a machine.
+# ---------------------------------------------------------------------------
+
+add_library(testgain MODULE
+    test/plugins/testgain/testgain.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/vstsinglecomponenteffect.cpp
+)
+if(APPLE)
+    target_sources(testgain PRIVATE ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/macmain.cpp)
+elseif(WIN32)
+    target_sources(testgain PRIVATE ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/dllmain.cpp)
+else()
+    target_sources(testgain PRIVATE ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/linuxmain.cpp)
+endif()
+target_link_libraries(testgain PRIVATE sdk)
+if(APPLE)
+    target_link_libraries(testgain PRIVATE "-framework CoreFoundation")
+endif()
+
+# Assemble the .vst3 bundle layout by hand (no SDK cmake helpers -- keeps the
+# validator and module-info tooling out of the build).
+set(SND_TESTGAIN_BUNDLE ${CMAKE_BINARY_DIR}/TestGain.vst3)
+if(APPLE)
+    set_target_properties(testgain PROPERTIES
+        OUTPUT_NAME TestGain
+        PREFIX ""
+        SUFFIX ""
+        LIBRARY_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/MacOS)
+    file(WRITE ${SND_TESTGAIN_BUNDLE}/Contents/Info.plist
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>CFBundleExecutable</key><string>TestGain</string>
+    <key>CFBundleIdentifier</key><string>com.snd.testgain</string>
+    <key>CFBundleName</key><string>TestGain</string>
+    <key>CFBundlePackageType</key><string>BNDL</string>
+    <key>CFBundleVersion</key><string>0.1.0</string>
+</dict>
+</plist>
+")
+elseif(WIN32)
+    set_target_properties(testgain PROPERTIES
+        OUTPUT_NAME TestGain
+        PREFIX ""
+        SUFFIX ".vst3"
+        LIBRARY_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win)
+else()
+    set_target_properties(testgain PROPERTIES
+        OUTPUT_NAME TestGain
+        PREFIX ""
+        SUFFIX ".so"
+        LIBRARY_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/${CMAKE_SYSTEM_PROCESSOR}-linux)
+endif()
+
+# ---------------------------------------------------------------------------
+# Example app (window + audio device + --selftest)
+# ---------------------------------------------------------------------------
+
+add_executable(snd-example examples/snd-example/main.cpp)
+target_link_libraries(snd-example PRIVATE snd)
+add_dependencies(snd-example testgain)
+
+target_compile_definitions(snd-example PRIVATE
+    SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
+    SND_TEST_VST3_PATH="${SND_TESTGAIN_BUNDLE}"
+)

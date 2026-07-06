@@ -31,7 +31,7 @@ cmake --build build
 
 if [ "$RUN_TEST" = 1 ]; then
     echo "== selftest =="
-    ./build/app-template --selftest
+    ./build/snd-example --selftest
     echo "== done: build OK, selftest passed =="
 else
     echo "== done: build OK (selftest skipped) =="

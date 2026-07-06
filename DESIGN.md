@@ -90,7 +90,46 @@ license already permits using it freely as-is, so forking it would only mean
 permanently maintaining a copy of someone else's audio-I/O code, with no
 corresponding benefit.
 
-## Explicitly Deferred: Plugin Hosting (VST3/AU)
+## Plugin Hosting (VST3 + AU) — BUILT, headless v1
+
+`snd::plugin` exists and passes selftest. Shape (from the audits in
+`docs/research/`):
+
+- `Format` (per-format base) / `HostManager` (registry + scanning) /
+  `Instance` (unified across formats) / `Parameter` — mirrors JUCE's proven
+  Format/FormatManager/AudioPluginInstance layering.
+- **Stable parameter IDs only**: `Parameter::id()` is the VST3 `ParamID` /
+  AU parameter ID as a string. Indices are never exposed — they shift between
+  plugin versions and corrupt saved state.
+- **Threading** (per the JUCE audit): a spin lock guards process(); parameter
+  sets are queued — delivered to the processor at the next `process()` via
+  `ParameterChanges` (sample-accurate) and to the controller at the next
+  `idle()` on the main thread. Setup/state calls are main-thread-only.
+  **State restore clears pending parameter queues** — restored state is the
+  new truth; a stale queued change must not overwrite it (selftest caught
+  exactly this on first run).
+- **VST3 backend** wraps the SDK's own hosting utilities (`Module`,
+  `PlugProvider`, `HostProcessData`, `ParameterChanges`) rather than
+  reimplementing them. Bus-arrangement calls always pass valid pointers even
+  for zero buses (known plugin-crash pitfall). SND processes through bus 0;
+  extra buses get silence.
+- **AU backend** (macOS only, compiled out elsewhere) uses
+  AudioToolbox/AudioComponent directly: registry discovery
+  (`AudioComponentFindNext`), render-callback input feeding, state via
+  `kAudioUnitProperty_ClassInfo` plists. AU v2 effects only for now; AUv3
+  async instantiation is future work.
+- **Crash-loop protection**: dead-man's-pedal file around scanning
+  (mark-before-load / clear-after-success / skip-if-still-marked). True
+  out-of-process isolation remains a later hardening phase.
+- **No MIDI** (owner decision): hosted plugins get an empty event list.
+- **No editor-GUI embedding yet**: `Instance` has no window concept. When
+  wanted, the per-OS embedding (NSView/HWND/X11) belongs in SND, and the AU
+  side has three tiers to support (CocoaUI / RequestViewController /
+  AUGenericView — see the JUCE audit).
+- `TestGain` (test/plugins/testgain) is SND's own single-component VST3 gain
+  plugin, built in-tree so selftest never depends on installed plugins.
+
+## Formerly Deferred: Plugin Hosting (original rationale, kept for history)
 
 Not needed for Snoredacity (VST hosting there is a "maybe," not a requirement),
 and not attempted yet. When it's actually wanted:
@@ -136,16 +175,23 @@ remote pipeline. New capabilities should extend `--selftest` with a real
 check of the actual behaviour (not just "did it compile"), the same way
 Murk's own Debug build supports a `--selftest` flag for its own smoke checks.
 
-A VST/plugin-load check is listed in `--selftest`'s output but skipped, since
-plugin hosting doesn't exist yet (see above). Add that check for real once
-plugin hosting lands, rather than leaving it as a permanent stub.
+`--selftest` now covers all four capabilities with behaviour checks:
+decode+playback, capture, VST3 hosting (TestGain: RMS actually changes with
+the gain parameter; state + stable-ID round-trip), AU hosting (AULowpass
+attenuates an 8kHz sine). The selftest binary is `snd-example`.
 
 ## Fundamental Model
 
-Not yet established beyond the vendored/original split above. Once SND has
-real behaviour, this section should describe its distinct flows (audio
-device/graph, UI/interaction, persistence) and state plainly that they stay
-separate — matching the same discipline JUCE and miniaudio already apply.
+Three flows, kept separate:
+
+1. **Audio flow** — device callbacks and plugin `process()` calls. Real-time
+   rules apply: no allocation, no blocking locks, no I/O. Communication with
+   the rest of the app is via atomics and spin-lock-guarded queues only.
+2. **Control flow** — main-thread API calls (prepare/unprepare, parameter
+   sets, `idle()`, state save/load, scanning). Parameter changes cross into
+   the audio flow through queues, never direct calls.
+3. **Persistence flow** — opaque state blobs (`saveState`/`loadState`) and
+   stable parameter IDs. Restored state invalidates queued control changes.
 
 ## Current Design Biases
 

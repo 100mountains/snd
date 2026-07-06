@@ -10,9 +10,9 @@ Module map (target shape):
 
 | Module | Contents | Status |
 |---|---|---|
-| `snd::audio` | device I/O, file decode/encode (miniaudio underneath) | placeholder proven, wrapper API not started |
-| `snd::ui` | window/GL/ImGui shell, custom widget layer (gradients etc.) | placeholder proven, wrapper API not started |
-| `snd::plugin` | VST3 + AU hosting, headless-first | next up — phase 1 |
+| `snd::audio` | device I/O, file decode/encode (miniaudio underneath) | **built** (Device/CaptureDevice/Player/load/saveWav) |
+| `snd::ui` | window/GL/ImGui shell, custom widget layer (gradients etc.) | **built** (Window shell, gradientPanel/gradientButton) |
+| `snd::plugin` | VST3 + AU hosting, headless-first | **built** (phases 1+2 done, selftest passing) |
 | `snd::dsp` | FFT, spectral tools (needed for spectral editing) | later — check Murk's existing FFT code first |
 | `snd::platform` | native file dialogs, paths, OS packaging glue | later |
 

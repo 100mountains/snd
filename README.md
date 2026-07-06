@@ -1,75 +1,66 @@
 # SND
 
 **A JUCE/iPlug replacement attempt.** SND is a small, permissively-licensed,
-in-house audio+UI foundation library — cross-platform audio I/O and a GUI,
-without JUCE's AGPLv3-or-pay licensing. It wraps
-[miniaudio](https://github.com/mackron/miniaudio) (audio device I/O +
-decoding, public domain / MIT-0) and [Dear ImGui](https://github.com/ocornut/imgui)
-(UI, MIT) behind an original API. Snoredacity — and any future app — builds on
-SND instead of on JUCE.
+in-house audio+UI foundation library — cross-platform audio I/O, a GUI shell,
+and headless VST3/AU plugin hosting, without JUCE's AGPLv3-or-pay licensing.
+Apps (Snoredacity first) build on SND instead of on JUCE.
 
-The CMake project/binary are still named `app-template` internally (from
-before this had its own repo) — harmless, but worth renaming to `snd` whenever
-someone's next in there.
+## What works right now
 
-## Why this exists
+- `snd::audio` — device playback/capture, file decode (wav/flac/mp3/ogg),
+  WAV writing, a simple `Player` (wraps miniaudio)
+- `snd::ui` — window + Dear ImGui frame shell (GLFW/OpenGL underneath),
+  file drag-and-drop, first custom widgets (`gradientPanel`, `gradientButton`
+  drawn via ImDrawList — ImGui itself stays unmodified)
+- `snd::plugin` — headless plugin hosting:
+  - **VST3** everywhere, built on the VST3 SDK's own hosting utilities
+  - **AU** on macOS via AudioToolbox directly
+  - format-agnostic API (`Format` / `HostManager` / `Instance` /
+    `Parameter`), stable parameter IDs (never indices), spin-lock +
+    deferred-parameter threading model per the JUCE audit, dead-man's-pedal
+    crash-loop protection for scanning
+  - no editor-GUI embedding yet, deliberately; no MIDI, deliberately
+- `TestGain` — SND's own minimal VST3 plugin, built as part of the tree so
+  hosting tests never depend on what's installed on a machine
 
-JUCE solves cross-platform audio + UI + (optionally) VST/AU plugin hosting
-well, but it ties whatever you build to AGPLv3 or a paid commercial license.
-SND exists to get the same job done — cross-platform audio I/O, a UI layer,
-and eventually plugin hosting if it's ever needed — on foundations that impose
-nothing: miniaudio and Dear ImGui are both about as permissively licensed as
-software gets. See `DESIGN.md` for the full reasoning, including why plugin
-hosting is deliberately not attempted yet, and how JUCE's own module
-boundaries (audio-device layer separate from plugin-hosting layer) inform how
-SND is laid out.
+See `ROADMAP.md` for phases and `docs/research/` for the JUCE/VST3 audits
+this design came from. `DESIGN.md` records the architecture decisions.
 
-This is unrelated to Murk, which keeps its existing JUCE setup untouched.
-
-## Status
-
-Early — this repo currently proves the foundation actually builds and runs:
-one placeholder binary that opens an audio device and a blank window, calling
-miniaudio and Dear ImGui directly. SND's own wrapper API doesn't exist yet.
-
-It also has a `--selftest` mode that decodes and plays a bundled test file,
-records briefly from the input device, and reports pass/fail with an exit
-code — a real (if basic) check that the audio path actually works, not just
-that it compiles. A VST/plugin-load check is listed but skipped until plugin
-hosting exists.
-
-## Testing this repo
-
-`tools/build.sh` configures, builds, and runs `--selftest` in one command.
-That's the only build/test automation this repo has, and deliberately so:
-**there is no CI here, and there won't be.** A previous project's GitHub
-Actions setup ran unexpectedly often and produced a surprise bill — this repo
-only builds when someone runs the script by hand. `tools/build.sh --no-test`
-skips the selftest if you just want a build.
-
-## What's vendored vs. original
-
-- **Vendored, unmodified** (never forked, pulled in via CMake `FetchContent`):
-  miniaudio, Dear ImGui, GLFW.
-- **Original** (SND's own code, once it exists): everything under `include/snd/`
-  and `src/` — a thin API wrapping the above with SND's own names and
-  ergonomics, not a copy of miniaudio's or ImGui's own surface.
-
-## Build
+## Build & test
 
 ```sh
 tools/build.sh            # configure + build + run --selftest
 tools/build.sh --no-test  # configure + build only
 ```
 
-Or by hand (same steps `tools/build.sh` runs — this is what to use on Windows):
+Or by hand (same steps — use these on Windows):
 
 ```sh
 cmake -S . -B build
 cmake --build build
-./build/app-template --selftest   # or without the flag to see the window
+./build/snd-example --selftest   # headless checks
+./build/snd-example              # window + audio device demo
 ```
+
+`--selftest` verifies real behaviour, not just compilation: decodes and plays
+a bundled file, records from the input device, loads TestGain and confirms
+audio is actually altered by a parameter set via stable ID (and that state
+save/restore round-trips), and hosts Apple's AULowpass confirming an 8kHz
+sine gets attenuated.
+
+**There is no CI here, and there won't be.** A previous project's GitHub
+Actions produced a surprise bill; this repo only builds when someone runs the
+script by hand.
+
+## What's vendored vs. original
+
+- **Vendored, unmodified, pinned** (via CMake `FetchContent`): miniaudio
+  0.11.25, Dear ImGui v1.92.8, GLFW 3.4, VST3 SDK v3.8.0 (MIT — used for its
+  hosting utilities and to build TestGain)
+- **Original**: everything under `include/snd/` and `src/` — SND's own API
+  and the backends behind it
 
 ## Dev workflow
 
-See `AGENTS.md` for the multi-agent dev workflow (genericized from Murk's) that applies to work in this repo.
+See `AGENTS.md` for the multi-agent dev workflow (genericized from Murk's)
+that applies to work in this repo.
