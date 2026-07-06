@@ -13,8 +13,8 @@ Module map (target shape):
 | `snd::audio` | device I/O, file decode/encode (miniaudio underneath) | **built** (Device/CaptureDevice/Player/load/saveWav) |
 | `snd::ui` | window/GL/ImGui shell, custom widget layer (gradients etc.) | **built** (Window shell, gradientPanel/gradientButton) |
 | `snd::plugin` | VST3 + AU hosting, headless-first | **built** (phases 1+2 done, selftest passing) |
-| `snd::dsp` | FFT, spectral tools (needed for spectral editing) | later — check Murk's existing FFT code first |
-| `snd::platform` | native file dialogs, paths, OS packaging glue | later |
+| `snd::dsp` | FFT, spectral tools (needed for spectral editing) | **built** (PFFFT vendored, STFT round-trip -140dB) |
+| `snd::platform` | native file dialogs, paths, OS packaging glue | **built** (NFD dialogs, configDir) |
 
 Reference material: `docs/research/` (JUCE hosting audit = architecture to
 mirror and pitfalls to avoid; VST3 SDK audit = the hosting utilities we build
@@ -80,7 +80,7 @@ on).
 9. Custom widget layer starts here (gradient panels etc., drawn via
    `ImDrawList` on top of stock ImGui — ImGui itself stays unmodified).
 
-## Phase 4 — the wave editor app (own repo, first SND consumer) — v0 BUILT (github.com/100mountains/Snoredacity)
+## Phase 4 — the wave editor app (own repo, first SND consumer) — BUILT, now named WaveBob (github.com/100mountains/WaveBob) — tabs, menus, spectral editing, plugin apply, record
 
 Two-mode design:
 - **Organize mode**: whole-window file browser/manager for WAV libraries —
