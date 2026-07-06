@@ -7,22 +7,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
 
 # miniaudio -- single-header audio I/O + decoding (public domain / MIT-0)
+# Pinned to a release tag, not a floating branch, so every build uses the same
+# code until someone deliberately bumps this.
 FetchContent_Declare(
     miniaudio
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
-    GIT_TAG master
+    GIT_TAG 0.11.25
 )
 FetchContent_MakeAvailable(miniaudio)
 
-# Dear ImGui -- immediate-mode UI (MIT)
+# Dear ImGui -- immediate-mode UI (MIT). Pinned (plain release, not -docking).
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG master
+    GIT_TAG v1.92.8
 )
 FetchContent_MakeAvailable(imgui)
 
-# GLFW -- cross-platform windowing (zlib license)
+# GLFW -- cross-platform windowing (zlib license). Pinned.
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -30,7 +32,7 @@ set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(
     glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG master
+    GIT_TAG 3.4
 )
 FetchContent_MakeAvailable(glfw)
 
