@@ -20,7 +20,7 @@ Reference material: `docs/research/` (JUCE hosting audit = architecture to
 mirror and pitfalls to avoid; VST3 SDK audit = the hosting utilities we build
 on).
 
-## Phase 1 — VST3 hosting (headless)
+## Phase 1 — VST3 hosting (headless) — DONE
 
 1. Vendor the VST3 SDK via `FetchContent`, pinned tag, unmodified — same
    pattern as miniaudio/imgui/glfw. Reuse its hosting utilities
@@ -58,7 +58,7 @@ on).
    the output actually changed, save/restore state, confirm a parameter
    round-trips by stable ID. Replaces the current "skipped" VST line.
 
-## Phase 2 — AU hosting (macOS only)
+## Phase 2 — AU hosting (macOS only) — DONE
 
 6. AU backend in `src/plugin_host/au/`, compiled out on Windows/Linux, using
    AudioToolbox/AudioComponent directly (no third-party SDK):
@@ -70,7 +70,7 @@ on).
 7. `--selftest` AU check using a built-in Apple unit (e.g. an Apple-supplied
    effect), so no custom AU needs building.
 
-## Phase 3 — SND wrapper API for audio + UI
+## Phase 3 — SND wrapper API for audio + UI — DONE
 
 8. Promote the placeholder into the real library: `include/snd/audio.h`
    (device open/close, decode, playback/capture) and `include/snd/ui.h`
@@ -80,7 +80,7 @@ on).
 9. Custom widget layer starts here (gradient panels etc., drawn via
    `ImDrawList` on top of stock ImGui — ImGui itself stays unmodified).
 
-## Phase 4 — the wave editor app (own repo, first SND consumer)
+## Phase 4 — the wave editor app (own repo, first SND consumer) — v0 BUILT (github.com/100mountains/Snoredacity)
 
 Two-mode design:
 - **Organize mode**: whole-window file browser/manager for WAV libraries —
