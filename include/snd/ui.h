@@ -53,4 +53,19 @@ void gradientPanel(const ImVec2& size, ImU32 topLeft, ImU32 topRight,
 // Gradient-filled button. Returns true when clicked.
 bool gradientButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bottom);
 
+// Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
+// independent like SVG). `active` renders with the accent colour + border.
+enum class Icon {
+    Play,
+    Stop,
+    Record,
+    SkipToStart,
+    SkipToEnd,
+    Loop,
+    Waveform,
+    Spectrum,
+};
+bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
+                bool active = false);
+
 } // namespace snd::ui
