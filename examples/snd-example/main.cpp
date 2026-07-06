@@ -4,6 +4,7 @@
 //                snd capability (decode+play, record, VST3 hosting, AU hosting)
 
 #include "snd/audio.h"
+#include "snd/dsp.h"
 #include "snd/plugin_host.h"
 #include "snd/ui.h"
 
@@ -272,23 +273,94 @@ static bool selftestAU()
 }
 #endif
 
+static bool selftestResample()
+{
+    snd::audio::Buffer in;
+    in.channels = 2;
+    in.sampleRate = 48000;
+    auto mono = makeSine(1000.0, 48000, 48000, 0.5f);
+    for (float s : mono) {
+        in.samples.push_back(s);
+        in.samples.push_back(s);
+    }
+
+    snd::audio::Buffer out;
+    std::string err;
+    if (!snd::audio::resample(in, 44100, out, &err)) {
+        printf("FAIL (%s)\n", err.c_str());
+        return false;
+    }
+
+    double expected = 48000.0 * 44100.0 / 48000.0;
+    double got = (double)out.frames();
+    if (std::abs(got - expected) > 64) {
+        printf("FAIL (expected ~%.0f frames at 44100, got %.0f)\n", expected, got);
+        return false;
+    }
+    // Content sanity: a sine stays a sine of similar level.
+    std::vector<float> outMono(out.frames());
+    for (uint64_t f = 0; f < out.frames(); ++f)
+        outMono[f] = out.samples[f * out.channels];
+    double ratio = rms(outMono) / rms(mono);
+    if (ratio < 0.9 || ratio > 1.1) {
+        printf("FAIL (RMS ratio after resample %.3f)\n", ratio);
+        return false;
+    }
+    printf("PASS (48k -> 44.1k, %llu frames, RMS ratio %.3f)\n",
+           (unsigned long long)out.frames(), ratio);
+    return true;
+}
+
+static bool selftestStft()
+{
+    // Round-trip transparency: analyze + resynthesize a sine, compare.
+    const double sr = 48000.0;
+    auto sine = makeSine(440.0, sr, 48000, 0.5f);
+
+    auto data = snd::dsp::stftAnalyze(sine.data(), sine.size());
+    auto back = snd::dsp::stftResynthesize(data);
+    if (back.size() != sine.size()) {
+        printf("FAIL (length changed: %zu -> %zu)\n", sine.size(), back.size());
+        return false;
+    }
+
+    // Error RMS relative to signal RMS, in dB. Skip the outermost edge
+    // samples where the first/last window taper.
+    const size_t guard = 4096;
+    double errAcc = 0, sigAcc = 0;
+    size_t n = 0;
+    for (size_t i = guard; i + guard < sine.size(); ++i) {
+        double e = (double)back[i] - sine[i];
+        errAcc += e * e;
+        sigAcc += (double)sine[i] * sine[i];
+        ++n;
+    }
+    double errDb = 10.0 * std::log10((errAcc / n) / (sigAcc / n));
+    if (errDb > -60.0) {
+        printf("FAIL (round-trip error %.1f dB, need < -60)\n", errDb);
+        return false;
+    }
+    printf("PASS (STFT round-trip error %.1f dB)\n", errDb);
+    return true;
+}
+
 static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/4] decode + playback: ");
+    printf("[1/6] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/4] capture/record:    ");
+    printf("[2/6] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/4] VST3 hosting:      ");
+    printf("[3/6] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/4] AU hosting:        ");
+    printf("[4/6] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -297,7 +369,15 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    bool all = ok1 && ok2 && ok3 && ok4;
+    printf("[5/6] resample:          ");
+    fflush(stdout);
+    bool ok5 = selftestResample();
+
+    printf("[6/6] STFT round-trip:   ");
+    fflush(stdout);
+    bool ok6 = selftestStft();
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }

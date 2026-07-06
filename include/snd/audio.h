@@ -26,6 +26,9 @@ bool load(const std::string& path, Buffer& out, std::string* error = nullptr);
 // Write a 32-bit float WAV.
 bool saveWav(const std::string& path, const Buffer& buf, std::string* error = nullptr);
 
+// High-quality resample to a new rate (miniaudio's resampler underneath).
+bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error = nullptr);
+
 // Playback device. The callback runs on the audio thread: no allocation, no
 // locks, no I/O in it.
 class Device {
@@ -93,6 +96,10 @@ public:
 
     uint64_t positionFrames() const;
     void seek(uint64_t frame);
+
+    // Peak absolute sample level of the most recent audio callback, per
+    // channel (0/1). For UI meters; decays are the caller's business.
+    float outputPeak(uint32_t channel) const;
 
 private:
     struct Impl;

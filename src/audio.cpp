@@ -6,7 +6,9 @@
 
 #include "snd/audio.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstring>
 
 namespace snd::audio {
@@ -70,6 +72,48 @@ bool saveWav(const std::string& path, const Buffer& buf, std::string* error)
         if (error) *error = "short write: " + path;
         return false;
     }
+    return true;
+}
+
+bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error)
+{
+    if (in.channels == 0 || in.sampleRate == 0 || in.samples.empty()) {
+        if (error) *error = "empty buffer";
+        return false;
+    }
+    if (newRate == in.sampleRate) {
+        out = in;
+        return true;
+    }
+
+    ma_resampler_config cfg = ma_resampler_config_init(
+        ma_format_f32, in.channels, in.sampleRate, newRate, ma_resample_algorithm_linear);
+    // linear with high lpf order is miniaudio's best built-in quality
+    cfg.linear.lpfOrder = MA_MAX_FILTER_ORDER;
+
+    ma_resampler resampler;
+    if (ma_resampler_init(&cfg, nullptr, &resampler) != MA_SUCCESS) {
+        if (error) *error = "resampler init failed";
+        return false;
+    }
+
+    out.channels = in.channels;
+    out.sampleRate = newRate;
+    ma_uint64 expectedOut = 0;
+    ma_resampler_get_expected_output_frame_count(&resampler, in.frames(), &expectedOut);
+    out.samples.assign((size_t)(expectedOut + 16) * in.channels, 0.0f);
+
+    ma_uint64 framesIn = in.frames();
+    ma_uint64 framesOut = expectedOut + 16;
+    ma_result r = ma_resampler_process_pcm_frames(&resampler, in.samples.data(), &framesIn,
+                                                  out.samples.data(), &framesOut);
+    ma_resampler_uninit(&resampler, nullptr);
+
+    if (r != MA_SUCCESS) {
+        if (error) *error = "resample failed";
+        return false;
+    }
+    out.samples.resize((size_t)framesOut * out.channels);
     return true;
 }
 
@@ -189,23 +233,33 @@ struct Player::Impl {
     std::atomic<uint64_t> position{0};
     std::atomic<uint64_t> endFrame{0};
     std::atomic<bool> playing{false};
+    std::atomic<float> peaks[2] = {0.0f, 0.0f};
 
     void render(float* out, uint32_t frames, uint32_t channels)
     {
         std::memset(out, 0, sizeof(float) * frames * channels);
-        if (!playing.load(std::memory_order_relaxed) || !buffer)
+        if (!playing.load(std::memory_order_relaxed) || !buffer) {
+            peaks[0].store(0.0f, std::memory_order_relaxed);
+            peaks[1].store(0.0f, std::memory_order_relaxed);
             return;
+        }
 
         const Buffer& b = *buffer;
         uint64_t pos = position.load(std::memory_order_relaxed);
         const uint64_t end = std::min<uint64_t>(endFrame.load(std::memory_order_relaxed), b.frames());
 
+        float pk[2] = {0.0f, 0.0f};
         for (uint32_t f = 0; f < frames && pos < end; ++f, ++pos) {
             for (uint32_t c = 0; c < channels; ++c) {
                 uint32_t src = c < b.channels ? c : b.channels - 1;
-                out[f * channels + c] = b.samples[pos * b.channels + src];
+                float v = b.samples[pos * b.channels + src];
+                out[f * channels + c] = v;
+                if (c < 2)
+                    pk[c] = std::max(pk[c], std::fabs(v));
             }
         }
+        peaks[0].store(pk[0], std::memory_order_relaxed);
+        peaks[1].store(pk[1], std::memory_order_relaxed);
         position.store(pos, std::memory_order_relaxed);
         if (pos >= end)
             playing.store(false, std::memory_order_relaxed);
@@ -255,5 +309,10 @@ void Player::stop() { impl->playing.store(false); }
 bool Player::isPlaying() const { return impl->playing.load(); }
 uint64_t Player::positionFrames() const { return impl->position.load(); }
 void Player::seek(uint64_t frame) { impl->position.store(frame); }
+
+float Player::outputPeak(uint32_t channel) const
+{
+    return channel < 2 ? impl->peaks[channel].load(std::memory_order_relaxed) : 0.0f;
+}
 
 } // namespace snd::audio

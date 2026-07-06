@@ -41,6 +41,26 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glfw)
 
+# nativefiledialog-extended -- native OS file/folder dialogs (zlib)
+set(NFD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    nfd
+    GIT_REPOSITORY https://github.com/btzy/nativefiledialog-extended.git
+    GIT_TAG v1.3.0
+)
+FetchContent_MakeAvailable(nfd)
+
+# PFFFT -- small fast FFT for audio (BSD-like FFTPACK license). No release
+# tags upstream, so pinned to a commit. Compiled directly into snd below
+# rather than via its own CMake (keeps its test/bench targets out).
+FetchContent_Declare(
+    pffft
+    GIT_REPOSITORY https://github.com/marton78/pffft.git
+    GIT_TAG a4b03590cc2a4bea56f9721996e3057835799179
+    SOURCE_SUBDIR "cmake-subdir-skipped"
+)
+FetchContent_MakeAvailable(pffft)
+
 # Steinberg VST3 SDK (MIT) -- used for its hosting utilities (Module,
 # PlugProvider, HostProcessData, ParameterChanges) and to build the test
 # plugin. Samples/utilities/VSTGUI all disabled; only the library targets
@@ -85,8 +105,12 @@ endif()
 add_library(snd STATIC
     src/audio.cpp
     src/ui.cpp
+    src/dsp.cpp
+    src/platform.cpp
     src/plugin_host.cpp
     src/plugin_host/vst3/vst3_format.cpp
+    ${pffft_SOURCE_DIR}/src/pffft.c
+    ${pffft_SOURCE_DIR}/src/pffft_common.c
     ${SND_VST3_HOSTING_EXTRA}
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -106,9 +130,12 @@ target_include_directories(snd
         ${miniaudio_SOURCE_DIR}
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
+    PRIVATE
+        ${pffft_SOURCE_DIR}/src
+        ${pffft_SOURCE_DIR}/include/pffft
 )
 
-target_link_libraries(snd PUBLIC glfw sdk_hosting)
+target_link_libraries(snd PUBLIC glfw sdk_hosting nfd)
 
 if(APPLE)
     target_link_libraries(snd PUBLIC
