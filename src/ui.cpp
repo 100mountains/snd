@@ -83,6 +83,12 @@ bool Window::shouldClose() const
     return !impl->window || glfwWindowShouldClose(impl->window);
 }
 
+void Window::setShouldClose(bool close)
+{
+    if (impl->window)
+        glfwSetWindowShouldClose(impl->window, close ? GLFW_TRUE : GLFW_FALSE);
+}
+
 bool Window::beginFrame()
 {
     if (!impl->window)

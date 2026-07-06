@@ -22,6 +22,9 @@ public:
     void destroy();
 
     bool shouldClose() const;
+    // Veto or force a close request (e.g. to show an "unsaved changes" prompt
+    // after the user hits the window's close button).
+    void setShouldClose(bool close);
 
     // Poll events + start an ImGui frame. Returns false if the window is gone.
     bool beginFrame();
