@@ -26,8 +26,13 @@ bool load(const std::string& path, Buffer& out, std::string* error = nullptr);
 // Write a 32-bit float WAV.
 bool saveWav(const std::string& path, const Buffer& buf, std::string* error = nullptr);
 
-// High-quality resample to a new rate (miniaudio's resampler underneath).
+// Resample to a new rate (miniaudio's resampler, highest built-in quality).
 bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error = nullptr);
+
+// Names of the available devices, for settings UIs. Order may change between
+// calls; select devices by NAME, not index.
+std::vector<std::string> playbackDevices();
+std::vector<std::string> captureDevices();
 
 // Playback device. The callback runs on the audio thread: no allocation, no
 // locks, no I/O in it.
@@ -40,7 +45,9 @@ public:
     Device(const Device&) = delete;
     Device& operator=(const Device&) = delete;
 
-    bool open(uint32_t sampleRate = 48000, uint32_t channels = 2, Callback cb = {});
+    // deviceName from playbackDevices(); empty = system default.
+    bool open(uint32_t sampleRate = 48000, uint32_t channels = 2, Callback cb = {},
+              const std::string& deviceName = {});
     void close();
     bool start();
     void stop();
@@ -65,7 +72,9 @@ public:
     CaptureDevice(const CaptureDevice&) = delete;
     CaptureDevice& operator=(const CaptureDevice&) = delete;
 
-    bool open(uint32_t sampleRate = 48000, uint32_t channels = 1, Callback cb = {});
+    // deviceName from captureDevices(); empty = system default.
+    bool open(uint32_t sampleRate = 48000, uint32_t channels = 1, Callback cb = {},
+              const std::string& deviceName = {});
     void close();
     bool start();
     void stop();
@@ -82,7 +91,8 @@ public:
     Player();
     ~Player();
 
-    bool open(uint32_t sampleRate = 48000, uint32_t channels = 2);
+    bool open(uint32_t sampleRate = 48000, uint32_t channels = 2,
+              const std::string& deviceName = {});
     void close();
 
     // The buffer must outlive playback. Sample-rate conversion is not done;
@@ -93,6 +103,11 @@ public:
     void playRange(uint64_t startFrame, uint64_t endFrame); // half-open [start,end)
     void stop();
     bool isPlaying() const;
+
+    // Gapless looping of the current range (whole buffer for play(), the
+    // given range for playRange()). Takes effect live, from any thread.
+    void setLooping(bool loop);
+    bool isLooping() const;
 
     uint64_t positionFrames() const;
     void seek(uint64_t frame);

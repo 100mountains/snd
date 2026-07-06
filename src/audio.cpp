@@ -14,6 +14,69 @@
 namespace snd::audio {
 
 // ---------------------------------------------------------------------------
+// shared context + device enumeration (main thread only)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+ma_context* globalContext()
+{
+    static struct Holder {
+        ma_context ctx{};
+        bool ok = false;
+        Holder() { ok = ma_context_init(nullptr, 0, nullptr, &ctx) == MA_SUCCESS; }
+    } holder;
+    return holder.ok ? &holder.ctx : nullptr;
+}
+
+// Look up a device id by name. Returns nullptr (= default) when not found or
+// name is empty. The pointed-to id stays valid until the next enumeration.
+const ma_device_id* findDeviceId(bool playback, const std::string& name)
+{
+    if (name.empty())
+        return nullptr;
+    ma_context* ctx = globalContext();
+    if (!ctx)
+        return nullptr;
+    ma_device_info* playbackInfos = nullptr;
+    ma_device_info* captureInfos = nullptr;
+    ma_uint32 playbackCount = 0, captureCount = 0;
+    if (ma_context_get_devices(ctx, &playbackInfos, &playbackCount, &captureInfos,
+                               &captureCount) != MA_SUCCESS)
+        return nullptr;
+    ma_device_info* infos = playback ? playbackInfos : captureInfos;
+    ma_uint32 count = playback ? playbackCount : captureCount;
+    for (ma_uint32 i = 0; i < count; ++i)
+        if (name == infos[i].name)
+            return &infos[i].id;
+    return nullptr;
+}
+
+std::vector<std::string> deviceNames(bool playback)
+{
+    std::vector<std::string> out;
+    ma_context* ctx = globalContext();
+    if (!ctx)
+        return out;
+    ma_device_info* playbackInfos = nullptr;
+    ma_device_info* captureInfos = nullptr;
+    ma_uint32 playbackCount = 0, captureCount = 0;
+    if (ma_context_get_devices(ctx, &playbackInfos, &playbackCount, &captureInfos,
+                               &captureCount) != MA_SUCCESS)
+        return out;
+    ma_device_info* infos = playback ? playbackInfos : captureInfos;
+    ma_uint32 count = playback ? playbackCount : captureCount;
+    for (ma_uint32 i = 0; i < count; ++i)
+        out.push_back(infos[i].name);
+    return out;
+}
+
+} // namespace
+
+std::vector<std::string> playbackDevices() { return deviceNames(true); }
+std::vector<std::string> captureDevices() { return deviceNames(false); }
+
+// ---------------------------------------------------------------------------
 // load / save
 // ---------------------------------------------------------------------------
 
@@ -140,7 +203,8 @@ struct Device::Impl {
 Device::Device() : impl(new Impl) {}
 Device::~Device() { close(); }
 
-bool Device::open(uint32_t sampleRate, uint32_t channels, Callback cb)
+bool Device::open(uint32_t sampleRate, uint32_t channels, Callback cb,
+                  const std::string& deviceName)
 {
     close();
     impl->callback = std::move(cb);
@@ -148,11 +212,12 @@ bool Device::open(uint32_t sampleRate, uint32_t channels, Callback cb)
     ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
     cfg.playback.format = ma_format_f32;
     cfg.playback.channels = channels;
+    cfg.playback.pDeviceID = findDeviceId(true, deviceName);
     cfg.sampleRate = sampleRate;
     cfg.dataCallback = Impl::maCallback;
     cfg.pUserData = impl.get();
 
-    if (ma_device_init(nullptr, &cfg, &impl->device) != MA_SUCCESS)
+    if (ma_device_init(globalContext(), &cfg, &impl->device) != MA_SUCCESS)
         return false;
     impl->open = true;
     return true;
@@ -194,7 +259,8 @@ struct CaptureDevice::Impl {
 CaptureDevice::CaptureDevice() : impl(new Impl) {}
 CaptureDevice::~CaptureDevice() { close(); }
 
-bool CaptureDevice::open(uint32_t sampleRate, uint32_t channels, Callback cb)
+bool CaptureDevice::open(uint32_t sampleRate, uint32_t channels, Callback cb,
+                         const std::string& deviceName)
 {
     close();
     impl->callback = std::move(cb);
@@ -202,11 +268,12 @@ bool CaptureDevice::open(uint32_t sampleRate, uint32_t channels, Callback cb)
     ma_device_config cfg = ma_device_config_init(ma_device_type_capture);
     cfg.capture.format = ma_format_f32;
     cfg.capture.channels = channels;
+    cfg.capture.pDeviceID = findDeviceId(false, deviceName);
     cfg.sampleRate = sampleRate;
     cfg.dataCallback = Impl::maCallback;
     cfg.pUserData = impl.get();
 
-    if (ma_device_init(nullptr, &cfg, &impl->device) != MA_SUCCESS)
+    if (ma_device_init(globalContext(), &cfg, &impl->device) != MA_SUCCESS)
         return false;
     impl->open = true;
     return true;
@@ -231,8 +298,10 @@ struct Player::Impl {
     Device device;
     const Buffer* buffer = nullptr;         // set from main thread while stopped
     std::atomic<uint64_t> position{0};
+    std::atomic<uint64_t> rangeStart{0};
     std::atomic<uint64_t> endFrame{0};
     std::atomic<bool> playing{false};
+    std::atomic<bool> looping{false};
     std::atomic<float> peaks[2] = {0.0f, 0.0f};
 
     void render(float* out, uint32_t frames, uint32_t channels)
@@ -246,10 +315,21 @@ struct Player::Impl {
 
         const Buffer& b = *buffer;
         uint64_t pos = position.load(std::memory_order_relaxed);
-        const uint64_t end = std::min<uint64_t>(endFrame.load(std::memory_order_relaxed), b.frames());
+        const uint64_t start = rangeStart.load(std::memory_order_relaxed);
+        const uint64_t end =
+            std::min<uint64_t>(endFrame.load(std::memory_order_relaxed), b.frames());
+        const bool loop = looping.load(std::memory_order_relaxed);
 
         float pk[2] = {0.0f, 0.0f};
-        for (uint32_t f = 0; f < frames && pos < end; ++f, ++pos) {
+        for (uint32_t f = 0; f < frames; ++f) {
+            if (pos >= end) {
+                if (loop && end > start)
+                    pos = start; // gapless wrap, mid-block
+                else {
+                    playing.store(false, std::memory_order_relaxed);
+                    break;
+                }
+            }
             for (uint32_t c = 0; c < channels; ++c) {
                 uint32_t src = c < b.channels ? c : b.channels - 1;
                 float v = b.samples[pos * b.channels + src];
@@ -257,23 +337,24 @@ struct Player::Impl {
                 if (c < 2)
                     pk[c] = std::max(pk[c], std::fabs(v));
             }
+            ++pos;
         }
         peaks[0].store(pk[0], std::memory_order_relaxed);
         peaks[1].store(pk[1], std::memory_order_relaxed);
         position.store(pos, std::memory_order_relaxed);
-        if (pos >= end)
-            playing.store(false, std::memory_order_relaxed);
     }
 };
 
 Player::Player() : impl(new Impl) {}
 Player::~Player() { close(); }
 
-bool Player::open(uint32_t sampleRate, uint32_t channels)
+bool Player::open(uint32_t sampleRate, uint32_t channels, const std::string& deviceName)
 {
     auto* p = impl.get();
-    if (!impl->device.open(sampleRate, channels,
-                           [p](float* out, uint32_t frames, uint32_t ch) { p->render(out, frames, ch); }))
+    if (!impl->device.open(
+            sampleRate, channels,
+            [p](float* out, uint32_t frames, uint32_t ch) { p->render(out, frames, ch); },
+            deviceName))
         return false;
     return impl->device.start();
 }
@@ -293,6 +374,7 @@ void Player::play()
     if (!impl->buffer) return;
     if (impl->position.load() >= impl->buffer->frames())
         impl->position.store(0);
+    impl->rangeStart.store(0);
     impl->endFrame.store(impl->buffer->frames());
     impl->playing.store(true);
 }
@@ -301,12 +383,15 @@ void Player::playRange(uint64_t startFrame, uint64_t endFrame)
 {
     if (!impl->buffer) return;
     impl->position.store(startFrame);
+    impl->rangeStart.store(startFrame);
     impl->endFrame.store(endFrame);
     impl->playing.store(true);
 }
 
 void Player::stop() { impl->playing.store(false); }
 bool Player::isPlaying() const { return impl->playing.load(); }
+void Player::setLooping(bool loop) { impl->looping.store(loop); }
+bool Player::isLooping() const { return impl->looping.load(); }
 uint64_t Player::positionFrames() const { return impl->position.load(); }
 void Player::seek(uint64_t frame) { impl->position.store(frame); }
 

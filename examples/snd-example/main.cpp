@@ -344,23 +344,60 @@ static bool selftestStft()
     return true;
 }
 
+static bool selftestLooping()
+{
+    // 0.25s tone, looped: after 0.8s it must still be playing inside the range.
+    snd::audio::Buffer buf;
+    buf.channels = 2;
+    buf.sampleRate = 48000;
+    auto mono = makeSine(440.0, 48000, 12000, 0.25f);
+    for (float s : mono) {
+        buf.samples.push_back(s);
+        buf.samples.push_back(s);
+    }
+
+    snd::audio::Player player;
+    if (!player.open(48000, 2)) {
+        printf("FAIL (could not open playback device)\n");
+        return false;
+    }
+    player.setBuffer(&buf);
+    player.setLooping(true);
+    player.playRange(0, buf.frames());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    bool stillPlaying = player.isPlaying();
+    uint64_t pos = player.positionFrames();
+    player.stop();
+    bool stopped = !player.isPlaying();
+    player.close();
+
+    if (stillPlaying && pos <= buf.frames() && stopped) {
+        printf("PASS (looped past buffer length, stop() sticks)\n");
+        return true;
+    }
+    printf("FAIL (playing %d, pos %llu, stopped %d)\n", stillPlaying,
+           (unsigned long long)pos, stopped);
+    return false;
+}
+
 static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/6] decode + playback: ");
+    printf("[1/7] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/6] capture/record:    ");
+    printf("[2/7] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/6] VST3 hosting:      ");
+    printf("[3/7] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/6] AU hosting:        ");
+    printf("[4/7] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -369,15 +406,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/6] resample:          ");
+    printf("[5/7] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/6] STFT round-trip:   ");
+    printf("[6/7] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6;
+    printf("[7/7] player looping:    ");
+    fflush(stdout);
+    bool ok7 = selftestLooping();
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
