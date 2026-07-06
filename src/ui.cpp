@@ -33,10 +33,12 @@ struct Window::Impl {
 Window::Window() : impl(new Impl) {}
 Window::~Window() { destroy(); }
 
-bool Window::create(int width, int height, const std::string& title)
+bool Window::create(int width, int height, const std::string& title, bool decorated)
 {
     if (!glfwInit())
         return false;
+
+    glfwWindowHint(GLFW_DECORATED, decorated ? GLFW_TRUE : GLFW_FALSE);
 
 #if defined(__APPLE__)
     const char* glslVersion = "#version 150";
@@ -132,6 +134,41 @@ int Window::height() const
     int w = 0, h = 0;
     if (impl->window) glfwGetWindowSize(impl->window, &w, &h);
     return h;
+}
+
+void Window::getPosition(int& x, int& y) const
+{
+    x = y = 0;
+    if (impl->window)
+        glfwGetWindowPos(impl->window, &x, &y);
+}
+
+void Window::setPosition(int x, int y)
+{
+    if (impl->window)
+        glfwSetWindowPos(impl->window, x, y);
+}
+
+void Window::setSize(int width, int height)
+{
+    if (impl->window)
+        glfwSetWindowSize(impl->window, std::max(320, width), std::max(240, height));
+}
+
+void Window::minimize()
+{
+    if (impl->window)
+        glfwIconifyWindow(impl->window);
+}
+
+void Window::toggleMaximize()
+{
+    if (!impl->window)
+        return;
+    if (glfwGetWindowAttrib(impl->window, GLFW_MAXIMIZED))
+        glfwRestoreWindow(impl->window);
+    else
+        glfwMaximizeWindow(impl->window);
 }
 
 std::vector<std::string> Window::takeDroppedFiles()

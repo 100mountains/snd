@@ -18,7 +18,9 @@ public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
 
-    bool create(int width, int height, const std::string& title);
+    // decorated=false creates a frameless window (the app draws its own
+    // title bar and calls the position/size/minimize helpers below).
+    bool create(int width, int height, const std::string& title, bool decorated = true);
     void destroy();
 
     bool shouldClose() const;
@@ -34,6 +36,13 @@ public:
     void setTitle(const std::string& title);
     int width() const;
     int height() const;
+
+    // For app-drawn title bars on frameless windows.
+    void getPosition(int& x, int& y) const;
+    void setPosition(int x, int y);
+    void setSize(int width, int height);
+    void minimize();
+    void toggleMaximize();
 
     // Paths of files dropped onto the window since the last call (then cleared).
     std::vector<std::string> takeDroppedFiles();
