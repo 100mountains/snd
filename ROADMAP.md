@@ -59,13 +59,12 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 - Dogfood gate (**M1**): an SND-built plugin with an ImGui GUI running inside
   WaveBob's rack
 
-### ③ `snd::midi` — DECISION GATE: reverses the "no MIDI anywhere" charter line.
-Owner must bless before work starts; there is no Murk-on-SND without it
-(53/57 files). WaveBob simply won't link it.
-- event/buffer types, CoreMIDI in/out devices — M
-- host side: VST3 IEventList + AU MusicDeviceMIDIEvent (our event lists are
-  deliberately empty today) — M
-- client side: MIDI through the plugin SDK processor API — S/M
+### ③ `snd::midi` — BLESSED 2026-07-07, host side DONE
+- ~~event/buffer types, CoreMIDI in/out devices~~ done (virtual-endpoint
+  loopback selftest)
+- ~~host side: VST3 IEventList + IMidiMapping CC route, AU
+  MusicDeviceMIDIEvent, aumu/aumf in the scan~~ done (DLS-synth-sings selftest)
+- client side: MIDI through the plugin SDK processor API — lands with ② — S
 
 ### ④ App plumbing
 - state tree (ValueTree replacement: tree + listeners + undo + serialize;

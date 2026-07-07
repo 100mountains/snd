@@ -13,6 +13,8 @@
 //     next idle(). Call idle() periodically from the main thread.
 #pragma once
 
+#include "snd/midi.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -59,6 +61,19 @@ public:
     virtual bool process(const float* const* in, uint32_t inChannels,
                          float* const* out, uint32_t outChannels,
                          uint32_t frames) = 0;
+
+    // Same, with MIDI: midiIn events (frame offsets within this block) are
+    // delivered to the plugin; events the plugin emits land in midiOut when
+    // given. Default ignores MIDI, so effect-only instances need not care.
+    virtual bool processMidi(const float* const* in, uint32_t inChannels,
+                             float* const* out, uint32_t outChannels,
+                             uint32_t frames, const midi::Buffer& midiIn,
+                             midi::Buffer* midiOut = nullptr)
+    {
+        (void)midiIn;
+        (void)midiOut;
+        return process(in, inChannels, out, outChannels, frames);
+    }
 
     // Main thread, periodically (~60Hz while interactive; once per file is
     // fine for batch). Flushes queued parameter changes to the plugin's

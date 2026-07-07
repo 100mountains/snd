@@ -20,6 +20,7 @@
 #include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
+#include "pluginterfaces/vst/ivstmidicontrollers.h"
 #include "pluginterfaces/base/funknownimpl.h"
 
 #include <algorithm>
@@ -164,6 +165,7 @@ public:
         component_ = provider_->getComponentPtr();
         controller_ = provider_->getControllerPtr();
         processor_ = FUnknownPtr<Vst::IAudioProcessor>(component_);
+        midiMapping_ = FUnknownPtr<Vst::IMidiMapping>(controller_);
         handler_ = owned(new VST3ComponentHandler(this));
         if (controller_)
             controller_->setComponentHandler(handler_);
@@ -180,6 +182,7 @@ public:
         unprepare();
         parameters_.clear();
         ownedParameters_.clear();
+        midiMapping_ = nullptr;
         processor_ = nullptr;
         controller_ = nullptr;
         component_ = nullptr;
@@ -235,7 +238,8 @@ public:
         processContext_.tempo = 120.0;
         processContext_.state = Vst::ProcessContext::kPlaying | Vst::ProcessContext::kTempoValid;
         processData_.processContext = &processContext_;
-        processData_.inputEvents = &eventList_;   // stays empty: no MIDI in SND
+        processData_.inputEvents = &eventList_; // filled by processMidi()
+        processData_.outputEvents = &outputEventList_;
         processData_.inputParameterChanges = &inputParamChanges_;
         processData_.outputParameterChanges = &outputParamChanges_;
 
@@ -259,6 +263,14 @@ public:
     bool process(const float* const* in, uint32_t inChannels,
                  float* const* out, uint32_t outChannels, uint32_t frames) override
     {
+        static const midi::Buffer kNoMidi;
+        return processMidi(in, inChannels, out, outChannels, frames, kNoMidi, nullptr);
+    }
+
+    bool processMidi(const float* const* in, uint32_t inChannels,
+                     float* const* out, uint32_t outChannels, uint32_t frames,
+                     const midi::Buffer& midiIn, midi::Buffer* midiOut) override
+    {
         if (!prepared_ || frames == 0 || frames > maxBlock_)
             return false;
 
@@ -276,6 +288,51 @@ public:
                 }
             }
             pendingAudio_.clear();
+        }
+
+        // MIDI in: notes become VST3 events; CC/pitchbend/aftertouch travel
+        // as parameter changes through the plugin's IMidiMapping (that's the
+        // VST3 way -- there are no raw CC events).
+        eventList_.clear();
+        for (auto& m : midiIn) {
+            if (m.isNoteOn()) {
+                Vst::Event e{};
+                e.busIndex = 0;
+                e.sampleOffset = (int32)m.frame;
+                e.type = Vst::Event::kNoteOnEvent;
+                e.noteOn.channel = (int16)m.channel();
+                e.noteOn.pitch = (int16)m.data1;
+                e.noteOn.velocity = (float)m.data2 / 127.0f;
+                e.noteOn.noteId = -1;
+                eventList_.addEvent(e);
+            } else if (m.isNoteOff()) {
+                Vst::Event e{};
+                e.busIndex = 0;
+                e.sampleOffset = (int32)m.frame;
+                e.type = Vst::Event::kNoteOffEvent;
+                e.noteOff.channel = (int16)m.channel();
+                e.noteOff.pitch = (int16)m.data1;
+                e.noteOff.velocity = (float)m.data2 / 127.0f;
+                e.noteOff.noteId = -1;
+                eventList_.addEvent(e);
+            } else if (midiMapping_ && (m.isControl() || m.isPitchBend())) {
+                Vst::CtrlNumber ctrl =
+                    m.isPitchBend() ? Vst::kPitchBend : (Vst::CtrlNumber)m.data1;
+                Vst::ParamID pid = Vst::kNoParamId;
+                if (midiMapping_->getMidiControllerAssignment(
+                        0, (int16)m.channel(), ctrl, pid) == kResultOk &&
+                    pid != Vst::kNoParamId) {
+                    double v = m.isPitchBend()
+                                   ? (double)(m.data1 | (m.data2 << 7)) / 16383.0
+                                   : (double)m.data2 / 127.0;
+                    int32 qIndex = 0;
+                    if (auto* queue =
+                            inputParamChanges_.addParameterData(pid, qIndex)) {
+                        int32 pIndex = 0;
+                        queue->addPoint((int32)m.frame, v, pIndex);
+                    }
+                }
+            }
         }
 
         processData_.numSamples = (int32)frames;
@@ -301,6 +358,7 @@ public:
         }
 
         outputParamChanges_.clearQueue();
+        outputEventList_.clear();
 
         bool ok = processor_->process(processData_) == kResultOk;
 
@@ -329,6 +387,25 @@ public:
                 auto it = paramsById_.find(std::to_string(q->getParameterId()));
                 if (it != paramsById_.end())
                     static_cast<VST3Parameter*>(it->second)->updateCacheOnly(v);
+            }
+        }
+
+        // MIDI out: note events the plugin emitted this block.
+        if (ok && midiOut) {
+            int32 nEvents = outputEventList_.getEventCount();
+            for (int32 i = 0; i < nEvents; ++i) {
+                Vst::Event e{};
+                if (outputEventList_.getEvent(i, e) != kResultOk)
+                    continue;
+                if (e.type == Vst::Event::kNoteOnEvent)
+                    midiOut->push_back(midi::Message::noteOn(
+                        (uint8_t)e.noteOn.channel, (uint8_t)e.noteOn.pitch,
+                        (uint8_t)std::clamp((int)(e.noteOn.velocity * 127.0f), 1, 127),
+                        (uint32_t)std::max<int32>(0, e.sampleOffset)));
+                else if (e.type == Vst::Event::kNoteOffEvent)
+                    midiOut->push_back(midi::Message::noteOff(
+                        (uint8_t)e.noteOff.channel, (uint8_t)e.noteOff.pitch,
+                        (uint32_t)std::max<int32>(0, e.sampleOffset)));
             }
         }
 
@@ -593,7 +670,9 @@ private:
     Vst::ProcessContext processContext_{};
     Vst::ParameterChanges inputParamChanges_;
     Vst::ParameterChanges outputParamChanges_;
-    Vst::EventList eventList_; // deliberately always empty: no MIDI
+    Vst::EventList eventList_;       // MIDI in, per block
+    Vst::EventList outputEventList_; // MIDI the plugin emits
+    FUnknownPtr<Vst::IMidiMapping> midiMapping_; // CC/bend -> parameter route
 
     SpinLock processLock_;
     SpinLock pendingLock_;

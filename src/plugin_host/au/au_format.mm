@@ -152,9 +152,11 @@ public:
         fmt.mBytesPerFrame = 4;
         fmt.mBytesPerPacket = 4;
 
-        if (AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input,
-                                 0, &fmt, sizeof(fmt)) != noErr)
-            return false;
+        // Instruments (aumu) have no input bus: setting the input format
+        // fails, which is fine -- they render from MIDI, not from us.
+        hasInput_ = AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat,
+                                         kAudioUnitScope_Input, 0, &fmt,
+                                         sizeof(fmt)) == noErr;
         if (AudioUnitSetProperty(unit_, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output,
                                  0, &fmt, sizeof(fmt)) != noErr)
             return false;
@@ -163,12 +165,14 @@ public:
         AudioUnitSetProperty(unit_, kAudioUnitProperty_MaximumFramesPerSlice,
                              kAudioUnitScope_Global, 0, &maxFrames, sizeof(maxFrames));
 
-        AURenderCallbackStruct cb{};
-        cb.inputProc = renderInput;
-        cb.inputProcRefCon = this;
-        if (AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback,
-                                 kAudioUnitScope_Input, 0, &cb, sizeof(cb)) != noErr)
-            return false;
+        if (hasInput_) {
+            AURenderCallbackStruct cb{};
+            cb.inputProc = renderInput;
+            cb.inputProcRefCon = this;
+            if (AudioUnitSetProperty(unit_, kAudioUnitProperty_SetRenderCallback,
+                                     kAudioUnitScope_Input, 0, &cb, sizeof(cb)) != noErr)
+                return false;
+        }
 
         if (AudioUnitInitialize(unit_) != noErr)
             return false;
@@ -230,6 +234,20 @@ public:
 
         renderTime_ += frames;
         return true;
+    }
+
+    bool processMidi(const float* const* in, uint32_t inChannels,
+                     float* const* out, uint32_t outChannels, uint32_t frames,
+                     const snd::midi::Buffer& midiIn,
+                     snd::midi::Buffer* midiOut) override
+    {
+        if (!prepared_ || !unit_)
+            return false;
+        // schedule this block's events, then render
+        for (auto& m : midiIn)
+            MusicDeviceMIDIEvent(unit_, m.status, m.data1, m.data2, m.frame);
+        (void)midiOut; // AUv2 render has no MIDI-out path
+        return process(in, inChannels, out, outChannels, frames);
     }
 
     void idle() override
@@ -444,6 +462,7 @@ private:
     uint32_t maxBlock_ = 0;
     uint64_t renderTime_ = 0;
     bool prepared_ = false;
+    bool hasInput_ = true; // false for instruments (no input bus)
 
     const float* const* currentInput_ = nullptr;
     uint32_t currentInputChannels_ = 0;
@@ -473,36 +492,49 @@ public:
         if (!path.empty())
             return result; // registry format: only the enumerate-all call
 
-        AudioComponentDescription wanted{};
-        wanted.componentType = kAudioUnitType_Effect;
+        // Effects, music effects (aumf) and instruments (aumu). MIDI arrived
+        // in SND 2026-07-07; instruments render from processMidi().
+        const struct {
+            OSType type;
+            const char* category;
+        } kinds[] = {
+            {kAudioUnitType_Effect, "Effect"},
+            {kAudioUnitType_MusicEffect, "MusicEffect"},
+            {kAudioUnitType_MusicDevice, "Instrument"},
+        };
 
-        AudioComponent comp = nullptr;
-        while ((comp = AudioComponentFindNext(comp, &wanted)) != nullptr) {
-            AudioComponentDescription desc{};
-            if (AudioComponentGetDescription(comp, &desc) != noErr)
-                continue;
+        for (auto& kind : kinds) {
+            AudioComponentDescription wanted{};
+            wanted.componentType = kind.type;
 
-            CFStringRef cfName = nullptr;
-            AudioComponentCopyName(comp, &cfName);
-            std::string full = cfToString(cfName);
-            if (cfName)
-                CFRelease(cfName);
+            AudioComponent comp = nullptr;
+            while ((comp = AudioComponentFindNext(comp, &wanted)) != nullptr) {
+                AudioComponentDescription desc{};
+                if (AudioComponentGetDescription(comp, &desc) != noErr)
+                    continue;
 
-            // Names come as "Vendor: Name".
-            std::string vendor, name = full;
-            auto colon = full.find(": ");
-            if (colon != std::string::npos) {
-                vendor = full.substr(0, colon);
-                name = full.substr(colon + 2);
+                CFStringRef cfName = nullptr;
+                AudioComponentCopyName(comp, &cfName);
+                std::string full = cfToString(cfName);
+                if (cfName)
+                    CFRelease(cfName);
+
+                // Names come as "Vendor: Name".
+                std::string vendor, name = full;
+                auto colon = full.find(": ");
+                if (colon != std::string::npos) {
+                    vendor = full.substr(0, colon);
+                    name = full.substr(colon + 2);
+                }
+
+                Description d;
+                d.format = "AU";
+                d.identifier = makeIdentifier(desc);
+                d.name = name;
+                d.vendor = vendor;
+                d.category = kind.category;
+                result.push_back(std::move(d));
             }
-
-            Description d;
-            d.format = "AU";
-            d.identifier = makeIdentifier(desc);
-            d.name = name;
-            d.vendor = vendor;
-            d.category = "Effect";
-            result.push_back(std::move(d));
         }
         return result;
     }

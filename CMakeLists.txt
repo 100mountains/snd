@@ -113,6 +113,7 @@ endif()
 
 add_library(snd STATIC
     src/audio.cpp
+    src/midi.cpp
     src/ui.cpp
     src/ui_widgets.cpp
     src/dsp.cpp
@@ -162,7 +163,8 @@ if(APPLE)
         "-framework CoreFoundation"
         "-framework AudioToolbox"
         "-framework AudioUnit"
-        "-framework CoreAudioKit")
+        "-framework CoreAudioKit"
+        "-framework CoreMIDI")
 elseif(WIN32)
     target_link_libraries(snd PUBLIC opengl32)
 else()

@@ -5,6 +5,7 @@
 
 #include "snd/audio.h"
 #include "snd/dsp.h"
+#include "snd/midi.h"
 #include "snd/platform.h"
 #include "snd/plugin_host.h"
 #include "snd/ui.h"
@@ -399,19 +400,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/10] decode + playback: ");
+    printf("[1/12] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/10] capture/record:    ");
+    printf("[2/12] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/10] VST3 hosting:      ");
+    printf("[3/12] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/10] AU hosting:        ");
+    printf("[4/12] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -420,19 +421,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/10] resample:          ");
+    printf("[5/12] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/10] STFT round-trip:   ");
+    printf("[6/12] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/10] player looping:    ");
+    printf("[7/12] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/10] insert hook:       ");
+    printf("[8/12] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -467,7 +468,7 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    printf("[9/10] OOP plugin scan:   ");
+    printf("[9/12] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -489,7 +490,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/10] widget set:      ");
+    printf("[10/12] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -542,7 +543,95 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10;
+    printf("[11/12] MIDI loopback:   ");
+    fflush(stdout);
+    bool ok11;
+    {
+        // real CoreMIDI round trip: our own virtual destination receives
+        // what our own output port sends
+        std::atomic<int> got{0};
+        std::atomic<uint32_t> payload{0};
+        snd::midi::Input in;
+        ok11 = in.open(
+            "",
+            [&](const snd::midi::Message& m) {
+                payload.store(((uint32_t)m.status << 16) | ((uint32_t)m.data1 << 8) |
+                              m.data2);
+                got.fetch_add(1);
+            },
+            "SND Selftest In");
+
+        snd::midi::Output out;
+        if (ok11) {
+            bool opened = false;
+            for (int tries = 0; tries < 50 && !opened; ++tries) {
+                opened = out.open("SND Selftest In");
+                if (!opened)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            }
+            ok11 = opened && out.send(snd::midi::Message::noteOn(0, 60, 100));
+        }
+        if (ok11) {
+            auto deadline =
+                std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+            while (got.load() == 0 && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            ok11 = got.load() > 0 &&
+                   payload.load() == ((0x90u << 16) | (60u << 8) | 100u);
+        }
+        if (ok11)
+            printf("PASS (note 60 vel 100 round-tripped through CoreMIDI)\n");
+        else
+            printf("FAIL\n");
+    }
+
+    printf("[12/12] AU instrument:   ");
+    fflush(stdout);
+#if defined(__APPLE__)
+    bool ok12;
+    {
+        // MIDI drives sound: Apple's DLS synth must produce audio from a
+        // note-on delivered through processMidi()
+        snd::plugin::HostManager manager;
+        manager.addDefaultFormats();
+        snd::plugin::Description d;
+        d.format = "AU";
+        d.identifier = "aumu,dls ,appl";
+        auto synth = manager.create(d);
+        if (!synth) {
+            d.identifier = "aumu,samp,appl"; // AUSampler fallback
+            synth = manager.create(d);
+        }
+        ok12 = synth != nullptr && synth->prepare(44100.0, 512);
+        if (ok12) {
+            const uint32_t block = 512;
+            std::vector<float> L(block), R(block);
+            float* outs[2] = {L.data(), R.data()};
+            float peak = 0.0f;
+            snd::midi::Buffer noteOn = {snd::midi::Message::noteOn(0, 60, 127)};
+            snd::midi::Buffer silence;
+            for (int i = 0; i < 40 && ok12; ++i) { // ~0.5 s
+                ok12 = synth->processMidi(nullptr, 0, outs, 2, block,
+                                          i == 0 ? noteOn : silence);
+                for (uint32_t f = 0; f < block; ++f)
+                    peak = std::max(peak, std::fabs(L[f]));
+            }
+            ok12 = ok12 && peak > 0.01f;
+            if (ok12)
+                printf("PASS (note-on made the DLS synth sing, peak %.3f)\n", peak);
+            else
+                printf("FAIL (peak %.4f)\n", peak);
+            synth->unprepare();
+        } else
+            printf("FAIL (no Apple instrument available)\n");
+    }
+#else
+    bool ok12 = true;
+    printf("skipped (AU is macOS-only)\n");
+#endif
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
+               ok11 && ok12;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
