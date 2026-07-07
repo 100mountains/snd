@@ -121,7 +121,9 @@ add_library(snd STATIC
 )
 
 if(APPLE)
-    target_sources(snd PRIVATE src/plugin_host/au/au_format.mm)
+    target_sources(snd PRIVATE
+        src/plugin_host/au/au_format.mm
+        src/ui_mac.mm)
 endif()
 
 target_include_directories(snd
@@ -139,6 +141,7 @@ target_link_libraries(snd PUBLIC glfw sdk_hosting nfd)
 
 if(APPLE)
     target_link_libraries(snd PUBLIC
+        "-framework Cocoa"
         "-framework OpenGL"
         "-framework CoreAudio"
         "-framework CoreFoundation"

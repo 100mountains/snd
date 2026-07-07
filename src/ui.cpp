@@ -6,6 +6,12 @@
 #include "backends/imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 
+#if defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <windows.h>
+#endif
+
 #if defined(__APPLE__)
 #include <OpenGL/gl3.h>
 #else
@@ -159,6 +165,24 @@ void Window::minimize()
 {
     if (impl->window)
         glfwIconifyWindow(impl->window);
+}
+
+#if defined(__APPLE__)
+void nativeDragImpl(GLFWwindow* window); // ui_mac.mm
+#endif
+
+void Window::beginNativeDrag()
+{
+    if (!impl->window)
+        return;
+#if defined(__APPLE__)
+    nativeDragImpl(impl->window);
+#elif defined(_WIN32)
+    // Standard Win32 trick: pretend the press hit the title bar.
+    HWND hwnd = glfwGetWin32Window(impl->window);
+    ReleaseCapture();
+    SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+#endif
 }
 
 void Window::toggleMaximize()

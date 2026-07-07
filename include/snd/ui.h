@@ -44,6 +44,11 @@ public:
     void minimize();
     void toggleMaximize();
 
+    // Hand an in-progress mouse-down to the OS as a window drag (call once
+    // when the press lands on your custom title bar). Native and smooth on
+    // macOS/Windows; no-op elsewhere.
+    void beginNativeDrag();
+
     // Paths of files dropped onto the window since the last call (then cleared).
     std::vector<std::string> takeDroppedFiles();
 
