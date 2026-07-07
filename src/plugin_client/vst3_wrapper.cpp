@@ -27,9 +27,10 @@ std::unique_ptr<snd::plugin::client::Processor> sndCreateProcessor();
 namespace snd::plugin::client {
 // mac editor factory (editor_view_mac.mm); returns nullptr where unsupported
 Steinberg::IPlugView* createEditorView(Processor& proc, UiHost& host, int width,
-                                       int height);
+                                       int height, bool resizable, int minW,
+                                       int minH);
 #if !defined(__APPLE__)
-Steinberg::IPlugView* createEditorView(Processor&, UiHost&, int, int)
+Steinberg::IPlugView* createEditorView(Processor&, UiHost&, int, int, bool, int, int)
 {
     return nullptr; // editor embedding is macOS-only so far
 }
@@ -273,7 +274,9 @@ public:
     {
         if (!spec_.hasUi || !name || strcmp(name, Vst::ViewType::kEditor) != 0)
             return nullptr;
-        return createEditorView(*proc_, *this, spec_.uiWidth, spec_.uiHeight);
+        return createEditorView(*proc_, *this, spec_.uiWidth, spec_.uiHeight,
+                                spec_.uiResizable, spec_.uiMinWidth,
+                                spec_.uiMinHeight);
     }
 
     // --- UiHost (editor writes go through the host for automation) ----------

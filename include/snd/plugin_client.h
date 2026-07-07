@@ -40,7 +40,9 @@ struct PluginSpec {
     bool isInstrument = false;        // no audio input; MIDI drives it
     bool wantsMidi = false;           // receive note events in process()
     bool hasUi = false;               // drawUi() is implemented
+    bool uiResizable = false;         // host may resize the editor
     int uiWidth = 480, uiHeight = 320;
+    int uiMinWidth = 200, uiMinHeight = 120; // when resizable
     std::vector<ParamSpec> params;
 };
 

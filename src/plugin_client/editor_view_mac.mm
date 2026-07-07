@@ -6,6 +6,8 @@
 #include "snd/plugin_client.h"
 #include "snd/ui.h"
 
+#include <algorithm>
+
 #include "pluginterfaces/base/funknownimpl.h"
 #include "pluginterfaces/gui/iplugview.h"
 
@@ -279,8 +281,10 @@ namespace {
 
 class EditorView final : public U::Implements<U::Directly<IPlugView>> {
 public:
-    EditorView(Processor& proc, UiHost& host, int width, int height)
-        : proc_(proc), host_(host), width_(width), height_(height)
+    EditorView(Processor& proc, UiHost& host, int width, int height,
+               bool resizable, int minW, int minH)
+        : proc_(proc), host_(host), width_(width), height_(height),
+          resizable_(resizable), minW_(minW), minH_(minH)
     {
     }
 
@@ -334,7 +338,10 @@ public:
 
     tresult PLUGIN_API onSize(ViewRect* newSize) override
     {
-        (void)newSize; // autoresizing tracks the parent
+        if (newSize) { // autoresizing tracks the parent; remember for getSize
+            width_ = newSize->getWidth();
+            height_ = newSize->getHeight();
+        }
         return kResultOk;
     }
 
@@ -344,8 +351,18 @@ public:
         frame_ = frame;
         return kResultOk;
     }
-    tresult PLUGIN_API canResize() override { return kResultFalse; }
-    tresult PLUGIN_API checkSizeConstraint(ViewRect*) override { return kResultOk; }
+    tresult PLUGIN_API canResize() override
+    {
+        return resizable_ ? kResultTrue : kResultFalse;
+    }
+    tresult PLUGIN_API checkSizeConstraint(ViewRect* rect) override
+    {
+        if (rect) {
+            rect->right = rect->left + std::max(rect->getWidth(), (int32)minW_);
+            rect->bottom = rect->top + std::max(rect->getHeight(), (int32)minH_);
+        }
+        return kResultOk;
+    }
 
     ~EditorView() override { removed(); }
 
@@ -353,15 +370,18 @@ private:
     Processor& proc_;
     UiHost& host_;
     int width_, height_;
+    bool resizable_ = false;
+    int minW_ = 200, minH_ = 120;
     void* view_ = nullptr;
     IPlugFrame* frame_ = nullptr;
 };
 
 } // namespace
 
-IPlugView* createEditorView(Processor& proc, UiHost& host, int width, int height)
+IPlugView* createEditorView(Processor& proc, UiHost& host, int width, int height,
+                            bool resizable, int minW, int minH)
 {
-    return new EditorView(proc, host, width, height);
+    return new EditorView(proc, host, width, height, resizable, minW, minH);
 }
 
 } // namespace snd::plugin::client

@@ -49,8 +49,14 @@ Remaining candidates: OGG export, loudness-select for the brush.
   instance), standalone shell, snd_add_plugin()~~ done — DemoFilter ships as
   .vst3 + app; hosted + editor verified through SND's own host (selftest 13
   + window probe)
-- remaining: AU via the SDK's `auwrapper` — S/M; MIDI-out from client
-  processors; resizable editors; live input in the standalone shell
+- ~~MIDI-out from client processors, resizable editors (uiResizable +
+  min sizes), live input in the standalone shell (SPSC ring off the default
+  capture device)~~ done 2026-07-07
+- AU client wrapping DEFERRED with a decision to make: the SDK's auwrapper
+  hard-requires the Xcode generator + a separately downloaded Apple
+  CoreAudio SDK. Either adopt Xcode-generator builds for plugin targets
+  only, or write a bespoke AUv2 wrapper. Needed before Murfy plugins can
+  ship AU for Logic users.
 
 ### ③ `snd::midi` — BLESSED 2026-07-07, host side DONE
 - ~~event/buffer types, CoreMIDI in/out devices~~ done (virtual-endpoint
