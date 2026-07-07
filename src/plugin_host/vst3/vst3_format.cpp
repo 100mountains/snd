@@ -227,6 +227,7 @@ public:
         if (component_->setActive(true) != kResultOk)
             return false;
         processor_->setProcessing(true);
+        latency_ = processor_->getLatencySamples();
 
         if (!processData_.prepare(*component_, (int32)maxBlockFrames, Vst::kSample32)) {
             component_->setActive(false);
@@ -427,6 +428,8 @@ public:
     }
 
     const std::vector<Parameter*>& parameters() const override { return parameters_; }
+
+    uint32_t latencySamples() const override { return latency_; }
 
     Parameter* parameterById(const std::string& id) const override
     {
@@ -686,6 +689,7 @@ private:
 
     double sampleRate_ = 0;
     uint32_t maxBlock_ = 0;
+    uint32_t latency_ = 0;
     bool prepared_ = false;
 };
 

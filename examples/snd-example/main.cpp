@@ -7,7 +7,9 @@
 #include "snd/dsp.h"
 #include "snd/midi.h"
 #include "snd/platform.h"
+#include "snd/plugin_graph.h"
 #include "snd/plugin_host.h"
+#include "snd/state.h"
 #include "snd/ui.h"
 
 #include <chrono>
@@ -400,19 +402,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/16] decode + playback: ");
+    printf("[1/20] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/16] capture/record:    ");
+    printf("[2/20] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/16] VST3 hosting:      ");
+    printf("[3/20] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/16] AU hosting:        ");
+    printf("[4/20] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -421,19 +423,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/16] resample:          ");
+    printf("[5/20] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/16] STFT round-trip:   ");
+    printf("[6/20] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/16] player looping:    ");
+    printf("[7/20] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/16] insert hook:       ");
+    printf("[8/20] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -468,7 +470,7 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    printf("[9/16] OOP plugin scan:   ");
+    printf("[9/20] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -490,7 +492,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/16] widget set:      ");
+    printf("[10/20] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -543,7 +545,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/16] MIDI loopback:   ");
+    printf("[11/20] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -585,7 +587,7 @@ static int runSelftest()
             printf("FAIL\n");
     }
 
-    printf("[12/16] AU instrument:   ");
+    printf("[12/20] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -630,7 +632,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/16] client SDK:      ");
+    printf("[13/20] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -686,7 +688,7 @@ static int runSelftest()
                    cutRatio);
     }
 
-    printf("[14/16] FLAC encode:     ");
+    printf("[14/20] FLAC encode:     ");
     fflush(stdout);
     bool ok14;
     {
@@ -713,7 +715,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[15/16] MP3 encode:      ");
+    printf("[15/20] MP3 encode:      ");
     fflush(stdout);
     bool ok15 = true;
     if (!snd::audio::mp3EncoderAvailable()) {
@@ -741,7 +743,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[16/16] media extract:   ");
+    printf("[16/20] media extract:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok16;
@@ -782,8 +784,215 @@ static int runSelftest()
     printf("skipped (AVFoundation is macOS-only)\n");
 #endif
 
+    printf("[17/20] state tree:      ");
+    fflush(stdout);
+    bool ok17;
+    {
+        // properties, children, listeners, undo, and XML round-trip
+        snd::state::UndoManager um;
+        snd::state::Tree root("Session");
+        int propEvents = 0, childEvents = 0;
+        root.addListener({[&](snd::state::Tree, const std::string&) { ++propEvents; },
+                          [&](snd::state::Tree, snd::state::Tree) { ++childEvents; },
+                          nullptr});
+
+        um.beginTransaction();
+        root.set("name", std::string("take one"), &um);
+        root.set("bpm", 128.0, &um);
+        auto track = root.getOrCreateChild("Track", &um);
+        track.set("gain", 0.5, &um);
+
+        bool ok = root.getString("name") == "take one" &&
+                  root.getDouble("bpm") == 128.0 && propEvents == 3 &&
+                  childEvents == 1 && root.childCount() == 1;
+
+        // undo unwinds the whole transaction; redo replays it
+        ok = ok && um.undo() && !root.hasProperty("name") && root.childCount() == 0;
+        ok = ok && um.redo() && root.getDouble("bpm") == 128.0 &&
+             root.child(0).getDouble("gain") == 0.5;
+
+        // XML round-trip is structurally identical
+        auto xml = root.toXml();
+        auto back = snd::state::Tree::fromXml(xml);
+        ok = ok && back.valid() && back.equivalent(root);
+
+        ok17 = ok;
+        if (ok17)
+            printf("PASS (props/children/listeners/undo/XML all behave)\n");
+        else
+            printf("FAIL (prop=%d child=%d xml=%zu)\n", propEvents, childEvents,
+                   xml.size());
+    }
+
+    printf("[18/20] stream reader:   ");
+    fflush(stdout);
+    bool ok18;
+    {
+        // seek+read random chunks and compare against the full decode
+        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+                   "/snd-selftest-stream.wav";
+        snd::audio::Buffer b;
+        b.channels = 2;
+        b.sampleRate = 48000;
+        auto mono = makeSine(440.0, 48000, 96000, 0.5f);
+        for (float s : mono) {
+            b.samples.push_back(s);
+            b.samples.push_back(-s);
+        }
+        std::string err;
+        ok18 = snd::audio::saveWav(tmp, b, &err);
+
+        snd::audio::StreamReader sr;
+        ok18 = ok18 && sr.open(tmp, &err) && sr.channels() == 2 &&
+               sr.sampleRate() == 48000 && sr.frames() == 96000;
+        if (ok18) {
+            std::vector<float> chunk(4096 * 2);
+            for (uint64_t at : {0ull, 48000ull, 91904ull, 12345ull}) {
+                ok18 = ok18 && sr.seek(at);
+                uint64_t got = sr.read(chunk.data(), 4096);
+                uint64_t expect = std::min<uint64_t>(4096, 96000 - at);
+                ok18 = ok18 && got == expect;
+                for (uint64_t f = 0; f < got && ok18; f += 512)
+                    ok18 = std::fabs(chunk[f * 2] - b.samples[(at + f) * 2]) < 1e-4f;
+            }
+        }
+        sr.close();
+        remove(tmp.c_str());
+        if (ok18)
+            printf("PASS (random seeks match the full decode)\n");
+        else
+            printf("FAIL (%s)\n", err.c_str());
+    }
+
+    printf("[19/20] queue+timer+pool: ");
+    fflush(stdout);
+    bool ok19;
+    {
+        // worker pool does real work; results marshal back via runOnMain;
+        // a frame-pumped timer fires on schedule
+        std::atomic<int> jobs{0};
+        int mainSeen = 0;
+        {
+            snd::platform::ThreadPool pool(4);
+            for (int i = 0; i < 64; ++i)
+                pool.submit([&] {
+                    jobs.fetch_add(1);
+                    snd::platform::runOnMain([&] { ++mainSeen; });
+                });
+            pool.wait();
+        }
+        int ticks = 0;
+        snd::platform::Timer timer;
+        timer.start(10, [&] { ++ticks; });
+        auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(120);
+        while (std::chrono::steady_clock::now() < deadline) {
+            snd::platform::processMainQueue();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        timer.stop();
+        ok19 = jobs.load() == 64 && mainSeen == 64 && ticks >= 5 && ticks <= 14;
+        if (ok19)
+            printf("PASS (64 jobs -> 64 main-thread callbacks, timer %d ticks)\n",
+                   ticks);
+        else
+            printf("FAIL (jobs=%d main=%d ticks=%d)\n", jobs.load(), mainSeen, ticks);
+    }
+
+    printf("[20/20] graph + latency: ");
+    fflush(stdout);
+    bool ok20;
+    {
+        // a fake 256-sample-latency node in parallel with a direct wire: the
+        // graph must delay the direct path so the impulse sums coherently
+        enum : uint32_t { kFakeDelay = 256 };
+        struct FakeDelay final : snd::plugin::Instance {
+            snd::plugin::Description d;
+            std::vector<snd::plugin::Parameter*> noParams;
+            std::vector<float> ringL, ringR;
+            size_t pos = 0;
+
+            const snd::plugin::Description& description() const override { return d; }
+            bool prepare(double, uint32_t) override
+            {
+                ringL.assign(kFakeDelay, 0.0f);
+                ringR.assign(kFakeDelay, 0.0f);
+                pos = 0;
+                return true;
+            }
+            void unprepare() override {}
+            bool process(const float* const* in, uint32_t, float* const* out,
+                         uint32_t, uint32_t frames) override
+            {
+                for (uint32_t f = 0; f < frames; ++f) {
+                    float l = ringL[pos], r = ringR[pos];
+                    ringL[pos] = in[0][f];
+                    ringR[pos] = in[1][f];
+                    out[0][f] = l;
+                    out[1][f] = r;
+                    pos = (pos + 1) % kFakeDelay;
+                }
+                return true;
+            }
+            void idle() override {}
+            uint32_t latencySamples() const override { return kFakeDelay; }
+            const std::vector<snd::plugin::Parameter*>& parameters() const override
+            {
+                return noParams;
+            }
+            snd::plugin::Parameter* parameterById(const std::string&) const override
+            {
+                return nullptr;
+            }
+            bool saveState(std::vector<uint8_t>&) override { return false; }
+            bool loadState(const uint8_t*, size_t) override { return false; }
+            bool hasEditor() override { return false; }
+            bool openEditor(const std::string&) override { return false; }
+            void closeEditor() override {}
+            bool editorOpen() const override { return false; }
+        };
+
+        snd::plugin::Graph g;
+        int delayed = g.addNode(std::make_unique<FakeDelay>());
+        ok20 = g.connect(snd::plugin::Graph::kInput, delayed) &&
+               g.connect(delayed, snd::plugin::Graph::kOutput) &&
+               g.connect(snd::plugin::Graph::kInput, snd::plugin::Graph::kOutput) &&
+               g.prepare(48000.0, 512);
+        ok20 = ok20 && g.latencySamples() == 256;
+
+        if (ok20) {
+            // impulse in; expect ONE spike of 2.0 at offset 256
+            std::vector<float> inL(512, 0.0f), inR(512, 0.0f), outL(512), outR(512);
+            inL[0] = inR[0] = 1.0f;
+            const float* ins[2] = {inL.data(), inR.data()};
+            float* outs[2] = {outL.data(), outR.data()};
+            ok20 = g.process(ins, outs, 512);
+            int spikeAt = -1;
+            float spike = 0;
+            double residue = 0;
+            for (int f = 0; f < 512; ++f) {
+                if (std::fabs(outL[f]) > spike) {
+                    spike = std::fabs(outL[f]);
+                    spikeAt = f;
+                }
+                residue += std::fabs(outL[f]);
+            }
+            residue -= spike;
+            ok20 = ok20 && spikeAt == 256 && std::fabs(spike - 2.0f) < 1e-5f &&
+                   residue < 1e-5;
+            if (ok20)
+                printf("PASS (parallel paths aligned: single 2.0 spike at 256, "
+                       "graph latency 256)\n");
+            else
+                printf("FAIL (spike %.3f at %d, residue %.6f)\n", spike, spikeAt,
+                       residue);
+        } else
+            printf("FAIL (graph build/prepare)\n");
+    }
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
-               ok11 && ok12 && ok13 && ok14 && ok15 && ok16;
+               ok11 && ok12 && ok13 && ok14 && ok15 && ok16 && ok17 && ok18 && ok19 &&
+               ok20;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }

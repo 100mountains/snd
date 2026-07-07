@@ -80,6 +80,10 @@ public:
     // controller side.
     virtual void idle() = 0;
 
+    // Samples of delay this plugin adds (valid after prepare()). Hosts use
+    // it to line up parallel paths and offset bounces.
+    virtual uint32_t latencySamples() const { return 0; }
+
     virtual const std::vector<Parameter*>& parameters() const = 0;
     virtual Parameter* parameterById(const std::string& id) const = 0;
 

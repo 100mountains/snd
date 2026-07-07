@@ -53,6 +53,32 @@ bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error = n
 // Resample to a new rate (miniaudio's resampler, highest built-in quality).
 bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error = nullptr);
 
+// Stream frames from disk without loading the whole file -- sampler-style
+// feeding of big content. One reader per thread; seek anywhere, read chunks.
+class StreamReader {
+public:
+    StreamReader();
+    ~StreamReader();
+    StreamReader(const StreamReader&) = delete;
+    StreamReader& operator=(const StreamReader&) = delete;
+
+    bool open(const std::string& path, std::string* error = nullptr);
+    void close();
+    bool isOpen() const;
+
+    uint32_t channels() const;
+    uint32_t sampleRate() const;
+    uint64_t frames() const;
+
+    bool seek(uint64_t frame);
+    // Reads up to maxFrames interleaved frames; returns frames read (0 = end).
+    uint64_t read(float* interleaved, uint64_t maxFrames);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl;
+};
+
 // Names of the available devices, for settings UIs. Order may change between
 // calls; select devices by NAME, not index.
 std::vector<std::string> playbackDevices();

@@ -177,6 +177,13 @@ public:
         if (AudioUnitInitialize(unit_) != noErr)
             return false;
 
+        Float64 latencySec = 0;
+        UInt32 latSize = sizeof(latencySec);
+        if (AudioUnitGetProperty(unit_, kAudioUnitProperty_Latency,
+                                 kAudioUnitScope_Global, 0, &latencySec,
+                                 &latSize) == noErr)
+            latency_ = (uint32_t)std::lround(latencySec * sampleRate);
+
         sampleRate_ = sampleRate;
         maxBlock_ = maxBlockFrames;
         renderTime_ = 0;
@@ -463,6 +470,7 @@ private:
     uint64_t renderTime_ = 0;
     bool prepared_ = false;
     bool hasInput_ = true; // false for instruments (no input bus)
+    uint32_t latency_ = 0;
 
     const float* const* currentInput_ = nullptr;
     uint32_t currentInputChannels_ = 0;

@@ -133,7 +133,9 @@ add_library(snd STATIC
     src/ui_widgets.cpp
     src/dsp.cpp
     src/platform.cpp
+    src/state.cpp
     src/plugin_host.cpp
+    src/plugin_graph.cpp
     src/plugin_host/vst3/vst3_format.cpp
     ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
     ${pffft_SOURCE_DIR}/src/pffft.c

@@ -1,6 +1,7 @@
 // snd::ui implementation: GLFW + OpenGL3 + Dear ImGui shell.
 
 #include "snd/ui.h"
+#include "snd/platform.h"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -104,6 +105,7 @@ bool Window::beginFrame()
     if (!impl->window)
         return false;
     glfwPollEvents();
+    snd::platform::processMainQueue(); // runOnMain() jobs + frame-pumped timers
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();

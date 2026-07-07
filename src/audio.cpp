@@ -385,6 +385,67 @@ bool loadMediaAudio(const std::string&, Buffer&, std::string* error)
 }
 #endif
 
+// --- StreamReader -------------------------------------------------------------
+
+struct StreamReader::Impl {
+    ma_decoder decoder{};
+    bool open = false;
+    uint64_t totalFrames = 0;
+};
+
+StreamReader::StreamReader() : impl(new Impl) {}
+StreamReader::~StreamReader() { close(); }
+
+bool StreamReader::open(const std::string& path, std::string* error)
+{
+    close();
+    ma_decoder_config cfg = ma_decoder_config_init(ma_format_f32, 0, 0);
+    if (ma_decoder_init_file(path.c_str(), &cfg, &impl->decoder) != MA_SUCCESS) {
+        if (error) *error = "could not open: " + path;
+        return false;
+    }
+    ma_uint64 n = 0;
+    ma_decoder_get_length_in_pcm_frames(&impl->decoder, &n);
+    impl->totalFrames = n;
+    impl->open = true;
+    return true;
+}
+
+void StreamReader::close()
+{
+    if (impl->open) {
+        ma_decoder_uninit(&impl->decoder);
+        impl->open = false;
+        impl->totalFrames = 0;
+    }
+}
+
+bool StreamReader::isOpen() const { return impl->open; }
+uint32_t StreamReader::channels() const
+{
+    return impl->open ? impl->decoder.outputChannels : 0;
+}
+uint32_t StreamReader::sampleRate() const
+{
+    return impl->open ? impl->decoder.outputSampleRate : 0;
+}
+uint64_t StreamReader::frames() const { return impl->totalFrames; }
+
+bool StreamReader::seek(uint64_t frame)
+{
+    return impl->open &&
+           ma_decoder_seek_to_pcm_frame(&impl->decoder, frame) == MA_SUCCESS;
+}
+
+uint64_t StreamReader::read(float* interleaved, uint64_t maxFrames)
+{
+    if (!impl->open || !interleaved || maxFrames == 0)
+        return 0;
+    ma_uint64 got = 0;
+    ma_decoder_read_pcm_frames(&impl->decoder, interleaved, maxFrames, &got);
+    return got;
+}
+
 bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error)
 {
     if (in.channels == 0 || in.sampleRate == 0 || in.samples.empty()) {
