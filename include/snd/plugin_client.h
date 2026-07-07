@@ -46,6 +46,15 @@ struct PluginSpec {
     std::vector<ParamSpec> params;
 };
 
+// Musical time as the host reports it, refreshed every process() call.
+struct Transport {
+    double tempoBpm = 120.0;
+    int timeSigNumerator = 4, timeSigDenominator = 4;
+    double projectQuarterNotes = 0.0; // song position in quarter notes
+    double barStartQuarterNotes = 0.0;
+    bool playing = false;
+};
+
 // Handed to drawUi(): parameter access that keeps the HOST in the loop
 // (edits go through begin/perform/endEdit so automation records them).
 class UiHost {
@@ -83,6 +92,12 @@ public:
     // window, GL context and input routing are the wrapper's job.
     virtual void drawUi(UiHost&) {}
 
+    // Host transport, valid inside process() (tempo LFOs, synced delays).
+    const Transport& transport() const { return transport_; }
+
+    // wrapper wiring -- not for plugin code
+    void _setTransport(const Transport& t) { transport_ = t; }
+
     // RT-safe normalized parameter read, usable inside process().
     double param(uint32_t id) const
     {
@@ -105,6 +120,7 @@ private:
     const std::atomic<double>* paramValues_ = nullptr;
     const uint32_t* paramIds_ = nullptr;
     size_t paramCount_ = 0;
+    Transport transport_;
 };
 
 } // namespace snd::plugin::client

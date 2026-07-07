@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -236,8 +237,14 @@ public:
 
         processContext_ = {};
         processContext_.sampleRate = sampleRate;
-        processContext_.tempo = 120.0;
-        processContext_.state = Vst::ProcessContext::kPlaying | Vst::ProcessContext::kTempoValid;
+        processContext_.tempo = tempo_.load(std::memory_order_relaxed);
+        processContext_.timeSigNumerator = tsNum_.load(std::memory_order_relaxed);
+        processContext_.timeSigDenominator = tsDen_.load(std::memory_order_relaxed);
+        processContext_.state = Vst::ProcessContext::kPlaying |
+                                Vst::ProcessContext::kTempoValid |
+                                Vst::ProcessContext::kTimeSigValid |
+                                Vst::ProcessContext::kProjectTimeMusicValid |
+                                Vst::ProcessContext::kBarPositionValid;
         processData_.processContext = &processContext_;
         processData_.inputEvents = &eventList_; // filled by processMidi()
         processData_.outputEvents = &outputEventList_;
@@ -410,8 +417,33 @@ public:
             }
         }
 
+        // musical clock for tempo-synced plugins
+        const double tempo = tempo_.load(std::memory_order_relaxed);
+        const int num = tsNum_.load(std::memory_order_relaxed);
+        const int den = tsDen_.load(std::memory_order_relaxed);
+        processContext_.tempo = tempo;
+        processContext_.timeSigNumerator = num;
+        processContext_.timeSigDenominator = den;
+        processContext_.projectTimeMusic =
+            (double)processContext_.projectTimeSamples / sampleRate_ * tempo / 60.0;
+        const double quartersPerBar = 4.0 * num / std::max(1, den);
+        processContext_.barPositionMusic =
+            std::floor(processContext_.projectTimeMusic / quartersPerBar) *
+            quartersPerBar;
+
         processContext_.projectTimeSamples += frames;
         return ok;
+    }
+
+    void setTransport(double tempoBpm, int timeSigNumerator,
+                      int timeSigDenominator) override
+    {
+        if (tempoBpm > 0)
+            tempo_.store(tempoBpm, std::memory_order_relaxed);
+        if (timeSigNumerator > 0)
+            tsNum_.store(timeSigNumerator, std::memory_order_relaxed);
+        if (timeSigDenominator > 0)
+            tsDen_.store(timeSigDenominator, std::memory_order_relaxed);
     }
 
     void idle() override
@@ -690,6 +722,8 @@ private:
     double sampleRate_ = 0;
     uint32_t maxBlock_ = 0;
     uint32_t latency_ = 0;
+    std::atomic<double> tempo_{120.0};
+    std::atomic<int> tsNum_{4}, tsDen_{4};
     bool prepared_ = false;
 };
 

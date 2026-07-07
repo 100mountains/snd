@@ -179,6 +179,23 @@ public:
             haveIn = ins[0] && ins[1];
         }
 
+        if (data.processContext) {
+            Transport t;
+            auto* ctx = data.processContext;
+            if (ctx->state & Vst::ProcessContext::kTempoValid)
+                t.tempoBpm = ctx->tempo;
+            if (ctx->state & Vst::ProcessContext::kTimeSigValid) {
+                t.timeSigNumerator = ctx->timeSigNumerator;
+                t.timeSigDenominator = ctx->timeSigDenominator;
+            }
+            if (ctx->state & Vst::ProcessContext::kProjectTimeMusicValid)
+                t.projectQuarterNotes = ctx->projectTimeMusic;
+            if (ctx->state & Vst::ProcessContext::kBarPositionValid)
+                t.barStartQuarterNotes = ctx->barPositionMusic;
+            t.playing = (ctx->state & Vst::ProcessContext::kPlaying) != 0;
+            proc_->_setTransport(t);
+        }
+
         midiOut_.clear();
         proc_->process(haveIn ? ins : nullptr, outs, (uint32_t)data.numSamples,
                        midiIn_, midiOut_);

@@ -84,6 +84,16 @@ public:
     // it to line up parallel paths and offset bounces.
     virtual uint32_t latencySamples() const { return 0; }
 
+    // Musical transport for plugins that sync to host time (tempo LFOs,
+    // synced delays). Applies from the next process() call; any thread.
+    virtual void setTransport(double tempoBpm, int timeSigNumerator,
+                              int timeSigDenominator)
+    {
+        (void)tempoBpm;
+        (void)timeSigNumerator;
+        (void)timeSigDenominator;
+    }
+
     virtual const std::vector<Parameter*>& parameters() const = 0;
     virtual Parameter* parameterById(const std::string& id) const = 0;
 

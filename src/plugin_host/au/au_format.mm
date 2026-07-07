@@ -15,6 +15,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <algorithm>
+#include <cmath>
 #include <atomic>
 #include <cstring>
 #include <unordered_map>
@@ -174,6 +175,15 @@ public:
                 return false;
         }
 
+        // musical transport for tempo-synced AUs
+        HostCallbackInfo host{};
+        host.hostUserData = this;
+        host.beatAndTempoProc = hostBeatAndTempo;
+        host.musicalTimeLocationProc = hostMusicalTime;
+        host.transportStateProc = hostTransportState;
+        AudioUnitSetProperty(unit_, kAudioUnitProperty_HostCallbacks,
+                             kAudioUnitScope_Global, 0, &host, sizeof(host));
+
         if (AudioUnitInitialize(unit_) != noErr)
             return false;
 
@@ -255,6 +265,17 @@ public:
             MusicDeviceMIDIEvent(unit_, m.status, m.data1, m.data2, m.frame);
         (void)midiOut; // AUv2 render has no MIDI-out path
         return process(in, inChannels, out, outChannels, frames);
+    }
+
+    void setTransport(double tempoBpm, int timeSigNumerator,
+                      int timeSigDenominator) override
+    {
+        if (tempoBpm > 0)
+            tempo_.store(tempoBpm, std::memory_order_relaxed);
+        if (timeSigNumerator > 0)
+            tsNum_.store(timeSigNumerator, std::memory_order_relaxed);
+        if (timeSigDenominator > 0)
+            tsDen_.store(timeSigDenominator, std::memory_order_relaxed);
     }
 
     void idle() override
@@ -401,6 +422,67 @@ private:
         return view;
     }
 
+    static OSStatus hostBeatAndTempo(void* refCon, Float64* outBeat, Float64* outTempo)
+    {
+        auto* self = (AUInstance*)refCon;
+        double tempo = self->tempo_.load(std::memory_order_relaxed);
+        if (outTempo)
+            *outTempo = tempo;
+        if (outBeat)
+            *outBeat = (double)self->renderTime_ /
+                       (self->sampleRate_ > 0 ? self->sampleRate_ : 48000.0) *
+                       tempo / 60.0;
+        return noErr;
+    }
+
+    static OSStatus hostMusicalTime(void* refCon, UInt32* outDeltaSampleOffset,
+                                    Float32* outTimeSigNumerator,
+                                    UInt32* outTimeSigDenominator,
+                                    Float64* outMeasureDownBeat)
+    {
+        auto* self = (AUInstance*)refCon;
+        if (outDeltaSampleOffset)
+            *outDeltaSampleOffset = 0;
+        int num = self->tsNum_.load(std::memory_order_relaxed);
+        int den = self->tsDen_.load(std::memory_order_relaxed);
+        if (outTimeSigNumerator)
+            *outTimeSigNumerator = (Float32)num;
+        if (outTimeSigDenominator)
+            *outTimeSigDenominator = (UInt32)den;
+        if (outMeasureDownBeat) {
+            double tempo = self->tempo_.load(std::memory_order_relaxed);
+            double beat = (double)self->renderTime_ /
+                          (self->sampleRate_ > 0 ? self->sampleRate_ : 48000.0) *
+                          tempo / 60.0;
+            double quartersPerBar = 4.0 * num / std::max(1, den);
+            *outMeasureDownBeat = std::floor(beat / quartersPerBar) * quartersPerBar;
+        }
+        return noErr;
+    }
+
+    static OSStatus hostTransportState(void* refCon, Boolean* outIsPlaying,
+                                       Boolean* outTransportStateChanged,
+                                       Float64* outCurrentSampleInTimeLine,
+                                       Boolean* outIsCycling,
+                                       Float64* outCycleStartBeat,
+                                       Float64* outCycleEndBeat)
+    {
+        auto* self = (AUInstance*)refCon;
+        if (outIsPlaying)
+            *outIsPlaying = true;
+        if (outTransportStateChanged)
+            *outTransportStateChanged = false;
+        if (outCurrentSampleInTimeLine)
+            *outCurrentSampleInTimeLine = (Float64)self->renderTime_;
+        if (outIsCycling)
+            *outIsCycling = false;
+        if (outCycleStartBeat)
+            *outCycleStartBeat = 0;
+        if (outCycleEndBeat)
+            *outCycleEndBeat = 0;
+        return noErr;
+    }
+
     static OSStatus renderInput(void* refCon, AudioUnitRenderActionFlags* /*flags*/,
                                 const AudioTimeStamp* /*ts*/, UInt32 /*bus*/,
                                 UInt32 frames, AudioBufferList* buffers)
@@ -471,6 +553,8 @@ private:
     bool prepared_ = false;
     bool hasInput_ = true; // false for instruments (no input bus)
     uint32_t latency_ = 0;
+    std::atomic<double> tempo_{120.0};
+    std::atomic<int> tsNum_{4}, tsDen_{4};
 
     const float* const* currentInput_ = nullptr;
     uint32_t currentInputChannels_ = 0;
