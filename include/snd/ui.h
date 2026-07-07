@@ -154,4 +154,40 @@ bool keyboard(const char* id, KeyboardState& st, const ImVec2& size,
               const std::function<void(uint8_t note)>& noteOff,
               const bool* lit = nullptr /* 128 flags, optional */);
 
+// Step-sequencer grid over a row-major bool array (rows x steps). Drag
+// paints, alt-drag erases; playheadStep highlights a column. Returns true
+// when any cell changed.
+bool patternGrid(const char* id, bool* cells, int rows, int steps,
+                 const ImVec2& size, int playheadStep = -1);
+
+// Breakpoint envelope over 0..1 in both axes. Drag points, double-click
+// empty space to add, right-click a point to delete. Points stay x-sorted;
+// first/last stay pinned to x=0/x=1. Returns true while editing.
+struct EnvPoint {
+    float x = 0.0f, y = 0.0f;
+};
+bool envelopeEditor(const char* id, std::vector<EnvPoint>& points,
+                    const ImVec2& size);
+
+// 2D pad controlling two normalized values. Returns true while dragging.
+bool xyPad(const char* id, float* x, float* y, const ImVec2& size);
+
+// Themed scrolling list; returns true when the selection changed.
+bool selectableList(const char* id, const std::vector<std::string>& items,
+                    int* selected, const ImVec2& size);
+
+// Number field you drag horizontally (themed DragFloat).
+bool dragNumber(const char* label, float* value, float speed, float minV,
+                float maxV, const char* format = "%.2f");
+
+// File browser panel: directory listing + breadcrumb up-navigation.
+// Returns true when the user picks a file (path written to outPath).
+// extensions = comma list ("wav,flac"); null shows everything.
+struct FileBrowserState {
+    std::string dir;      // current directory ("" = start in HOME)
+    std::string selected; // highlighted entry
+};
+bool fileBrowser(const char* id, FileBrowserState& st, const ImVec2& size,
+                 std::string* outPath, const char* extensions = nullptr);
+
 } // namespace snd::ui

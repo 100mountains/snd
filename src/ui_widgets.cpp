@@ -10,7 +10,9 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 namespace snd::ui {
 
@@ -376,6 +378,288 @@ void sectionHeader(const char* text)
         dl->AddLine(ImVec2(p.x + ts.x + 8.0f, p.y + 4.0f + fs * 0.55f),
                     ImVec2(p.x + w, p.y + 4.0f + fs * 0.55f),
                     withAlpha(gPalette.frameBright, 0xAA), 1.0f);
+}
+
+bool patternGrid(const char* id, bool* cells, int rows, int steps,
+                 const ImVec2& size, int playheadStep)
+{
+    if (rows <= 0 || steps <= 0 || !cells)
+        return false;
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    auto* dl = ImGui::GetWindowDrawList();
+
+    const float cw = size.x / steps, ch = size.y / rows;
+    bool changed = false;
+
+    if (ImGui::IsItemActive()) {
+        ImVec2 m = ImGui::GetIO().MousePos;
+        int c = (int)((m.x - p.x) / cw), r = (int)((m.y - p.y) / ch);
+        if (c >= 0 && c < steps && r >= 0 && r < rows) {
+            bool want = !ImGui::GetIO().KeyAlt; // drag paints, alt-drag erases
+            if (cells[r * steps + c] != want) {
+                cells[r * steps + c] = want;
+                changed = true;
+            }
+        }
+    }
+
+    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
+    if (playheadStep >= 0 && playheadStep < steps)
+        dl->AddRectFilled(ImVec2(p.x + playheadStep * cw, p.y),
+                          ImVec2(p.x + (playheadStep + 1) * cw, p.y + size.y),
+                          withAlpha(gPalette.accent, 0x24));
+
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < steps; ++c) {
+            ImVec2 a(p.x + c * cw + 1.5f, p.y + r * ch + 1.5f);
+            ImVec2 b(p.x + (c + 1) * cw - 1.5f, p.y + (r + 1) * ch - 1.5f);
+            bool on = cells[r * steps + c];
+            ImU32 col = on ? (c == playheadStep ? gPalette.text : gPalette.accent)
+                           : withAlpha(gPalette.frameBright,
+                                       (c / 4) % 2 ? 0x30 : 0x55);
+            dl->AddRectFilled(a, b, col, 2.0f);
+        }
+    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    return changed;
+}
+
+bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2& size)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    auto* dl = ImGui::GetWindowDrawList();
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    ImGuiID dragKey = ImGui::GetItemID();
+
+    if (points.empty())
+        points = {{0.0f, 0.5f}, {1.0f, 0.5f}};
+
+    auto toScreen = [&](const EnvPoint& e) {
+        return ImVec2(p.x + e.x * size.x, p.y + (1.0f - e.y) * size.y);
+    };
+
+    ImVec2 m = ImGui::GetIO().MousePos;
+    const float grab = 8.0f;
+    bool changed = false;
+
+    int hot = -1;
+    for (int i = 0; i < (int)points.size(); ++i) {
+        ImVec2 s = toScreen(points[i]);
+        if (std::fabs(m.x - s.x) < grab && std::fabs(m.y - s.y) < grab) {
+            hot = i;
+            break;
+        }
+    }
+
+    int dragging = store->GetInt(dragKey, -1);
+    if (ImGui::IsItemActivated())
+        store->SetInt(dragKey, dragging = hot);
+    if (!ImGui::IsItemActive())
+        store->SetInt(dragKey, dragging = -1);
+
+    if (dragging >= 0 && dragging < (int)points.size()) {
+        auto& e = points[(size_t)dragging];
+        float lo = dragging == 0 ? 0.0f : points[(size_t)dragging - 1].x;
+        float hi = dragging == (int)points.size() - 1 ? 1.0f
+                                                      : points[(size_t)dragging + 1].x;
+        if (dragging == 0)
+            hi = 0.0f; // endpoints pinned in x
+        if (dragging == (int)points.size() - 1)
+            lo = 1.0f;
+        e.x = std::clamp((m.x - p.x) / size.x, std::min(lo, hi), std::max(lo, hi));
+        e.y = std::clamp(1.0f - (m.y - p.y) / size.y, 0.0f, 1.0f);
+        changed = true;
+    }
+
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && hot < 0) {
+        EnvPoint e{std::clamp((m.x - p.x) / size.x, 0.0f, 1.0f),
+                   std::clamp(1.0f - (m.y - p.y) / size.y, 0.0f, 1.0f)};
+        auto it = std::find_if(points.begin(), points.end(),
+                               [&](const EnvPoint& q) { return q.x > e.x; });
+        points.insert(it, e);
+        changed = true;
+    }
+    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(1) && hot > 0 &&
+        hot < (int)points.size() - 1) {
+        points.erase(points.begin() + hot);
+        changed = true;
+    }
+
+    // draw
+    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
+    for (size_t i = 1; i < points.size(); ++i)
+        dl->AddLine(toScreen(points[i - 1]), toScreen(points[i]), gPalette.accent,
+                    2.0f);
+    for (int i = 0; i < (int)points.size(); ++i) {
+        ImVec2 s = toScreen(points[(size_t)i]);
+        dl->AddCircleFilled(s, i == hot || i == dragging ? 6.0f : 4.5f,
+                            i == hot || i == dragging ? gPalette.text
+                                                      : gPalette.accent);
+    }
+    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    return changed;
+}
+
+bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    auto* dl = ImGui::GetWindowDrawList();
+    bool changed = false;
+
+    if (ImGui::IsItemActive()) {
+        ImVec2 m = ImGui::GetIO().MousePos;
+        float nx = std::clamp((m.x - p.x) / size.x, 0.0f, 1.0f);
+        float ny = std::clamp(1.0f - (m.y - p.y) / size.y, 0.0f, 1.0f);
+        changed = nx != *x || ny != *y;
+        *x = nx;
+        *y = ny;
+    }
+
+    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
+    // crosshair
+    float cx = p.x + *x * size.x, cy = p.y + (1.0f - *y) * size.y;
+    dl->AddLine(ImVec2(cx, p.y), ImVec2(cx, p.y + size.y),
+                withAlpha(gPalette.accent, 0x50));
+    dl->AddLine(ImVec2(p.x, cy), ImVec2(p.x + size.x, cy),
+                withAlpha(gPalette.accent, 0x50));
+    dl->AddCircleFilled(ImVec2(cx, cy), 6.0f, gPalette.accent);
+    dl->AddCircleFilled(ImVec2(cx - 1.5f, cy - 1.8f), 1.6f,
+                        IM_COL32(255, 255, 255, 170));
+    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    return changed;
+}
+
+bool selectableList(const char* id, const std::vector<std::string>& items,
+                    int* selected, const ImVec2& size)
+{
+    bool changed = false;
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, toVec4(gPalette.frame));
+    if (ImGui::BeginChild(id, size, ImGuiChildFlags_Borders)) {
+        for (int i = 0; i < (int)items.size(); ++i) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(items[(size_t)i].c_str(), selected && *selected == i)) {
+                if (selected && *selected != i) {
+                    *selected = i;
+                    changed = true;
+                }
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    return changed;
+}
+
+bool dragNumber(const char* label, float* value, float speed, float minV, float maxV,
+                const char* format)
+{
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, toVec4(gPalette.frameBright));
+    ImGui::PushStyleColor(ImGuiCol_Text, toVec4(gPalette.text));
+    bool changed = ImGui::DragFloat(label, value, speed, minV, maxV, format);
+    ImGui::PopStyleColor(3);
+    return changed;
+}
+
+bool fileBrowser(const char* id, FileBrowserState& st, const ImVec2& size,
+                 std::string* outPath, const char* extensions)
+{
+    namespace fs = std::filesystem;
+    if (st.dir.empty()) {
+        const char* home = getenv("HOME");
+#if defined(_WIN32)
+        if (!home)
+            home = getenv("USERPROFILE");
+#endif
+        st.dir = home ? home : ".";
+    }
+
+    auto matches = [&](const fs::path& path) {
+        if (!extensions)
+            return true;
+        auto ext = path.extension().string();
+        if (!ext.empty() && ext[0] == '.')
+            ext.erase(0, 1);
+        for (auto& c : ext)
+            c = (char)tolower((unsigned char)c);
+        std::string list = extensions;
+        size_t pos = 0;
+        while (pos != std::string::npos) {
+            size_t comma = list.find(',', pos);
+            std::string one = list.substr(
+                pos, comma == std::string::npos ? std::string::npos : comma - pos);
+            if (one == ext)
+                return true;
+            pos = comma == std::string::npos ? comma : comma + 1;
+        }
+        return false;
+    };
+
+    bool picked = false;
+    ImGui::PushID(id);
+    ImGui::BeginGroup();
+
+    // breadcrumb: up button + current dir
+    if (ImGui::SmallButton("^ up")) {
+        fs::path parent = fs::path(st.dir).parent_path();
+        if (!parent.empty())
+            st.dir = parent.string();
+        st.selected.clear();
+    }
+    ImGui::SameLine();
+    ImGui::TextColored(toVec4(gPalette.textDim), "%s", st.dir.c_str());
+
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, toVec4(gPalette.frame));
+    if (ImGui::BeginChild("##files", ImVec2(size.x, size.y - ImGui::GetFrameHeight()),
+                          ImGuiChildFlags_Borders)) {
+        std::error_code ec;
+        std::vector<fs::directory_entry> dirs, files;
+        for (auto it = fs::directory_iterator(st.dir, ec);
+             !ec && it != fs::directory_iterator(); it.increment(ec)) {
+            auto name = it->path().filename().string();
+            if (!name.empty() && name[0] == '.')
+                continue; // hidden
+            if (it->is_directory(ec))
+                dirs.push_back(*it);
+            else if (matches(it->path()))
+                files.push_back(*it);
+        }
+        auto byName = [](const fs::directory_entry& a, const fs::directory_entry& b) {
+            return a.path().filename() < b.path().filename();
+        };
+        std::sort(dirs.begin(), dirs.end(), byName);
+        std::sort(files.begin(), files.end(), byName);
+
+        for (auto& d : dirs) {
+            std::string label = "[dir] " + d.path().filename().string();
+            if (ImGui::Selectable(label.c_str(), false,
+                                  ImGuiSelectableFlags_AllowDoubleClick) &&
+                ImGui::IsMouseDoubleClicked(0)) {
+                st.dir = d.path().string();
+                st.selected.clear();
+            }
+        }
+        for (auto& f : files) {
+            std::string name = f.path().filename().string();
+            bool sel = st.selected == f.path().string();
+            if (ImGui::Selectable(name.c_str(), sel,
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+                st.selected = f.path().string();
+                if (ImGui::IsMouseDoubleClicked(0) && outPath) {
+                    *outPath = st.selected;
+                    picked = true;
+                }
+            }
+        }
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::EndGroup();
+    ImGui::PopID();
+    return picked;
 }
 
 } // namespace snd::ui

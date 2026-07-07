@@ -531,7 +531,22 @@ static int runSelftest()
             snd::ui::meter("m", ms, 0.5f, ImVec2(10, 80));
             interacted = snd::ui::fader("f", &fad, ImVec2(24, 100)) || interacted;
             snd::ui::badge("VST3");
-            snd::ui::sectionHeader("levels");
+            snd::ui::sectionHeader("murk-parity widgets");
+        static bool cells[4 * 16] = {};
+        static int step = 0;
+        step = (step + 1) % (16 * 8);
+        snd::ui::patternGrid("grid", cells, 4, 16, ImVec2(320, 72), step / 8);
+        static std::vector<snd::ui::EnvPoint> env;
+        snd::ui::envelopeEditor("env", env, ImVec2(200, 80));
+        ImGui::SameLine();
+        static float px = 0.5f, py = 0.5f;
+        snd::ui::xyPad("xy", &px, &py, ImVec2(80, 80));
+        static snd::ui::KeyboardState kbst;
+        snd::ui::keyboard("kb", kbst, ImVec2(320, 60), 48, 2,
+                          [](uint8_t, uint8_t) {}, [](uint8_t) {});
+        static float dn = 0.3f;
+        snd::ui::dragNumber("drag me", &dn, 0.01f, 0.0f, 1.0f);
+        snd::ui::sectionHeader("levels");
             ImGui::End();
             ImGui::Render();
             drawLists = ImGui::GetDrawData()->CmdListsCount;
@@ -1121,6 +1136,21 @@ int main(int argc, char** argv)
         snd::ui::badge("VST3");
         ImGui::SameLine();
         snd::ui::badge("48k");
+        snd::ui::sectionHeader("murk-parity widgets");
+        static bool cells[4 * 16] = {};
+        static int step = 0;
+        step = (step + 1) % (16 * 8);
+        snd::ui::patternGrid("grid", cells, 4, 16, ImVec2(320, 72), step / 8);
+        static std::vector<snd::ui::EnvPoint> env;
+        snd::ui::envelopeEditor("env", env, ImVec2(200, 80));
+        ImGui::SameLine();
+        static float px = 0.5f, py = 0.5f;
+        snd::ui::xyPad("xy", &px, &py, ImVec2(80, 80));
+        static snd::ui::KeyboardState kbst;
+        snd::ui::keyboard("kb", kbst, ImVec2(320, 60), 48, 2,
+                          [](uint8_t, uint8_t) {}, [](uint8_t) {});
+        static float dn = 0.3f;
+        snd::ui::dragNumber("drag me", &dn, 0.01f, 0.0f, 1.0f);
         snd::ui::sectionHeader("levels");
         float sig = power ? fad * (0.55f + 0.45f * (float)std::sin(ImGui::GetTime() * 3.0))
                           : 0.0f;
