@@ -26,4 +26,8 @@ std::optional<std::string> saveFileDialog(const std::string& defaultName,
 // mac ~/Library/Application Support/<app>, win %APPDATA%/<app>, linux ~/.config/<app>
 std::string configDir(const std::string& appName);
 
+// Absolute path of the running executable (empty if the OS won't say).
+// Lets an app re-run itself, e.g. as a plugin-scan worker process.
+std::string executablePath();
+
 } // namespace snd::platform

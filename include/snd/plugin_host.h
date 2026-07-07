@@ -94,6 +94,38 @@ public:
     virtual std::unique_ptr<Instance> create(const Description& desc) = 0;
 };
 
+// --- Out-of-process scanning (Murk's crash-isolation pattern) ---
+// Enumerating a plugin file loads its binary, and a broken plugin can crash
+// or hang the whole process. The fix: re-run the app's own executable as a
+// one-shot scan worker per plugin. A crash or hang takes down only that
+// throwaway child (hangs are killed after a timeout), the plugin simply
+// yields no types this scan, the host never dies, and nothing is ever
+// permanently blacklisted.
+//
+// Wiring (two lines in the app):
+//   1. at the very top of main(), before any GUI/audio init:
+//        if (argc == 5 && std::string(argv[1]) == "--myapp-scan-plugin")
+//            return snd::plugin::runScanWorker(argv[2], argv[3], argv[4]);
+//   2. before scanning:
+//        manager.setScanWorker(snd::platform::executablePath(),
+//                              "--myapp-scan-plugin");
+//
+// Child command line: <exe> <flag> <format-name> <identifier> <out-file>
+
+// CHILD side: enumerate one plugin and write its descriptions to outFile
+// (written even when empty). Returns the process exit code.
+int runScanWorker(const std::string& formatName, const std::string& identifier,
+                  const std::string& outFile);
+
+// PARENT side: enumerate one plugin file in a throwaway child process.
+// Empty result = nothing found / crashed / hung / failed to launch; the
+// calling process is unharmed in every case.
+std::vector<Description> scanViaWorker(const std::string& workerExe,
+                                       const std::string& workerFlag,
+                                       const std::string& formatName,
+                                       const std::string& fileOrIdentifier,
+                                       uint32_t timeoutMs = 30000);
+
 class HostManager {
 public:
     HostManager();
@@ -106,7 +138,14 @@ public:
     // Crash-loop prevention (JUCE's "dead man's pedal"): each plugin file is
     // recorded here before scanning and cleared after success. Files still
     // present from a previous run are skipped and reported as blacklisted.
+    // Only used for in-process scans; superseded by setScanWorker().
     void setDeadMansPedalFile(const std::string& path);
+
+    // Route scanAll()'s per-file enumeration through scanViaWorker() (see
+    // above). Registry formats (AU) stay in-process: their enumeration reads
+    // the OS component registry and never loads plugin code.
+    void setScanWorker(const std::string& exePath, const std::string& flag);
+    void setScanWorkerTimeout(uint32_t milliseconds); // default 30000 per plugin
 
     struct ScanResult {
         std::vector<Description> plugins;

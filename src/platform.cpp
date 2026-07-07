@@ -5,7 +5,14 @@
 #include <nfd.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#endif
 
 namespace snd::platform {
 
@@ -104,6 +111,29 @@ std::string configDir(const std::string& appName)
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     return dir.string();
+}
+
+std::string executablePath()
+{
+#if defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size); // ask for the needed length
+    std::string buf(size, '\0');
+    if (_NSGetExecutablePath(buf.data(), &size) != 0)
+        return {};
+    buf.resize(std::strlen(buf.c_str()));
+    std::error_code ec;
+    auto canon = std::filesystem::canonical(buf, ec);
+    return ec ? buf : canon.string();
+#elif defined(_WIN32)
+    char buf[MAX_PATH] = {};
+    DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    return n > 0 && n < MAX_PATH ? std::string(buf, n) : std::string();
+#else
+    std::error_code ec;
+    auto p = std::filesystem::read_symlink("/proc/self/exe", ec);
+    return ec ? std::string() : p.string();
+#endif
 }
 
 } // namespace snd::platform

@@ -5,6 +5,7 @@
 
 #include "snd/audio.h"
 #include "snd/dsp.h"
+#include "snd/platform.h"
 #include "snd/plugin_host.h"
 #include "snd/ui.h"
 
@@ -385,19 +386,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/8] decode + playback: ");
+    printf("[1/9] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/8] capture/record:    ");
+    printf("[2/9] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/8] VST3 hosting:      ");
+    printf("[3/9] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/8] AU hosting:        ");
+    printf("[4/9] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -406,19 +407,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/8] resample:          ");
+    printf("[5/9] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/8] STFT round-trip:   ");
+    printf("[6/9] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/8] player looping:    ");
+    printf("[7/9] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/8] insert hook:       ");
+    printf("[8/9] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -453,7 +454,29 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8;
+    printf("[9/9] OOP plugin scan:   ");
+    fflush(stdout);
+    bool ok9;
+    {
+        // this same executable is the worker (see main); a real child
+        // process scans TestGain and reports back through the out-file
+        auto exe = snd::platform::executablePath();
+        auto found = snd::plugin::scanViaWorker(exe, "--snd-scan-plugin", "VST3",
+                                                SND_TEST_VST3_PATH);
+        // garbage never harms the parent: empty result, no crash
+        auto junk = snd::plugin::scanViaWorker(exe, "--snd-scan-plugin", "VST3",
+                                               "/nonexistent/junk.vst3");
+        ok9 = !exe.empty() && found.size() == 1 && found[0].name == "SND TestGain" &&
+              !found[0].identifier.empty() && junk.empty();
+        if (ok9)
+            printf("PASS (%s found via child process; junk path harmless)\n",
+                   found[0].name.c_str());
+        else
+            printf("FAIL (exe='%s', found=%zu, junk=%zu)\n", exe.c_str(), found.size(),
+                   junk.size());
+    }
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
@@ -464,6 +487,11 @@ static int runSelftest()
 
 int main(int argc, char** argv)
 {
+    // scan-worker mode: enumerate one plugin and exit, before any GUI/audio
+    // init -- a crashing plugin takes down only this child process
+    if (argc == 5 && std::string(argv[1]) == "--snd-scan-plugin")
+        return snd::plugin::runScanWorker(argv[2], argv[3], argv[4]);
+
     for (int i = 1; i < argc; ++i)
         if (std::string(argv[i]) == "--selftest")
             return runSelftest();
