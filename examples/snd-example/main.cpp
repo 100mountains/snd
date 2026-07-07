@@ -399,19 +399,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/9] decode + playback: ");
+    printf("[1/10] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/9] capture/record:    ");
+    printf("[2/10] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/9] VST3 hosting:      ");
+    printf("[3/10] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/9] AU hosting:        ");
+    printf("[4/10] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -420,19 +420,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/9] resample:          ");
+    printf("[5/10] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/9] STFT round-trip:   ");
+    printf("[6/10] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/9] player looping:    ");
+    printf("[7/10] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/9] insert hook:       ");
+    printf("[8/10] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -467,7 +467,7 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    printf("[9/9] OOP plugin scan:   ");
+    printf("[9/10] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -489,7 +489,60 @@ static int runSelftest()
                    junk.size());
     }
 
-    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9;
+    printf("[10/10] widget set:      ");
+    fflush(stdout);
+    bool ok10;
+    {
+        // one headless ImGui frame exercising every snd::ui widget: no GPU,
+        // no window -- proves the widget layer stands on its own
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.DisplaySize = ImVec2(800, 600);
+        unsigned char* pixels = nullptr;
+        int tw = 0, th = 0;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &tw, &th); // build atlas CPU-side
+
+        snd::ui::Palette pal;
+        snd::ui::setPalette(pal);
+
+        float k = 0.5f, db = -6.0f, fad = 0.7f;
+        bool sw = true;
+        snd::ui::MeterState ms;
+
+        // two frames: ImGui hides a fresh auto-sizing window on its first
+        // frame while it measures, so the draw check needs frame two
+        bool interacted = false;
+        int drawLists = 0;
+        for (int frame = 0; frame < 2; ++frame) {
+            ImGui::NewFrame();
+            ImGui::Begin("w");
+            interacted = snd::ui::knob("k", &k) || interacted;
+            interacted = snd::ui::knobDb("g", &db, -60.0f, 12.0f) || interacted;
+            interacted = snd::ui::toggle("t", &sw) || interacted;
+            interacted = snd::ui::led("l", true, 5.0f, true) || interacted;
+            snd::ui::meter("m", ms, 0.5f, ImVec2(10, 80));
+            interacted = snd::ui::fader("f", &fad, ImVec2(24, 100)) || interacted;
+            snd::ui::badge("VST3");
+            snd::ui::sectionHeader("levels");
+            ImGui::End();
+            ImGui::Render();
+            drawLists = ImGui::GetDrawData()->CmdListsCount;
+        }
+        ImGui::DestroyContext();
+
+        // no input was fed, so nothing may report interaction; values intact;
+        // the meter must have integrated the level; something got drawn
+        ok10 = !interacted && k == 0.5f && db == -6.0f && sw && fad == 0.7f &&
+               ms.shown > 0.4f && drawLists > 0;
+        if (ok10)
+            printf("PASS (knob/toggle/led/meter/fader/badge drew headless)\n");
+        else
+            printf("FAIL (interacted=%d shown=%.2f lists=%d)\n", (int)interacted,
+                   ms.shown, drawLists);
+    }
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
@@ -535,6 +588,35 @@ int main(int argc, char** argv)
         if (snd::ui::gradientButton("gradient button", ImVec2(260, 32),
                                     IM_COL32(70, 70, 90, 255), IM_COL32(35, 35, 50, 255)))
             printf("clicked\n");
+        ImGui::End();
+
+        // the audio widget set, all in one place
+        static float drive = 0.5f, mix = 0.3f, gainDb = -6.0f, fad = 0.8f;
+        static bool live = true, power = true;
+        static snd::ui::MeterState msV, msH;
+        ImGui::Begin("SND Widgets");
+        snd::ui::sectionHeader("knobs");
+        snd::ui::knob("drive", &drive);
+        ImGui::SameLine();
+        snd::ui::knob("mix", &mix);
+        ImGui::SameLine();
+        snd::ui::knobDb("gain", &gainDb, -60.0f, 12.0f);
+        snd::ui::sectionHeader("switches");
+        snd::ui::toggle("live", &live);
+        ImGui::SameLine();
+        if (snd::ui::led("pwr", power, 6.0f, true))
+            power = !power;
+        ImGui::SameLine();
+        snd::ui::badge("VST3");
+        ImGui::SameLine();
+        snd::ui::badge("48k");
+        snd::ui::sectionHeader("levels");
+        float sig = power ? fad * (0.55f + 0.45f * (float)std::sin(ImGui::GetTime() * 3.0))
+                          : 0.0f;
+        snd::ui::fader("fad", &fad, ImVec2(26, 120));
+        ImGui::SameLine();
+        snd::ui::meter("mv", msV, sig, ImVec2(10, 120));
+        snd::ui::meter("mh", msH, sig, ImVec2(220, 8));
         ImGui::End();
 
         window.endFrame();

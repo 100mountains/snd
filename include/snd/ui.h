@@ -83,4 +83,62 @@ enum class Icon {
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);
 
+// --- The audio widget set ---------------------------------------------------
+// Themed controls for audio apps: knobs, switches, LEDs, meters, faders.
+// They read the Palette below, so one setPalette() call when the app's theme
+// changes re-skins every widget. Knobs are the vendored imgui-knobs
+// underneath; the rest is SND's own drawing.
+
+struct Palette {
+    ImU32 accent = IM_COL32(240, 190, 90, 255);    // active/lit elements
+    ImU32 accentDim = IM_COL32(120, 95, 45, 255);  // their darker relative
+    ImU32 text = IM_COL32(230, 232, 240, 255);
+    ImU32 textDim = IM_COL32(140, 145, 158, 255);
+    ImU32 frame = IM_COL32(34, 37, 46, 255);       // control bodies
+    ImU32 frameBright = IM_COL32(58, 63, 78, 255); // borders/tracks
+    ImU32 ledOff = IM_COL32(70, 74, 88, 255);
+    ImU32 meterLow = IM_COL32(80, 220, 120, 235);  // classic hardware zones
+    ImU32 meterMid = IM_COL32(255, 185, 70, 235);
+    ImU32 meterHot = IM_COL32(255, 80, 70, 235);
+};
+void setPalette(const Palette& p);
+const Palette& palette();
+
+// Rotary knob, normalized 0..1. Returns true while the value is changing.
+// size 0 = a sensible default. The label is drawn under the knob.
+bool knob(const char* label, float* value, float size = 0.0f,
+          const char* format = "%.2f");
+
+// Knob over a dB range (label shows dB). 0 dB gets a tick if in range.
+bool knobDb(const char* label, float* db, float minDb, float maxDb,
+            float size = 0.0f);
+
+// Animated on/off switch. Returns true when toggled.
+bool toggle(const char* label, bool* on);
+
+// Round indicator LED with a glow when lit. Clickable when `clickable`;
+// returns true on click. onColor 0 = palette accent.
+bool led(const char* id, bool on, float radius = 5.0f, bool clickable = false,
+         ImU32 onColor = 0);
+
+// Level meter on a dB scale (floorDb..0) with peak-hold. `level` is linear
+// amplitude 0..1 for this frame; the state carries decay + hold between
+// frames. Horizontal when size.x > size.y.
+struct MeterState {
+    float shown = 0.0f;   // decayed bar level (linear)
+    float peak = 0.0f;    // held peak (linear)
+    float peakAge = 0.0f; // frames since the peak was set
+};
+void meter(const char* id, MeterState& st, float level, const ImVec2& size,
+           float floorDb = -48.0f);
+
+// Vertical audio fader, normalized 0..1. Returns true while dragging.
+bool fader(const char* id, float* value, const ImVec2& size);
+
+// Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
+void badge(const char* text, ImU32 fill = 0);
+
+// Dim uppercase caption with a rule to the right: section separators.
+void sectionHeader(const char* text);
+
 } // namespace snd::ui

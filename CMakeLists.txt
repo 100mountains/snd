@@ -50,6 +50,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nfd)
 
+# imgui-knobs -- rotary knob widgets for ImGui (MIT). No release tags; pinned.
+FetchContent_Declare(
+    imgui_knobs
+    GIT_REPOSITORY https://github.com/altschuler/imgui-knobs.git
+    GIT_TAG 6b4b5923129c1e8fa4cd30f8c59439643d44f22f
+    SOURCE_SUBDIR "cmake-subdir-skipped"
+)
+FetchContent_MakeAvailable(imgui_knobs)
+
 # PFFFT -- small fast FFT for audio (BSD-like FFTPACK license). No release
 # tags upstream, so pinned to a commit. Compiled directly into snd below
 # rather than via its own CMake (keeps its test/bench targets out).
@@ -105,10 +114,12 @@ endif()
 add_library(snd STATIC
     src/audio.cpp
     src/ui.cpp
+    src/ui_widgets.cpp
     src/dsp.cpp
     src/platform.cpp
     src/plugin_host.cpp
     src/plugin_host/vst3/vst3_format.cpp
+    ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
     ${pffft_SOURCE_DIR}/src/pffft.c
     ${pffft_SOURCE_DIR}/src/pffft_common.c
     ${SND_VST3_HOSTING_EXTRA}
@@ -135,6 +146,7 @@ target_include_directories(snd
         ${miniaudio_SOURCE_DIR}
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
+        ${imgui_knobs_SOURCE_DIR}
     PRIVATE
         ${pffft_SOURCE_DIR}/src
         ${pffft_SOURCE_DIR}/include/pffft
