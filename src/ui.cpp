@@ -25,8 +25,14 @@
 
 namespace snd::ui {
 
+namespace {
+int gWindowCount = 0;             // glfwTerminate when the last one dies
+GLFWwindow* gShareWindow = nullptr; // GL object sharing (textures cross windows)
+} // namespace
+
 struct Window::Impl {
     GLFWwindow* window = nullptr;
+    ImGuiContext* ctx = nullptr; // one ImGui context per window
     std::vector<std::string> droppedFiles;
 
     static void dropCallback(GLFWwindow* w, int count, const char** paths)
@@ -59,18 +65,26 @@ bool Window::create(int width, int height, const std::string& title, bool decora
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 #endif
 
-    impl->window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    // share GL objects with the first window so textures work everywhere
+    impl->window =
+        glfwCreateWindow(width, height, title.c_str(), nullptr, gShareWindow);
     if (!impl->window) {
-        glfwTerminate();
+        if (gWindowCount == 0)
+            glfwTerminate();
         return false;
     }
+    if (!gShareWindow)
+        gShareWindow = impl->window;
+    ++gWindowCount;
+
     glfwSetWindowUserPointer(impl->window, impl.get());
     glfwSetDropCallback(impl->window, Impl::dropCallback);
     glfwMakeContextCurrent(impl->window);
     glfwSwapInterval(1);
 
     IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+    impl->ctx = ImGui::CreateContext();
+    ImGui::SetCurrentContext(impl->ctx);
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(impl->window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);
@@ -81,12 +95,18 @@ void Window::destroy()
 {
     if (!impl->window)
         return;
+    glfwMakeContextCurrent(impl->window);
+    ImGui::SetCurrentContext(impl->ctx);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
+    ImGui::DestroyContext(impl->ctx);
+    impl->ctx = nullptr;
+    if (impl->window == gShareWindow)
+        gShareWindow = nullptr;
     glfwDestroyWindow(impl->window);
-    glfwTerminate();
     impl->window = nullptr;
+    if (--gWindowCount == 0)
+        glfwTerminate();
 }
 
 bool Window::shouldClose() const
@@ -106,6 +126,8 @@ bool Window::beginFrame()
         return false;
     glfwPollEvents();
     snd::platform::processMainQueue(); // runOnMain() jobs + frame-pumped timers
+    glfwMakeContextCurrent(impl->window);
+    ImGui::SetCurrentContext(impl->ctx); // per-window ImGui context
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -114,6 +136,8 @@ bool Window::beginFrame()
 
 void Window::endFrame()
 {
+    glfwMakeContextCurrent(impl->window);
+    ImGui::SetCurrentContext(impl->ctx);
     ImGui::Render();
     int w, h;
     glfwGetFramebufferSize(impl->window, &w, &h);
