@@ -97,9 +97,15 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
   MP3 encode works off system libmp3lame. Fixes were three transitive
   includes + global PIC. Workflow: rsync from the Mac, run tools/build.sh
   by hand over SSH.
-- **P2 — Linux backends** (next): ALSA MIDI, X11 editor windows
-  (host+client), media via ffmpeg-on-PATH pipe (already installed on the
-  box) or GStreamer.
+- **P2 — DONE 2026-07-07 (minus editor embedding)**: ALSA sequencer MIDI
+  (loopback selftest passes on the box), media extraction via
+  ffmpeg-on-PATH pipe (process-isolated like the plugin scanner -- nothing
+  linked, nothing vendored; swap for GStreamer if ffmpeg-as-tool ever
+  bothers us). Linux scorecard: 19 PASS + 2 AU skips = full parity minus AU.
+- **P2b — remaining**: X11 plugin-editor embedding, host side (needs a
+  Steinberg::Linux::IRunLoop implementation -- the known hard part of Linux
+  VST3 hosting) and client side (GLX view). SND-built plugin UIs DO work on
+  Linux today via the GLFW standalone shell.
 - **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
   clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
   already-written CreateProcess scan path + LAME dll loading.

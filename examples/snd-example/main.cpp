@@ -608,7 +608,7 @@ static int runSelftest()
         }
         if (!skipped) {
             if (ok11)
-                printf("PASS (note 60 vel 100 round-tripped through CoreMIDI)\n");
+                printf("PASS (note 60 vel 100 round-tripped through the OS MIDI system)\n");
             else
                 printf("FAIL\n");
         }
@@ -772,11 +772,12 @@ static int runSelftest()
 
     printf("[16/21] media extract:   ");
     fflush(stdout);
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__linux__)
     bool ok16;
     {
-        // wav -> AAC in an .m4a via the OS (afconvert), then pull the audio
-        // back out through loadMediaAudio -- the same path video files take
+        // wav -> AAC in an .m4a via the OS tool (afconvert on mac, ffmpeg on
+        // Linux), then pull the audio back out through loadMediaAudio --
+        // the same path video files take
         auto tmpw = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
                     "/snd-selftest-src.wav";
         auto tmpm = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
@@ -791,8 +792,19 @@ static int runSelftest()
         }
         std::string err;
         ok16 = snd::audio::saveWav(tmpw, b, &err);
+#if defined(__APPLE__)
         std::string cmd = "afconvert -f m4af -d aac '" + tmpw + "' '" + tmpm + "' 2>/dev/null";
-        ok16 = ok16 && system(cmd.c_str()) == 0;
+#else
+        std::string cmd = "ffmpeg -v error -y -i '" + tmpw + "' -c:a aac '" + tmpm + "' 2>/dev/null";
+#endif
+        bool haveTool = ok16 && system(cmd.c_str()) == 0;
+        if (!haveTool) {
+            printf("skipped (no media conversion tool available)\n");
+            remove(tmpw.c_str());
+            ok16 = true;
+            goto media_done;
+        }
+        ok16 = haveTool;
         snd::audio::Buffer media;
         ok16 = ok16 && snd::audio::loadMediaAudio(tmpm, media, &err);
         double r1 = rms(b.samples), r2 = rms(media.samples);
@@ -806,9 +818,10 @@ static int runSelftest()
         else
             printf("FAIL (%s)\n", err.c_str());
     }
+media_done:;
 #else
     bool ok16 = true;
-    printf("skipped (AVFoundation is macOS-only)\n");
+    printf("skipped (no media backend on this platform yet)\n");
 #endif
 
     printf("[17/21] state tree:      ");

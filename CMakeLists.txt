@@ -194,7 +194,7 @@ elseif(WIN32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)
-    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl)
+    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl asound)
 endif()
 
 # ---------------------------------------------------------------------------

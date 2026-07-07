@@ -393,10 +393,74 @@ bool saveMp3(const std::string& path, const Buffer& buf, std::string* error)
     return ok;
 }
 
-#if !defined(__APPLE__)
+#if !defined(__APPLE__) && !defined(_WIN32)
+// Linux: pipe through ffprobe/ffmpeg when they're on PATH -- nothing linked,
+// nothing vendored, reads every container ffmpeg knows.
+namespace {
+
+std::string shellQuote(const std::string& s)
+{
+    std::string out = "'";
+    for (char c : s)
+        out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+    out += "'";
+    return out;
+}
+
+} // namespace
+
+bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error)
+{
+    // probe the first audio stream's layout
+    std::string probe = "ffprobe -v error -select_streams a:0 -show_entries "
+                        "stream=sample_rate,channels -of default=nw=1 " +
+                        shellQuote(path) + " 2>/dev/null";
+    FILE* pf = popen(probe.c_str(), "r");
+    if (!pf) {
+        if (error) *error = "could not run ffprobe";
+        return false;
+    }
+    uint32_t channels = 0, rate = 0;
+    char line[128];
+    while (fgets(line, sizeof(line), pf)) {
+        unsigned v = 0;
+        if (sscanf(line, "sample_rate=%u", &v) == 1)
+            rate = v;
+        else if (sscanf(line, "channels=%u", &v) == 1)
+            channels = v;
+    }
+    if (pclose(pf) != 0 || channels == 0 || rate == 0) {
+        if (error)
+            *error = "no audio track (or ffprobe missing): " + path;
+        return false;
+    }
+
+    std::string cmd = "ffmpeg -v error -i " + shellQuote(path) +
+                      " -map a:0 -f f32le -acodec pcm_f32le - 2>/dev/null";
+    FILE* f = popen(cmd.c_str(), "r");
+    if (!f) {
+        if (error) *error = "could not run ffmpeg";
+        return false;
+    }
+    out.channels = channels;
+    out.sampleRate = rate;
+    out.samples.clear();
+    float chunk[8192];
+    size_t got;
+    while ((got = fread(chunk, sizeof(float), 8192, f)) > 0)
+        out.samples.insert(out.samples.end(), chunk, chunk + got);
+    int rc = pclose(f);
+    out.samples.resize(out.samples.size() - out.samples.size() % channels);
+    if (rc != 0 || out.samples.empty()) {
+        if (error) *error = "ffmpeg decode failed: " + path;
+        return false;
+    }
+    return true;
+}
+#elif defined(_WIN32)
 bool loadMediaAudio(const std::string&, Buffer&, std::string* error)
 {
-    if (error) *error = "media extraction is macOS-only so far";
+    if (error) *error = "media extraction: Media Foundation backend pending";
     return false;
 }
 #endif

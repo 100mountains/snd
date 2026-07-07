@@ -1,5 +1,5 @@
-// snd::midi -- CoreMIDI on macOS (modern MIDIEventList API), stubs elsewhere
-// until Windows/Linux backends are needed.
+// snd::midi -- CoreMIDI on macOS (modern MIDIEventList API), ALSA sequencer
+// on Linux, stubs on Windows until the WinMM/WinRT backend lands.
 
 #include "snd/midi.h"
 
@@ -208,7 +208,270 @@ bool Output::send(const Message& m)
 
 } // namespace snd::midi
 
-#else // !__APPLE__ -- stubs until a Windows/Linux backend exists
+#elif defined(__linux__) // ALSA sequencer backend
+
+#include <alsa/asoundlib.h>
+
+#include <atomic>
+#include <poll.h>
+#include <thread>
+
+namespace snd::midi {
+
+namespace {
+
+// display name = "client:port"; match against the whole thing, the client
+// name alone, or the port name alone (so virtual ports find themselves)
+bool nameMatches(const std::string& want, const char* client, const char* port)
+{
+    std::string c = client ? client : "", p = port ? port : "";
+    return want == c + ":" + p || want == c || want == p;
+}
+
+std::vector<std::string> enumeratePorts(unsigned requiredCaps)
+{
+    std::vector<std::string> out;
+    snd_seq_t* seq = nullptr;
+    if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0)
+        return out;
+    snd_seq_client_info_t* cinfo;
+    snd_seq_client_info_alloca(&cinfo);
+    snd_seq_port_info_t* pinfo;
+    snd_seq_port_info_alloca(&pinfo);
+    snd_seq_client_info_set_client(cinfo, -1);
+    while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+        int client = snd_seq_client_info_get_client(cinfo);
+        if (client == snd_seq_client_id(seq))
+            continue;
+        snd_seq_port_info_set_client(pinfo, client);
+        snd_seq_port_info_set_port(pinfo, -1);
+        while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+            unsigned caps = snd_seq_port_info_get_capability(pinfo);
+            if ((caps & requiredCaps) == requiredCaps)
+                out.push_back(std::string(snd_seq_client_info_get_name(cinfo)) + ":" +
+                              snd_seq_port_info_get_name(pinfo));
+        }
+    }
+    snd_seq_close(seq);
+    return out;
+}
+
+bool findPort(snd_seq_t* seq, const std::string& name, unsigned requiredCaps,
+              snd_seq_addr_t& addr)
+{
+    snd_seq_client_info_t* cinfo;
+    snd_seq_client_info_alloca(&cinfo);
+    snd_seq_port_info_t* pinfo;
+    snd_seq_port_info_alloca(&pinfo);
+    snd_seq_client_info_set_client(cinfo, -1);
+    while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+        int client = snd_seq_client_info_get_client(cinfo);
+        if (client == snd_seq_client_id(seq))
+            continue;
+        snd_seq_port_info_set_client(pinfo, client);
+        snd_seq_port_info_set_port(pinfo, -1);
+        while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+            unsigned caps = snd_seq_port_info_get_capability(pinfo);
+            if ((caps & requiredCaps) != requiredCaps)
+                continue;
+            if (nameMatches(name, snd_seq_client_info_get_name(cinfo),
+                            snd_seq_port_info_get_name(pinfo))) {
+                addr.client = (unsigned char)client;
+                addr.port = (unsigned char)snd_seq_port_info_get_port(pinfo);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+std::vector<std::string> inputDevices()
+{
+    return enumeratePorts(SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ);
+}
+
+std::vector<std::string> outputDevices()
+{
+    return enumeratePorts(SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE);
+}
+
+// --- Input ------------------------------------------------------------------
+
+struct Input::Impl {
+    snd_seq_t* seq = nullptr;
+    int port = -1;
+    std::thread thread;
+    std::atomic<bool> run{false};
+    Callback cb;
+
+    void loop()
+    {
+        int nfds = snd_seq_poll_descriptors_count(seq, POLLIN);
+        std::vector<pollfd> fds((size_t)std::max(1, nfds));
+        snd_seq_poll_descriptors(seq, fds.data(), (unsigned)fds.size(), POLLIN);
+        while (run.load(std::memory_order_relaxed)) {
+            if (poll(fds.data(), (nfds_t)fds.size(), 100) <= 0)
+                continue;
+            snd_seq_event_t* ev = nullptr;
+            while (snd_seq_event_input(seq, &ev) >= 0 && ev) {
+                Message m;
+                bool known = true;
+                switch (ev->type) {
+                case SND_SEQ_EVENT_NOTEON:
+                    m = Message::noteOn(ev->data.note.channel, ev->data.note.note,
+                                        ev->data.note.velocity);
+                    break;
+                case SND_SEQ_EVENT_NOTEOFF:
+                    m = Message::noteOff(ev->data.note.channel, ev->data.note.note);
+                    break;
+                case SND_SEQ_EVENT_CONTROLLER:
+                    m = Message::control(ev->data.control.channel,
+                                         (uint8_t)ev->data.control.param,
+                                         (uint8_t)ev->data.control.value);
+                    break;
+                case SND_SEQ_EVENT_PITCHBEND:
+                    m = Message::pitchBend(ev->data.control.channel,
+                                           (uint16_t)(ev->data.control.value + 8192));
+                    break;
+                default:
+                    known = false;
+                }
+                if (known && cb)
+                    cb(m);
+                if (snd_seq_event_input_pending(seq, 0) <= 0)
+                    break;
+            }
+        }
+    }
+
+    void stop()
+    {
+        run.store(false);
+        if (thread.joinable())
+            thread.join();
+        if (seq) {
+            snd_seq_close(seq);
+            seq = nullptr;
+        }
+        port = -1;
+        cb = nullptr;
+    }
+};
+
+Input::Input() : impl(new Impl) {}
+Input::~Input() { close(); }
+
+bool Input::open(const std::string& name, Callback cb, const std::string& virtualName)
+{
+    close();
+    if (snd_seq_open(&impl->seq, "default", SND_SEQ_OPEN_DUPLEX, SND_SEQ_NONBLOCK) < 0)
+        return false;
+    snd_seq_set_client_name(impl->seq,
+                            name.empty() ? virtualName.c_str() : "SND input");
+    impl->port = snd_seq_create_simple_port(
+        impl->seq, name.empty() ? virtualName.c_str() : "in",
+        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
+        SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
+    if (impl->port < 0) {
+        snd_seq_close(impl->seq);
+        impl->seq = nullptr;
+        return false;
+    }
+    if (!name.empty()) {
+        snd_seq_addr_t src{};
+        if (!findPort(impl->seq, name,
+                      SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ, src) ||
+            snd_seq_connect_from(impl->seq, impl->port, src.client, src.port) < 0) {
+            snd_seq_close(impl->seq);
+            impl->seq = nullptr;
+            return false;
+        }
+    }
+    impl->cb = std::move(cb);
+    impl->run.store(true);
+    impl->thread = std::thread([im = impl.get()] { im->loop(); });
+    return true;
+}
+
+void Input::close() { impl->stop(); }
+
+// --- Output -----------------------------------------------------------------
+
+struct Output::Impl {
+    snd_seq_t* seq = nullptr;
+    int port = -1;
+};
+
+Output::Output() : impl(new Impl) {}
+Output::~Output() { close(); }
+
+bool Output::open(const std::string& name)
+{
+    close();
+    if (snd_seq_open(&impl->seq, "default", SND_SEQ_OPEN_DUPLEX, 0) < 0)
+        return false;
+    snd_seq_set_client_name(impl->seq, "SND output");
+    impl->port = snd_seq_create_simple_port(
+        impl->seq, "out", SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ,
+        SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
+    snd_seq_addr_t dest{};
+    if (impl->port < 0 ||
+        !findPort(impl->seq, name,
+                  SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE, dest) ||
+        snd_seq_connect_to(impl->seq, impl->port, dest.client, dest.port) < 0) {
+        snd_seq_close(impl->seq);
+        impl->seq = nullptr;
+        impl->port = -1;
+        return false;
+    }
+    return true;
+}
+
+void Output::close()
+{
+    if (impl->seq) {
+        snd_seq_close(impl->seq);
+        impl->seq = nullptr;
+        impl->port = -1;
+    }
+}
+
+bool Output::send(const Message& m)
+{
+    if (!impl->seq)
+        return false;
+    snd_seq_event_t ev;
+    snd_seq_ev_clear(&ev);
+    switch (m.type()) {
+    case 0x90:
+        snd_seq_ev_set_noteon(&ev, m.channel(), m.data1, m.data2);
+        break;
+    case 0x80:
+        snd_seq_ev_set_noteoff(&ev, m.channel(), m.data1, m.data2);
+        break;
+    case 0xB0:
+        snd_seq_ev_set_controller(&ev, m.channel(), m.data1, m.data2);
+        break;
+    case 0xE0:
+        snd_seq_ev_set_pitchbend(&ev, m.channel(),
+                                 (m.data1 | (m.data2 << 7)) - 8192);
+        break;
+    default:
+        return false;
+    }
+    snd_seq_ev_set_source(&ev, (unsigned char)impl->port);
+    snd_seq_ev_set_subs(&ev);
+    snd_seq_ev_set_direct(&ev);
+    bool ok = snd_seq_event_output(impl->seq, &ev) >= 0 &&
+              snd_seq_drain_output(impl->seq) >= 0;
+    return ok;
+}
+
+} // namespace snd::midi
+
+#else // stubs until a Windows backend exists
 
 namespace snd::midi {
 
