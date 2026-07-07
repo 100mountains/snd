@@ -85,12 +85,15 @@ the fact that nothing has ever been COMPILED off-Mac.
 | AU hosting | n/a (AU is Apple-only; VST3 covers) | n/a |
 
 Phases (verification is LOCAL AND MANUAL — no CI, ever):
-- **P1 — compiles+selftests on Linux**: local container one-shot script
-  (`tools/build-linux.sh` via Docker/OrbStack — a script run by hand, not
-  CI). Hardware-needing selftests (devices, MIDI loopback) must skip cleanly
-  when absent. Flushes out every include/warning break in the "portable" code.
-- **P2 — Linux backends**: ALSA MIDI, X11 editor windows (host+client),
-  GStreamer/ffmpeg media.
+- **P1 — DONE 2026-07-07 on the owner's Mint 22 box (`ssh sentience`)**:
+  SND 16 PASS + 4 honest skips, WaveBob 17/17 ALL PASS, GUI runs on X11,
+  real device playback/capture works, SDK plugins build+host as Linux .vst3,
+  MP3 encode works off system libmp3lame. Fixes were three transitive
+  includes + global PIC. Workflow: rsync from the Mac, run tools/build.sh
+  by hand over SSH.
+- **P2 — Linux backends** (next): ALSA MIDI, X11 editor windows
+  (host+client), media via ffmpeg-on-PATH pipe (already installed on the
+  box) or GStreamer.
 - **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
   clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
   already-written CreateProcess scan path + LAME dll loading.
