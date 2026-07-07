@@ -3,6 +3,9 @@ project(snd LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Everything may end up inside a .vst3 shared module (Linux needs PIC there;
+# macOS/Windows are PIC by default anyway).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if(APPLE)
     enable_language(OBJC OBJCXX)
 endif()

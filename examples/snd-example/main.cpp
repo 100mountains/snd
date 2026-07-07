@@ -12,6 +12,7 @@
 #include "snd/state.h"
 #include "snd/ui.h"
 
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
