@@ -305,6 +305,13 @@ bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, boo
         }
         break;
     }
+    case Icon::Follow: {
+        dl->AddLine(ImVec2(c.x - r * 0.9f, c.y - r), ImVec2(c.x - r * 0.9f, c.y + r), fg, 2.0f);
+        dl->AddLine(ImVec2(c.x - r * 0.4f, c.y), ImVec2(c.x + r * 0.4f, c.y), fg, 2.0f);
+        dl->AddTriangleFilled(ImVec2(c.x + r * 0.3f, c.y - r * 0.5f),
+                              ImVec2(c.x + r * 0.3f, c.y + r * 0.5f), ImVec2(c.x + r, c.y), fg);
+        break;
+    }
     case Icon::Spectrum: {
         // rising frequency sweep
         for (int i = 0; i < 12; ++i) {

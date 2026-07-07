@@ -109,6 +109,10 @@ public:
     void setLooping(bool loop);
     bool isLooping() const;
 
+    // Retarget the play/loop range without seeking -- lets a loop follow a
+    // changing selection live during playback.
+    void setRange(uint64_t startFrame, uint64_t endFrame);
+
     uint64_t positionFrames() const;
     void seek(uint64_t frame);
 

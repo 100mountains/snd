@@ -78,6 +78,7 @@ enum class Icon {
     Loop,
     Waveform,
     Spectrum,
+    Follow, // playhead line + arrow: "view follows transport"
 };
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);

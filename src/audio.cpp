@@ -392,6 +392,12 @@ void Player::stop() { impl->playing.store(false); }
 bool Player::isPlaying() const { return impl->playing.load(); }
 void Player::setLooping(bool loop) { impl->looping.store(loop); }
 bool Player::isLooping() const { return impl->looping.load(); }
+
+void Player::setRange(uint64_t startFrame, uint64_t endFrame)
+{
+    impl->rangeStart.store(startFrame);
+    impl->endFrame.store(endFrame);
+}
 uint64_t Player::positionFrames() const { return impl->position.load(); }
 void Player::seek(uint64_t frame) { impl->position.store(frame); }
 
