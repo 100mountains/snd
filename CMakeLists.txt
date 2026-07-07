@@ -50,6 +50,21 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nfd)
 
+# libFLAC -- FLAC encoding (BSD). Programs/tests/docs/ogg all off.
+set(BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(BUILD_CXXLIBS OFF CACHE BOOL "" FORCE)
+set(WITH_OGG OFF CACHE BOOL "" FORCE)
+set(INSTALL_MANPAGES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    flac
+    GIT_REPOSITORY https://github.com/xiph/flac.git
+    GIT_TAG 1.5.0
+)
+FetchContent_MakeAvailable(flac)
+
 # imgui-knobs -- rotary knob widgets for ImGui (MIT). No release tags; pinned.
 FetchContent_Declare(
     imgui_knobs
@@ -134,10 +149,12 @@ add_library(snd STATIC
 
 if(APPLE)
     target_sources(snd PRIVATE
+        src/audio_media_mac.mm
         src/plugin_host/au/au_format.mm
         src/plugin_host/editor_window_mac.mm
         src/ui_mac.mm)
-    set_source_files_properties(src/plugin_host/editor_window_mac.mm
+    set_source_files_properties(
+        src/plugin_host/editor_window_mac.mm src/audio_media_mac.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
@@ -153,7 +170,7 @@ target_include_directories(snd
         ${pffft_SOURCE_DIR}/include/pffft
 )
 
-target_link_libraries(snd PUBLIC glfw sdk_hosting nfd)
+target_link_libraries(snd PUBLIC glfw sdk_hosting nfd FLAC)
 
 if(APPLE)
     target_link_libraries(snd PUBLIC
@@ -164,7 +181,9 @@ if(APPLE)
         "-framework AudioToolbox"
         "-framework AudioUnit"
         "-framework CoreAudioKit"
-        "-framework CoreMIDI")
+        "-framework CoreMIDI"
+        "-framework AVFoundation"
+        "-framework CoreMedia")
 elseif(WIN32)
     target_link_libraries(snd PUBLIC opengl32)
 else()

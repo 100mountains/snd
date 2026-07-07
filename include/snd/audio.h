@@ -35,6 +35,21 @@ bool loadPrefix(const std::string& path, Buffer& out, uint64_t maxFrames,
 // Write a 32-bit float WAV.
 bool saveWav(const std::string& path, const Buffer& buf, std::string* error = nullptr);
 
+// Write a FLAC (24-bit, up to 8 channels; vendored libFLAC).
+bool saveFlac(const std::string& path, const Buffer& buf, std::string* error = nullptr);
+
+// Write an MP3 (mono/stereo only). libmp3lame is loaded AT RUNTIME (keeps
+// the LGPL at arm's length); when it isn't installed this fails with a
+// message saying so. mp3EncoderAvailable() lets UIs grey the option out.
+bool saveMp3(const std::string& path, const Buffer& buf, std::string* error = nullptr);
+bool mp3EncoderAvailable();
+
+// Extract the audio track from any media file the OS can read -- video
+// (mp4/mov/m4v...) or audio (m4a/aac...). Preserves the track's channel
+// count (5.1 film audio arrives as 6 channels) and sample rate.
+// macOS (AVFoundation) today; other platforms report failure.
+bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error = nullptr);
+
 // Resample to a new rate (miniaudio's resampler, highest built-in quality).
 bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error = nullptr);
 

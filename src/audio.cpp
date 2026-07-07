@@ -6,10 +6,15 @@
 
 #include "snd/audio.h"
 
+#include <FLAC/stream_encoder.h>
+#include <dlfcn.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace snd::audio {
 
@@ -192,6 +197,193 @@ bool saveWav(const std::string& path, const Buffer& buf, std::string* error)
     }
     return true;
 }
+
+bool saveFlac(const std::string& path, const Buffer& buf, std::string* error)
+{
+    if (buf.channels == 0 || buf.sampleRate == 0 || buf.samples.empty()) {
+        if (error) *error = "empty buffer";
+        return false;
+    }
+    if (buf.channels > 8) {
+        if (error) *error = "FLAC supports at most 8 channels";
+        return false;
+    }
+
+    FLAC__StreamEncoder* enc = FLAC__stream_encoder_new();
+    if (!enc) {
+        if (error) *error = "encoder alloc failed";
+        return false;
+    }
+    FLAC__stream_encoder_set_channels(enc, buf.channels);
+    FLAC__stream_encoder_set_bits_per_sample(enc, 24);
+    FLAC__stream_encoder_set_sample_rate(enc, buf.sampleRate);
+    FLAC__stream_encoder_set_compression_level(enc, 5);
+
+    if (FLAC__stream_encoder_init_file(enc, path.c_str(), nullptr, nullptr) !=
+        FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+        if (error) *error = "could not open for writing: " + path;
+        FLAC__stream_encoder_delete(enc);
+        return false;
+    }
+
+    // float -> 24-bit, in chunks
+    const uint64_t total = buf.frames();
+    const uint32_t chunk = 4096;
+    std::vector<FLAC__int32> tmp((size_t)chunk * buf.channels);
+    bool ok = true;
+    for (uint64_t pos = 0; pos < total && ok; pos += chunk) {
+        uint32_t n = (uint32_t)std::min<uint64_t>(chunk, total - pos);
+        for (uint32_t i = 0; i < n * buf.channels; ++i) {
+            float s = buf.samples[pos * buf.channels + i];
+            s = s < -1.0f ? -1.0f : (s > 1.0f ? 1.0f : s);
+            tmp[i] = (FLAC__int32)std::lrintf(s * 8388607.0f);
+        }
+        ok = FLAC__stream_encoder_process_interleaved(enc, tmp.data(), n);
+    }
+    ok = FLAC__stream_encoder_finish(enc) && ok;
+    FLAC__stream_encoder_delete(enc);
+    if (!ok && error)
+        *error = "FLAC encode failed: " + path;
+    return ok;
+}
+
+// --- MP3 via libmp3lame, loaded at runtime (LGPL kept out of our binary) ---
+
+namespace {
+
+struct LameApi {
+    void* lib = nullptr;
+    void* (*init)() = nullptr;
+    int (*set_in_samplerate)(void*, int) = nullptr;
+    int (*set_num_channels)(void*, int) = nullptr;
+    int (*set_brate)(void*, int) = nullptr;
+    int (*set_quality)(void*, int) = nullptr;
+    int (*init_params)(void*) = nullptr;
+    int (*encode_interleaved_float)(void*, const float*, int, unsigned char*,
+                                    int) = nullptr;
+    int (*encode_float)(void*, const float*, const float*, int, unsigned char*,
+                        int) = nullptr;
+    int (*encode_flush)(void*, unsigned char*, int) = nullptr;
+    int (*close)(void*) = nullptr;
+
+    bool ok() const
+    {
+        return lib && init && set_in_samplerate && set_num_channels && set_brate &&
+               set_quality && init_params && encode_interleaved_float &&
+               encode_float && encode_flush && close;
+    }
+};
+
+const LameApi& lame()
+{
+    static LameApi api = [] {
+        LameApi a;
+        const char* candidates[] = {"libmp3lame.dylib",
+                                    "/opt/homebrew/lib/libmp3lame.dylib",
+                                    "/usr/local/lib/libmp3lame.dylib",
+                                    "libmp3lame.so.0", "libmp3lame.so"};
+        for (const char* c : candidates) {
+            a.lib = dlopen(c, RTLD_LAZY | RTLD_LOCAL);
+            if (a.lib)
+                break;
+        }
+        if (!a.lib)
+            return a;
+        a.init = (void* (*)())dlsym(a.lib, "lame_init");
+        a.set_in_samplerate = (int (*)(void*, int))dlsym(a.lib, "lame_set_in_samplerate");
+        a.set_num_channels = (int (*)(void*, int))dlsym(a.lib, "lame_set_num_channels");
+        a.set_brate = (int (*)(void*, int))dlsym(a.lib, "lame_set_brate");
+        a.set_quality = (int (*)(void*, int))dlsym(a.lib, "lame_set_quality");
+        a.init_params = (int (*)(void*))dlsym(a.lib, "lame_init_params");
+        a.encode_interleaved_float = (int (*)(void*, const float*, int, unsigned char*,
+                                              int))dlsym(a.lib,
+                                                         "lame_encode_buffer_interleaved_ieee_float");
+        a.encode_float = (int (*)(void*, const float*, const float*, int,
+                                  unsigned char*, int))dlsym(a.lib,
+                                                             "lame_encode_buffer_ieee_float");
+        a.encode_flush = (int (*)(void*, unsigned char*, int))dlsym(a.lib,
+                                                                    "lame_encode_flush");
+        a.close = (int (*)(void*))dlsym(a.lib, "lame_close");
+        return a;
+    }();
+    return api;
+}
+
+} // namespace
+
+bool mp3EncoderAvailable() { return lame().ok(); }
+
+bool saveMp3(const std::string& path, const Buffer& buf, std::string* error)
+{
+    if (buf.channels == 0 || buf.sampleRate == 0 || buf.samples.empty()) {
+        if (error) *error = "empty buffer";
+        return false;
+    }
+    if (buf.channels > 2) {
+        if (error) *error = "MP3 is mono/stereo only -- export multichannel as WAV or FLAC";
+        return false;
+    }
+    const LameApi& L = lame();
+    if (!L.ok()) {
+        if (error)
+            *error = "libmp3lame not installed (brew install lame) -- MP3 export "
+                     "loads it at runtime";
+        return false;
+    }
+
+    FILE* f = fopen(path.c_str(), "wb");
+    if (!f) {
+        if (error) *error = "could not open for writing: " + path;
+        return false;
+    }
+
+    void* gf = L.init();
+    L.set_in_samplerate(gf, (int)buf.sampleRate);
+    L.set_num_channels(gf, (int)buf.channels);
+    L.set_brate(gf, 256);
+    L.set_quality(gf, 2);
+    if (L.init_params(gf) < 0) {
+        if (error) *error = "LAME rejected the format (rate " +
+                            std::to_string(buf.sampleRate) + ")";
+        L.close(gf);
+        fclose(f);
+        return false;
+    }
+
+    const uint64_t total = buf.frames();
+    const uint32_t chunk = 4096;
+    std::vector<unsigned char> mp3(chunk * 5 / 4 + 7200);
+    bool ok = true;
+    for (uint64_t pos = 0; pos < total && ok; pos += chunk) {
+        int n = (int)std::min<uint64_t>(chunk, total - pos);
+        int bytes;
+        if (buf.channels == 2)
+            bytes = L.encode_interleaved_float(gf, buf.samples.data() + pos * 2, n,
+                                               mp3.data(), (int)mp3.size());
+        else
+            bytes = L.encode_float(gf, buf.samples.data() + pos,
+                                   buf.samples.data() + pos, n, mp3.data(),
+                                   (int)mp3.size());
+        ok = bytes >= 0 && (bytes == 0 || fwrite(mp3.data(), 1, bytes, f) == (size_t)bytes);
+    }
+    if (ok) {
+        int bytes = L.encode_flush(gf, mp3.data(), (int)mp3.size());
+        ok = bytes >= 0 && (bytes == 0 || fwrite(mp3.data(), 1, bytes, f) == (size_t)bytes);
+    }
+    L.close(gf);
+    fclose(f);
+    if (!ok && error)
+        *error = "MP3 encode failed: " + path;
+    return ok;
+}
+
+#if !defined(__APPLE__)
+bool loadMediaAudio(const std::string&, Buffer&, std::string* error)
+{
+    if (error) *error = "media extraction is macOS-only so far";
+    return false;
+}
+#endif
 
 bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* error)
 {
@@ -387,9 +579,18 @@ struct Player::Impl {
                     break;
                 }
             }
-            for (uint32_t c = 0; c < channels; ++c) {
-                uint32_t src = c < b.channels ? c : b.channels - 1;
-                out[f * channels + c] = b.samples[pos * b.channels + src];
+            if (b.channels <= channels) {
+                for (uint32_t c = 0; c < channels; ++c) {
+                    uint32_t src = c < b.channels ? c : b.channels - 1;
+                    out[f * channels + c] = b.samples[pos * b.channels + src];
+                }
+            } else {
+                // fold-down (5.1 etc.): extras distribute alternately at -3 dB
+                for (uint32_t c = 0; c < channels; ++c)
+                    out[f * channels + c] = b.samples[pos * b.channels + c];
+                for (uint32_t c = channels; c < b.channels; ++c)
+                    out[f * channels + (c % channels)] +=
+                        0.707f * b.samples[pos * b.channels + c];
             }
             ++pos;
         }

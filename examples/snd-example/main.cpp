@@ -400,19 +400,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/13] decode + playback: ");
+    printf("[1/16] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/13] capture/record:    ");
+    printf("[2/16] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/13] VST3 hosting:      ");
+    printf("[3/16] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/13] AU hosting:        ");
+    printf("[4/16] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -421,19 +421,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/13] resample:          ");
+    printf("[5/16] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/13] STFT round-trip:   ");
+    printf("[6/16] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/13] player looping:    ");
+    printf("[7/16] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/13] insert hook:       ");
+    printf("[8/16] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -468,7 +468,7 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    printf("[9/13] OOP plugin scan:   ");
+    printf("[9/16] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -490,7 +490,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/13] widget set:      ");
+    printf("[10/16] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -543,7 +543,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/13] MIDI loopback:   ");
+    printf("[11/16] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -585,7 +585,7 @@ static int runSelftest()
             printf("FAIL\n");
     }
 
-    printf("[12/13] AU instrument:   ");
+    printf("[12/16] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -630,7 +630,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/13] client SDK:      ");
+    printf("[13/16] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -686,8 +686,104 @@ static int runSelftest()
                    cutRatio);
     }
 
+    printf("[14/16] FLAC encode:     ");
+    fflush(stdout);
+    bool ok14;
+    {
+        // 6-channel tone -> FLAC -> decode (miniaudio) -> identical shape
+        snd::audio::Buffer b;
+        b.channels = 6;
+        b.sampleRate = 48000;
+        auto mono = makeSine(440.0, 48000, 24000, 0.5f);
+        for (float s : mono)
+            for (int c = 0; c < 6; ++c)
+                b.samples.push_back(s * (0.2f + 0.1f * c));
+        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+                   "/snd-selftest.flac";
+        std::string err;
+        snd::audio::Buffer back;
+        ok14 = snd::audio::saveFlac(tmp, b, &err) && snd::audio::load(tmp, back, &err);
+        double r1 = rms(b.samples), r2 = rms(back.samples);
+        ok14 = ok14 && back.channels == 6 && back.sampleRate == 48000 &&
+               back.frames() == b.frames() && std::abs(r1 - r2) < 0.001;
+        remove(tmp.c_str());
+        if (ok14)
+            printf("PASS (6ch 24-bit round-trip, RMS %.4f -> %.4f)\n", r1, r2);
+        else
+            printf("FAIL (%s)\n", err.c_str());
+    }
+
+    printf("[15/16] MP3 encode:      ");
+    fflush(stdout);
+    bool ok15 = true;
+    if (!snd::audio::mp3EncoderAvailable()) {
+        printf("skipped (libmp3lame not installed -- brew install lame)\n");
+    } else {
+        snd::audio::Buffer b;
+        b.channels = 2;
+        b.sampleRate = 44100;
+        auto mono = makeSine(440.0, 44100, 44100, 0.5f);
+        for (float s : mono) {
+            b.samples.push_back(s);
+            b.samples.push_back(s);
+        }
+        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+                   "/snd-selftest.mp3";
+        std::string err;
+        snd::audio::Buffer back;
+        ok15 = snd::audio::saveMp3(tmp, b, &err) && snd::audio::load(tmp, back, &err);
+        double r1 = rms(b.samples), r2 = rms(back.samples);
+        ok15 = ok15 && back.channels == 2 && std::abs(r1 - r2) / r1 < 0.15;
+        remove(tmp.c_str());
+        if (ok15)
+            printf("PASS (440Hz survived lossy round-trip, RMS %.3f -> %.3f)\n", r1, r2);
+        else
+            printf("FAIL (%s)\n", err.c_str());
+    }
+
+    printf("[16/16] media extract:   ");
+    fflush(stdout);
+#if defined(__APPLE__)
+    bool ok16;
+    {
+        // wav -> AAC in an .m4a via the OS (afconvert), then pull the audio
+        // back out through loadMediaAudio -- the same path video files take
+        auto tmpw = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+                    "/snd-selftest-src.wav";
+        auto tmpm = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+                    "/snd-selftest.m4a";
+        snd::audio::Buffer b;
+        b.channels = 2;
+        b.sampleRate = 44100;
+        auto mono = makeSine(440.0, 44100, 44100, 0.5f);
+        for (float s : mono) {
+            b.samples.push_back(s);
+            b.samples.push_back(s);
+        }
+        std::string err;
+        ok16 = snd::audio::saveWav(tmpw, b, &err);
+        std::string cmd = "afconvert -f m4af -d aac '" + tmpw + "' '" + tmpm + "' 2>/dev/null";
+        ok16 = ok16 && system(cmd.c_str()) == 0;
+        snd::audio::Buffer media;
+        ok16 = ok16 && snd::audio::loadMediaAudio(tmpm, media, &err);
+        double r1 = rms(b.samples), r2 = rms(media.samples);
+        ok16 = ok16 && media.channels == 2 && media.sampleRate == 44100 &&
+               media.frames() > b.frames() / 2 && std::abs(r1 - r2) / r1 < 0.2;
+        remove(tmpw.c_str());
+        remove(tmpm.c_str());
+        if (ok16)
+            printf("PASS (AAC track extracted: %uch @ %u Hz, RMS %.3f -> %.3f)\n",
+                   media.channels, media.sampleRate, r1, r2);
+        else
+            printf("FAIL (%s)\n", err.c_str());
+    }
+#else
+    bool ok16 = true;
+    printf("skipped (AVFoundation is macOS-only)\n");
+#endif
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
-               ok11 && ok12 && ok13;
+               ok11 && ok12 && ok13 && ok14 && ok15 && ok16;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
