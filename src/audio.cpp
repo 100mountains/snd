@@ -7,7 +7,22 @@
 #include "snd/audio.h"
 
 #include <FLAC/stream_encoder.h>
+
+// runtime library loading, portable: dlopen on POSIX, LoadLibrary on Windows
+#if defined(_WIN32)
+#include <windows.h>
+#define RTLD_LAZY 0
+#define RTLD_LOCAL 0
+namespace {
+void* dlopen(const char* name, int) { return (void*)LoadLibraryA(name); }
+void* dlsym(void* lib, const char* sym)
+{
+    return (void*)GetProcAddress((HMODULE)lib, sym);
+}
+} // namespace
+#else
 #include <dlfcn.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -281,7 +296,8 @@ const LameApi& lame()
         const char* candidates[] = {"libmp3lame.dylib",
                                     "/opt/homebrew/lib/libmp3lame.dylib",
                                     "/usr/local/lib/libmp3lame.dylib",
-                                    "libmp3lame.so.0", "libmp3lame.so"};
+                                    "libmp3lame.so.0", "libmp3lame.so",
+                                    "libmp3lame.dll", "lame_enc.dll"};
         for (const char* c : candidates) {
             a.lib = dlopen(c, RTLD_LAZY | RTLD_LOCAL);
             if (a.lib)

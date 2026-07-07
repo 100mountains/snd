@@ -68,6 +68,35 @@ Remaining candidates: OGG export, loudness-select for the brush.
 - remaining: imgui-node-editor vendoring for the graph UI (with its first
   consumer); cross-platform AIFF if Murk ever leaves the Mac
 
+## Track 4 — MULTIPLATFORM (owner-declared very important, 2026-07-07)
+
+SND's deps were chosen cross-platform from day one (miniaudio = WASAPI/ALSA,
+GLFW, ImGui, NFD, libFLAC, VST3 SDK w/ module_win32/linux, NFD, std-only
+state/graph/dsp). What is genuinely macOS-only today is four .mm files and
+the fact that nothing has ever been COMPILED off-Mac.
+
+| Gap | Windows backend | Linux backend |
+|---|---|---|
+| MIDI devices | WinMM / WinRT MIDI | ALSA sequencer |
+| media extraction (video audio) | Media Foundation (OS API) | GStreamer (dlopen'd) or ffmpeg-on-PATH pipe |
+| plugin editor windows (host) | HWND child window | X11 embed |
+| ImGui editor in plugins (client) | WGL view | GLX view |
+| frameless-window native drag | Win32 path partially written | manual drag fallback |
+| AU hosting | n/a (AU is Apple-only; VST3 covers) | n/a |
+
+Phases (verification is LOCAL AND MANUAL — no CI, ever):
+- **P1 — compiles+selftests on Linux**: local container one-shot script
+  (`tools/build-linux.sh` via Docker/OrbStack — a script run by hand, not
+  CI). Hardware-needing selftests (devices, MIDI loopback) must skip cleanly
+  when absent. Flushes out every include/warning break in the "portable" code.
+- **P2 — Linux backends**: ALSA MIDI, X11 editor windows (host+client),
+  GStreamer/ffmpeg media.
+- **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
+  clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
+  already-written CreateProcess scan path + LAME dll loading.
+- Blocked on: no container tooling on this Mac yet (P1) and no Windows
+  hardware identified (P3).
+
 ## Track 3 — the Murk port (starts after ②③ and most of ④)
 
 1. Engine first: DSP + ONNX (AidModel/AidBaker/AdtRunner…) — mostly
