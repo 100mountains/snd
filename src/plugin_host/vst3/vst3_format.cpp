@@ -9,6 +9,10 @@
 #include "vst3_format.h"
 #include "../editor_window.h"
 
+#if defined(__linux__)
+#include <poll.h>
+#endif
+
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
 #include "public.sdk/source/vst/hosting/processdata.h"
@@ -25,6 +29,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -146,15 +151,94 @@ private:
 };
 
 // Plugin-initiated editor resizes (host must resize the window, then onSize).
+// On Linux the frame ALSO provides Steinberg::Linux::IRunLoop -- plugins
+// need it for their timers and fd watching; without it most editors freeze.
+#if defined(__linux__)
+class VST3PlugFrame final
+    : public U::Implements<U::Directly<IPlugFrame, Steinberg::Linux::IRunLoop>> {
+#else
 class VST3PlugFrame final : public U::Implements<U::Directly<IPlugFrame>> {
+#endif
 public:
     explicit VST3PlugFrame(VST3Instance* owner) : owner_(owner) {}
     void disconnect() { owner_ = nullptr; }
 
     tresult PLUGIN_API resizeView(IPlugView* view, ViewRect* newSize) override;
 
+#if defined(__linux__)
+    tresult PLUGIN_API registerEventHandler(Steinberg::Linux::IEventHandler* handler,
+                                            Steinberg::Linux::FileDescriptor fd) override
+    {
+        if (!handler)
+            return kInvalidArgument;
+        fds_.push_back({handler, fd});
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API unregisterEventHandler(
+        Steinberg::Linux::IEventHandler* handler) override
+    {
+        fds_.erase(std::remove_if(fds_.begin(), fds_.end(),
+                                  [&](auto& e) { return e.handler == handler; }),
+                   fds_.end());
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API registerTimer(Steinberg::Linux::ITimerHandler* handler,
+                                     Steinberg::Linux::TimerInterval ms) override
+    {
+        if (!handler)
+            return kInvalidArgument;
+        timers_.push_back({handler, std::max<uint64_t>(1, ms),
+                           std::chrono::steady_clock::now() +
+                               std::chrono::milliseconds(std::max<uint64_t>(1, ms))});
+        return kResultTrue;
+    }
+
+    tresult PLUGIN_API unregisterTimer(Steinberg::Linux::ITimerHandler* handler) override
+    {
+        timers_.erase(std::remove_if(timers_.begin(), timers_.end(),
+                                     [&](auto& t) { return t.handler == handler; }),
+                      timers_.end());
+        return kResultTrue;
+    }
+
+    // called from Instance::idle() on the main thread
+    void service()
+    {
+        auto now = std::chrono::steady_clock::now();
+        for (auto& t : timers_)
+            if (now >= t.next) {
+                t.next = now + std::chrono::milliseconds(t.intervalMs);
+                t.handler->onTimer();
+            }
+        if (!fds_.empty()) {
+            std::vector<pollfd> pfds;
+            for (auto& e : fds_)
+                pfds.push_back({e.fd, POLLIN, 0});
+            if (poll(pfds.data(), (nfds_t)pfds.size(), 0) > 0)
+                for (size_t i = 0; i < pfds.size(); ++i)
+                    if (pfds[i].revents & POLLIN)
+                        fds_[i].handler->onFDIsSet(fds_[i].fd);
+        }
+    }
+#endif
+
 private:
     VST3Instance* owner_ = nullptr;
+#if defined(__linux__)
+    struct FdEntry {
+        Steinberg::Linux::IEventHandler* handler;
+        Steinberg::Linux::FileDescriptor fd;
+    };
+    struct TimerEntry {
+        Steinberg::Linux::ITimerHandler* handler;
+        uint64_t intervalMs;
+        std::chrono::steady_clock::time_point next;
+    };
+    std::vector<FdEntry> fds_;
+    std::vector<TimerEntry> timers_;
+#endif
 };
 
 class VST3Instance final : public Instance {
@@ -448,6 +532,11 @@ public:
 
     void idle() override
     {
+#if defined(__linux__)
+        editorwin::pump(); // X11 window events (close/resize)
+        if (frame_)
+            frame_->service(); // the plugin's IRunLoop timers + fds
+#endif
         if (!controller_)
             return;
         std::vector<std::pair<Vst::ParamID, double>> pending;

@@ -34,4 +34,8 @@ void setContentSize(void* handle, int width, int height);
 // from inside onClose.
 void destroy(void* handle);
 
+// Platforms that need explicit event pumping (X11) drain here; no-op on
+// macOS/Windows. Hosts reach it through Instance::idle().
+void pump();
+
 } // namespace snd::plugin::editorwin

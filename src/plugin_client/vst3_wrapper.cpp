@@ -29,10 +29,10 @@ namespace snd::plugin::client {
 Steinberg::IPlugView* createEditorView(Processor& proc, UiHost& host, int width,
                                        int height, bool resizable, int minW,
                                        int minH);
-#if !defined(__APPLE__)
+#if defined(_WIN32)
 Steinberg::IPlugView* createEditorView(Processor&, UiHost&, int, int, bool, int, int)
 {
-    return nullptr; // editor embedding is macOS-only so far
+    return nullptr; // Windows editor embedding pending
 }
 #endif
 } // namespace snd::plugin::client

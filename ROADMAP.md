@@ -103,10 +103,13 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
   ffmpeg-on-PATH pipe (process-isolated like the plugin scanner -- nothing
   linked, nothing vendored; swap for GStreamer if ffmpeg-as-tool ever
   bothers us). Linux scorecard: 19 PASS + 2 AU skips = full parity minus AU.
-- **P2b — remaining**: X11 plugin-editor embedding, host side (needs a
-  Steinberg::Linux::IRunLoop implementation -- the known hard part of Linux
-  VST3 hosting) and client side (GLX view). SND-built plugin UIs DO work on
-  Linux today via the GLFW standalone shell.
+- **P2b — DONE 2026-07-07**: X11 plugin-editor embedding both sides.
+  Host: X11 floating window + Steinberg::Linux::IRunLoop on the plug frame
+  (timers + fd handlers serviced from Instance::idle()). Client: GLX ImGui
+  view driven by the host's run loop (no threads in foreign processes).
+  Verified live on the box: our host opened our plugin's editor on the
+  real display. Linux is now at FULL parity minus AU (Apple-only forever)
+  and Windows P3.
 - **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
   clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
   already-written CreateProcess scan path + LAME dll loading.

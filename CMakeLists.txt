@@ -165,6 +165,10 @@ add_library(snd STATIC
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
+if(UNIX AND NOT APPLE)
+    target_sources(snd PRIVATE src/plugin_host/editor_window_x11.cpp)
+endif()
+
 if(APPLE)
     target_sources(snd PRIVATE
         src/audio_media_mac.mm
@@ -207,7 +211,8 @@ elseif(WIN32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)
-    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl asound)
+    find_package(X11 REQUIRED)
+    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl asound X11::X11)
 endif()
 
 # ---------------------------------------------------------------------------

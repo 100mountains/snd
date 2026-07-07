@@ -29,14 +29,19 @@ extern char** environ;
 namespace snd::plugin { std::unique_ptr<Format> createAUFormat(); }
 #endif
 
-#if !defined(__APPLE__)
-// Editor windows are macOS-only so far; every other OS reports "no editor".
+#if defined(_WIN32)
+// Editor windows: Windows backend pending; report "no editor".
 namespace snd::plugin::editorwin {
 void* create(const std::string&, int, int, bool, Callbacks) { return nullptr; }
 void* contentView(void*) { return nullptr; }
 void attachView(void*, void*) {}
 void setContentSize(void*, int, int) {}
 void destroy(void*) {}
+void pump() {}
+} // namespace snd::plugin::editorwin
+#elif defined(__APPLE__)
+namespace snd::plugin::editorwin {
+void pump() {} // Cocoa pumps itself
 } // namespace snd::plugin::editorwin
 #endif
 

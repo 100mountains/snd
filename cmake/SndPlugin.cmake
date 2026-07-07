@@ -43,6 +43,7 @@ function(snd_add_plugin target)
             ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/dllmain.cpp)
     else()
         target_sources(${target} PRIVATE
+            ${SND_ROOT_DIR}/src/plugin_client/editor_view_x11.cpp
             ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/linuxmain.cpp)
     endif()
 
