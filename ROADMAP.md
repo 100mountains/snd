@@ -52,11 +52,12 @@ Remaining candidates: OGG export, loudness-select for the brush.
 - ~~MIDI-out from client processors, resizable editors (uiResizable +
   min sizes), live input in the standalone shell (SPSC ring off the default
   capture device)~~ done 2026-07-07
-- AU client wrapping DEFERRED with a decision to make: the SDK's auwrapper
-  hard-requires the Xcode generator + a separately downloaded Apple
-  CoreAudio SDK. Either adopt Xcode-generator builds for plugin targets
-  only, or write a bespoke AUv2 wrapper. Needed before Murfy plugins can
-  ship AU for Logic users.
+- ~~AU client wrapping~~ DONE 2026-07-07 without the Xcode generator: the
+  SDK's auwrapper built against Apple's AudioUnitSDK 1.3.0 (Apache-2.0,
+  vendored) under plain Makefiles; snd_add_plugin(... AU_TYPE/AU_SUBTYPE/
+  AU_MANUFACTURER) emits a .component embedding the .vst3. Verified by
+  in-process AudioComponentRegister + our own AU host (selftest 22) --
+  no system registry involvement, no auval registrar rescans.
 
 ### ③ `snd::midi` — BLESSED 2026-07-07, host side DONE
 - ~~event/buffer types, CoreMIDI in/out devices~~ done (virtual-endpoint

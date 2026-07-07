@@ -8,8 +8,14 @@
 # an snd::plugin::client Processor. Everything static inside the bundle
 # (imgui, snd widgets), so the plugin never clashes with its host.
 
+# Optional AU output (macOS): pass AU_TYPE (aufx|aumu), AU_SUBTYPE and
+# AU_MANUFACTURER (4-char codes; manufacturer must contain an uppercase
+# letter). Produces <name>.component wrapping the VST3 via the SDK's
+# auwrapper built against Apple's AudioUnitSDK -- no Xcode generator, no
+# CoreAudio SDK download.
 function(snd_add_plugin target)
-    cmake_parse_arguments(ARG "STANDALONE" "OUTPUT_NAME" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "STANDALONE"
+        "OUTPUT_NAME;AU_TYPE;AU_SUBTYPE;AU_MANUFACTURER" "SOURCES" ${ARGN})
     if(NOT ARG_OUTPUT_NAME)
         set(ARG_OUTPUT_NAME ${target})
     endif()
@@ -86,5 +92,71 @@ function(snd_add_plugin target)
             ${ARG_SOURCES}
             ${SND_ROOT_DIR}/src/plugin_client/standalone_main.cpp)
         target_link_libraries(${target}-app PRIVATE snd)
+    endif()
+
+    if(APPLE AND ARG_AU_SUBTYPE)
+        set(auTarget ${target}-au)
+        file(GLOB AUSDK_SOURCES ${audiounitsdk_SOURCE_DIR}/src/AudioUnitSDK/*.cpp)
+        add_library(${auTarget} MODULE
+            ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/auwrapper/auwrapper.mm
+            ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/auwrapper/aucocoaview.mm
+            ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/auwrapper/NSDataIBStream.mm
+            ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/auwrapper/usediids.cpp
+            ${AUSDK_SOURCES})
+        target_compile_features(${auTarget} PRIVATE cxx_std_20) # AudioUnitSDK needs it
+        target_compile_definitions(${auTarget} PRIVATE
+            SMTG_AUWRAPPER_USES_AUSDK=1
+            SMTG_AUCocoaUIBase_CLASS_NAME=SNDAUCocoaUI_${target}
+            CA_USE_AUDIO_PLUGIN_ONLY=0)
+        target_include_directories(${auTarget} PRIVATE
+            ${audiounitsdk_SOURCE_DIR}/include
+            ${vst3sdk_SOURCE_DIR})
+        target_link_libraries(${auTarget} PRIVATE sdk_hosting
+            "-framework AudioUnit" "-framework AudioToolbox"
+            "-framework CoreAudio" "-framework CoreMIDI"
+            "-framework CoreFoundation" "-framework Cocoa"
+            "-framework QuartzCore")
+        add_dependencies(${auTarget} ${target})
+
+        set(component ${CMAKE_BINARY_DIR}/${ARG_OUTPUT_NAME}.component)
+        set_target_properties(${auTarget} PROPERTIES
+            OUTPUT_NAME ${ARG_OUTPUT_NAME}
+            PREFIX ""
+            SUFFIX ""
+            LIBRARY_OUTPUT_DIRECTORY ${component}/Contents/MacOS)
+        if(NOT ARG_AU_TYPE)
+            set(ARG_AU_TYPE "aufx")
+        endif()
+        file(WRITE ${component}/Contents/Info.plist
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>CFBundleExecutable</key><string>${ARG_OUTPUT_NAME}</string>
+    <key>CFBundleIdentifier</key><string>com.snd.au.${target}</string>
+    <key>CFBundleName</key><string>${ARG_OUTPUT_NAME}</string>
+    <key>CFBundlePackageType</key><string>BNDL</string>
+    <key>CFBundleVersion</key><string>1.0.0</string>
+    <key>AudioComponents</key>
+    <array>
+        <dict>
+            <key>factoryFunction</key><string>AUWrapperFactory</string>
+            <key>description</key><string>${ARG_OUTPUT_NAME}</string>
+            <key>manufacturer</key><string>${ARG_AU_MANUFACTURER}</string>
+            <key>name</key><string>SND: ${ARG_OUTPUT_NAME}</string>
+            <key>subtype</key><string>${ARG_AU_SUBTYPE}</string>
+            <key>type</key><string>${ARG_AU_TYPE}</string>
+            <key>version</key><integer>65536</integer>
+            <key>sandboxSafe</key><true/>
+        </dict>
+    </array>
+</dict>
+</plist>
+")
+        # the wrapper loads Resources/plugin.vst3 at runtime
+        add_custom_command(TARGET ${auTarget} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_BINARY_DIR}/${ARG_OUTPUT_NAME}.vst3
+                ${component}/Contents/Resources/plugin.vst3)
     endif()
 endfunction()

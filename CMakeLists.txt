@@ -68,6 +68,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(flac)
 
+# Apple AudioUnitSDK (Apache-2.0) -- the modern AUBase classes the VST3
+# SDK's AU wrapper builds against. Sources compiled directly into each
+# AU target; no cmake subproject needed.
+if(APPLE)
+    FetchContent_Declare(
+        audiounitsdk
+        GIT_REPOSITORY https://github.com/apple/AudioUnitSDK.git
+        GIT_TAG AudioUnitSDK-1.3.0
+        SOURCE_SUBDIR "cmake-subdir-skipped"
+    )
+    FetchContent_MakeAvailable(audiounitsdk)
+endif()
+
 # imgui-knobs -- rotary knob widgets for ImGui (MIT). No release tags; pinned.
 FetchContent_Declare(
     imgui_knobs
@@ -264,12 +277,14 @@ include(cmake/SndPlugin.cmake)
 snd_add_plugin(demofilter
     SOURCES test/plugins/demofilter/demofilter.cpp
     OUTPUT_NAME DemoFilter
-    STANDALONE)
+    STANDALONE
+    AU_TYPE aufx AU_SUBTYPE dflt AU_MANUFACTURER SndX)
 
 snd_add_plugin(demosynth
     SOURCES test/plugins/demosynth/demosynth.cpp
     OUTPUT_NAME DemoSynth
-    STANDALONE)
+    STANDALONE
+    AU_TYPE aumu AU_SUBTYPE dsyn AU_MANUFACTURER SndX)
 
 # ---------------------------------------------------------------------------
 # Example app (window + audio device + --selftest)
@@ -278,10 +293,14 @@ snd_add_plugin(demosynth
 add_executable(snd-example examples/snd-example/main.cpp)
 target_link_libraries(snd-example PRIVATE snd)
 add_dependencies(snd-example testgain demofilter demosynth)
+if(APPLE)
+    add_dependencies(snd-example demosynth-au demofilter-au)
+endif()
 
 target_compile_definitions(snd-example PRIVATE
     SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
     SND_TEST_VST3_PATH="${SND_TESTGAIN_BUNDLE}"
     SND_TEST_DEMOFILTER_PATH="${CMAKE_BINARY_DIR}/DemoFilter.vst3"
     SND_TEST_DEMOSYNTH_PATH="${CMAKE_BINARY_DIR}/DemoSynth.vst3"
+    SND_TEST_DEMOSYNTH_AU_BIN="${CMAKE_BINARY_DIR}/DemoSynth.component/Contents/MacOS/DemoSynth"
 )

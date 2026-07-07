@@ -3,6 +3,11 @@
 //   --selftest:  headless pass/fail checks of the real behaviour of every
 //                snd capability (decode+play, record, VST3 hosting, AU hosting)
 
+#if defined(__APPLE__)
+#include <AudioToolbox/AudioToolbox.h>
+#include <dlfcn.h>
+#endif
+
 #include "snd/audio.h"
 #include "snd/dsp.h"
 #include "snd/midi.h"
@@ -404,19 +409,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/21] decode + playback: ");
+    printf("[1/22] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/21] capture/record:    ");
+    printf("[2/22] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/21] VST3 hosting:      ");
+    printf("[3/22] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/21] AU hosting:        ");
+    printf("[4/22] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -425,19 +430,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/21] resample:          ");
+    printf("[5/22] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/21] STFT round-trip:   ");
+    printf("[6/22] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/21] player looping:    ");
+    printf("[7/22] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/21] insert hook:       ");
+    printf("[8/22] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -474,7 +479,7 @@ static int runSelftest()
         }
     }
 
-    printf("[9/21] OOP plugin scan:   ");
+    printf("[9/22] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -496,7 +501,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/21] widget set:      ");
+    printf("[10/22] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -564,7 +569,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/21] MIDI loopback:   ");
+    printf("[11/22] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -614,7 +619,7 @@ static int runSelftest()
         }
     }
 
-    printf("[12/21] AU instrument:   ");
+    printf("[12/22] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -659,7 +664,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/21] client SDK:      ");
+    printf("[13/22] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -715,7 +720,7 @@ static int runSelftest()
                    cutRatio);
     }
 
-    printf("[14/21] FLAC encode:     ");
+    printf("[14/22] FLAC encode:     ");
     fflush(stdout);
     bool ok14;
     {
@@ -742,7 +747,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[15/21] MP3 encode:      ");
+    printf("[15/22] MP3 encode:      ");
     fflush(stdout);
     bool ok15 = true;
     if (!snd::audio::mp3EncoderAvailable()) {
@@ -770,7 +775,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[16/21] media extract:   ");
+    printf("[16/22] media extract:   ");
     fflush(stdout);
 #if defined(__APPLE__) || defined(__linux__)
     bool ok16;
@@ -824,7 +829,7 @@ media_done:;
     printf("skipped (no media backend on this platform yet)\n");
 #endif
 
-    printf("[17/21] state tree:      ");
+    printf("[17/22] state tree:      ");
     fflush(stdout);
     bool ok17;
     {
@@ -864,7 +869,7 @@ media_done:;
                    xml.size());
     }
 
-    printf("[18/21] stream reader:   ");
+    printf("[18/22] stream reader:   ");
     fflush(stdout);
     bool ok18;
     {
@@ -904,7 +909,7 @@ media_done:;
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[19/21] queue+timer+pool: ");
+    printf("[19/22] queue+timer+pool: ");
     fflush(stdout);
     bool ok19;
     {
@@ -939,7 +944,7 @@ media_done:;
             printf("FAIL (jobs=%d main=%d ticks=%d)\n", jobs.load(), mainSeen, ticks);
     }
 
-    printf("[20/21] graph + latency: ");
+    printf("[20/22] graph + latency: ");
     fflush(stdout);
     bool ok20;
     {
@@ -1030,7 +1035,7 @@ media_done:;
             printf("FAIL (graph build/prepare)\n");
     }
 
-    printf("[21/21] SDK instrument:  ");
+    printf("[21/22] SDK instrument:  ");
     fflush(stdout);
     bool ok21;
     {
@@ -1079,9 +1084,65 @@ media_done:;
                    peakTail);
     }
 
+    printf("[22/22] AU wrapper:      ");
+    fflush(stdout);
+#if defined(__APPLE__)
+    bool ok22;
+    {
+        // the VST3-wrapped-as-AU, registered IN-PROCESS (no system registry,
+        // no registrar rescan), hosted through our own AU host
+        void* lib = dlopen(SND_TEST_DEMOSYNTH_AU_BIN, RTLD_NOW);
+        auto factory =
+            lib ? (AudioComponentFactoryFunction)dlsym(lib, "AUWrapperFactory")
+                : nullptr;
+        ok22 = factory != nullptr;
+        if (ok22) {
+            AudioComponentDescription desc{};
+            desc.componentType = 'aumu';
+            desc.componentSubType = 'dsyn';
+            desc.componentManufacturer = 'SndX';
+            ok22 = AudioComponentRegister(&desc, CFSTR("SND: Demo Synth"),
+                                          0x00010000, factory) != nullptr;
+        }
+        float peak = 0.0f;
+        if (ok22) {
+            snd::plugin::HostManager manager;
+            manager.addDefaultFormats();
+            snd::plugin::Description d;
+            d.format = "AU";
+            d.identifier = "aumu,dsyn,SndX";
+            auto synth = manager.create(d);
+            ok22 = synth != nullptr && synth->prepare(48000.0, 512);
+            if (ok22) {
+                const uint32_t block = 512;
+                std::vector<float> L(block), R(block);
+                float* outs[2] = {L.data(), R.data()};
+                snd::midi::Buffer on = {snd::midi::Message::noteOn(0, 60, 127)};
+                snd::midi::Buffer none;
+                for (int i = 0; i < 40 && ok22; ++i) {
+                    ok22 = synth->processMidi(nullptr, 0, outs, 2, block,
+                                              i == 0 ? on : none);
+                    for (uint32_t f = 0; f < block; ++f)
+                        peak = std::max(peak, std::fabs(L[f]));
+                }
+                std::vector<uint8_t> st;
+                ok22 = ok22 && peak > 0.05f && synth->saveState(st) && !st.empty();
+            }
+        }
+        if (ok22)
+            printf("PASS (VST3-in-AU sang via in-process registration, peak %.3f)\n",
+                   peak);
+        else
+            printf("FAIL (peak %.3f)\n", peak);
+    }
+#else
+    bool ok22 = true;
+    printf("skipped (AU is macOS-only)\n");
+#endif
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
                ok11 && ok12 && ok13 && ok14 && ok15 && ok16 && ok17 && ok18 && ok19 &&
-               ok20 && ok21;
+               ok20 && ok21 && ok22;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
