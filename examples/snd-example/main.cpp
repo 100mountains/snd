@@ -214,6 +214,13 @@ static bool selftestVST3()
         return false;
     }
 
+    // 3) editor API degrades gracefully on a GUI-less plugin
+    if (plugin->hasEditor() || plugin->openEditor("x") || plugin->editorOpen()) {
+        printf("FAIL (TestGain has no GUI but the editor API says otherwise)\n");
+        return false;
+    }
+    plugin->closeEditor(); // no-op, must not crash
+
     printf("PASS (%s: processed, gain param + state verified by stable ID)\n",
            found[0].name.c_str());
     return true;
@@ -266,6 +273,12 @@ static bool selftestAU()
     double ratio = rms(processed) / rms(sine);
     if (ratio > 0.5) {
         printf("FAIL (lowpass barely attenuated: RMS ratio %.3f)\n", ratio);
+        return false;
+    }
+
+    // Every AU must report an editor (generic parameter view at minimum).
+    if (!plugin->hasEditor()) {
+        printf("FAIL (AU reports no editor; generic view should always exist)\n");
         return false;
     }
 

@@ -123,7 +123,10 @@ add_library(snd STATIC
 if(APPLE)
     target_sources(snd PRIVATE
         src/plugin_host/au/au_format.mm
+        src/plugin_host/editor_window_mac.mm
         src/ui_mac.mm)
+    set_source_files_properties(src/plugin_host/editor_window_mac.mm
+        PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
 target_include_directories(snd
@@ -146,7 +149,8 @@ if(APPLE)
         "-framework CoreAudio"
         "-framework CoreFoundation"
         "-framework AudioToolbox"
-        "-framework AudioUnit")
+        "-framework AudioUnit"
+        "-framework CoreAudioKit")
 elseif(WIN32)
     target_link_libraries(snd PUBLIC opengl32)
 else()

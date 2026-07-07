@@ -7,6 +7,7 @@
 // docs/research/juce-hosting-audit.md for where this design comes from.
 
 #include "vst3_format.h"
+#include "../editor_window.h"
 
 #include "public.sdk/source/vst/hosting/module.h"
 #include "public.sdk/source/vst/hosting/plugprovider.h"
@@ -16,6 +17,7 @@
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/utility/stringconvert.h"
 #include "public.sdk/source/common/memorystream.h"
+#include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/base/funknownimpl.h"
@@ -121,6 +123,38 @@ private:
 
 // ---------------------------------------------------------------------------
 
+class VST3Instance;
+
+// The editor's channel back into the host: knob tweaks in the plugin GUI
+// arrive as performEdit and must reach the processor, or the editor is
+// decorative. (The SDK's PlugProvider installs a do-nothing handler.)
+class VST3ComponentHandler final
+    : public U::Implements<U::Directly<Vst::IComponentHandler>> {
+public:
+    explicit VST3ComponentHandler(VST3Instance* owner) : owner_(owner) {}
+    void disconnect() { owner_ = nullptr; }
+
+    tresult PLUGIN_API beginEdit(Vst::ParamID) override { return kResultOk; }
+    tresult PLUGIN_API performEdit(Vst::ParamID id, Vst::ParamValue value) override;
+    tresult PLUGIN_API endEdit(Vst::ParamID) override { return kResultOk; }
+    tresult PLUGIN_API restartComponent(int32 flags) override;
+
+private:
+    VST3Instance* owner_ = nullptr;
+};
+
+// Plugin-initiated editor resizes (host must resize the window, then onSize).
+class VST3PlugFrame final : public U::Implements<U::Directly<IPlugFrame>> {
+public:
+    explicit VST3PlugFrame(VST3Instance* owner) : owner_(owner) {}
+    void disconnect() { owner_ = nullptr; }
+
+    tresult PLUGIN_API resizeView(IPlugView* view, ViewRect* newSize) override;
+
+private:
+    VST3Instance* owner_ = nullptr;
+};
+
 class VST3Instance final : public Instance {
 public:
     VST3Instance(Description desc, VST3::Hosting::Module::Ptr mod,
@@ -130,11 +164,19 @@ public:
         component_ = provider_->getComponentPtr();
         controller_ = provider_->getControllerPtr();
         processor_ = FUnknownPtr<Vst::IAudioProcessor>(component_);
+        handler_ = owned(new VST3ComponentHandler(this));
+        if (controller_)
+            controller_->setComponentHandler(handler_);
         buildParameterList();
     }
 
     ~VST3Instance() override
     {
+        closeEditor();
+        if (handler_)
+            handler_->disconnect();
+        if (controller_)
+            controller_->setComponentHandler(nullptr);
         unprepare();
         parameters_.clear();
         ownedParameters_.clear();
@@ -353,18 +395,150 @@ public:
             controller_->setComponentState(&stream);
         }
 
-        // Refresh cached parameter values from the controller.
-        if (controller_) {
-            for (auto* p : parameters_) {
-                Vst::ParamID pid = (Vst::ParamID)std::stoul(p->id());
-                static_cast<VST3Parameter*>(p)->updateCacheOnly(
-                    controller_->getParamNormalized(pid));
-            }
+        refreshParamCaches();
+        return true;
+    }
+
+    bool hasEditor() override
+    {
+        if (!controller_)
+            return false;
+        if (view_)
+            return true;
+        if (!checkedEditor_) {
+            checkedEditor_ = true;
+            IPtr<IPlugView> probe = owned(controller_->createView(Vst::ViewType::kEditor));
+            hasEditorCached_ = probe != nullptr;
+        }
+        return hasEditorCached_;
+    }
+
+    bool openEditor(const std::string& windowTitle) override
+    {
+        if (editorWin_)
+            return true;
+        if (!controller_)
+            return false;
+
+#if defined(__APPLE__)
+        const char* platformType = kPlatformTypeNSView;
+#elif defined(_WIN32)
+        const char* platformType = kPlatformTypeHWND;
+#else
+        const char* platformType = kPlatformTypeX11EmbedWindowID;
+#endif
+
+        view_ = owned(controller_->createView(Vst::ViewType::kEditor));
+        if (!view_)
+            return false;
+        if (view_->isPlatformTypeSupported(platformType) != kResultTrue) {
+            view_ = nullptr;
+            return false;
+        }
+
+        ViewRect rect{};
+        if (view_->getSize(&rect) != kResultOk || rect.getWidth() <= 0 ||
+            rect.getHeight() <= 0) {
+            rect.left = rect.top = 0;
+            rect.right = 500;
+            rect.bottom = 320;
+        }
+        bool resizable = view_->canResize() == kResultTrue;
+
+        frame_ = owned(new VST3PlugFrame(this));
+        view_->setFrame(frame_); // before attached(): plugins query it there
+
+        editorwin::Callbacks cbs;
+        cbs.onClose = [this] { closeEditor(); };
+        cbs.onResized = [this](int w, int h) {
+            if (inPluginResize_ || !view_ || view_->canResize() != kResultTrue)
+                return;
+            ViewRect r{0, 0, w, h};
+            view_->checkSizeConstraint(&r);
+            view_->onSize(&r);
+        };
+        editorWin_ = editorwin::create(windowTitle, rect.getWidth(), rect.getHeight(),
+                                       resizable, std::move(cbs));
+        if (!editorWin_) {
+            teardownEditorView(false);
+            return false;
+        }
+
+        if (view_->attached(editorwin::contentView(editorWin_), platformType) !=
+            kResultOk) {
+            teardownEditorView(false);
+            editorwin::destroy(editorWin_);
+            editorWin_ = nullptr;
+            return false;
         }
         return true;
     }
 
+    void closeEditor() override
+    {
+        if (!editorWin_)
+            return;
+        teardownEditorView(true);
+        void* win = editorWin_;
+        editorWin_ = nullptr; // editorOpen() is false from here on
+        editorwin::destroy(win);
+    }
+
+    bool editorOpen() const override { return editorWin_ != nullptr; }
+
+    // called from the component handler / plug frame
+    void editorChangedParam(Vst::ParamID id, double value)
+    {
+        auto it = paramsById_.find(std::to_string(id));
+        if (it != paramsById_.end())
+            static_cast<VST3Parameter*>(it->second)->updateCacheOnly(value);
+        SpinGuard g(pendingLock_);
+        pendingAudio_.emplace_back(id, value);
+    }
+
+    void onRestartComponent(int32 flags)
+    {
+        if (flags & Vst::kParamValuesChanged)
+            refreshParamCaches();
+    }
+
+    void pluginRequestedResize(const ViewRect& size)
+    {
+        if (!editorWin_ || !view_)
+            return;
+        inPluginResize_ = true;
+        editorwin::setContentSize(editorWin_, size.getWidth(), size.getHeight());
+        ViewRect r = size;
+        view_->onSize(&r);
+        inPluginResize_ = false;
+    }
+
 private:
+    void refreshParamCaches()
+    {
+        if (!controller_)
+            return;
+        for (auto* p : parameters_) {
+            Vst::ParamID pid = (Vst::ParamID)std::stoul(p->id());
+            static_cast<VST3Parameter*>(p)->updateCacheOnly(
+                controller_->getParamNormalized(pid));
+        }
+    }
+
+    void teardownEditorView(bool attached)
+    {
+        if (view_) {
+            if (attached)
+                view_->removed();
+            view_->setFrame(nullptr);
+            view_ = nullptr;
+        }
+        if (frame_) {
+            frame_->disconnect();
+            frame_ = nullptr;
+        }
+    }
+
     void buildParameterList()
     {
         if (!controller_)
@@ -406,6 +580,14 @@ private:
     IPtr<Vst::IComponent> component_;
     IPtr<Vst::IEditController> controller_;
     FUnknownPtr<Vst::IAudioProcessor> processor_;
+    IPtr<VST3ComponentHandler> handler_;
+
+    // editor
+    IPtr<IPlugView> view_;
+    IPtr<VST3PlugFrame> frame_;
+    void* editorWin_ = nullptr;
+    bool checkedEditor_ = false, hasEditorCached_ = false;
+    bool inPluginResize_ = false;
 
     Vst::HostProcessData processData_;
     Vst::ProcessContext processContext_{};
@@ -427,6 +609,28 @@ private:
     uint32_t maxBlock_ = 0;
     bool prepared_ = false;
 };
+
+tresult PLUGIN_API VST3ComponentHandler::performEdit(Vst::ParamID id,
+                                                     Vst::ParamValue value)
+{
+    if (owner_)
+        owner_->editorChangedParam(id, value);
+    return kResultOk;
+}
+
+tresult PLUGIN_API VST3ComponentHandler::restartComponent(int32 flags)
+{
+    if (owner_)
+        owner_->onRestartComponent(flags);
+    return kResultOk;
+}
+
+tresult PLUGIN_API VST3PlugFrame::resizeView(IPlugView* view, ViewRect* newSize)
+{
+    if (owner_ && view && newSize)
+        owner_->pluginRequestedResize(*newSize);
+    return kResultTrue;
+}
 
 // ---------------------------------------------------------------------------
 

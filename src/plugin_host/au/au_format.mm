@@ -6,8 +6,12 @@
 // processing; AUv3 async instantiation is out of scope until it's needed.
 
 #include "snd/plugin_host.h"
+#include "../editor_window.h"
 
+#import <AppKit/AppKit.h>
 #import <AudioToolbox/AudioToolbox.h>
+#import <AudioUnit/AUCocoaUIView.h>
+#import <CoreAudioKit/CoreAudioKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 
 #include <algorithm>
@@ -117,6 +121,7 @@ public:
 
     ~AUInstance() override
     {
+        closeEditor(); // view listeners must unhook before the unit dies
         unprepare();
         destroyUnit();
     }
@@ -227,7 +232,14 @@ public:
         return true;
     }
 
-    void idle() override {} // AU parameter sets are applied immediately
+    void idle() override
+    {
+        // With the editor open, the user changes parameters behind our back;
+        // re-read them (throttled) so host-side sliders and saves stay true.
+        if (editorWin_ && ++idleTick_ % 6 == 0)
+            for (auto& owned : ownedParameters_)
+                owned->refreshCache();
+    }
 
     const std::vector<Parameter*>& parameters() const override { return parameters_; }
 
@@ -282,7 +294,88 @@ public:
         return true;
     }
 
+    // Every AU gets an editor: its own Cocoa view when it ships one, the
+    // system generic parameter view (CoreAudioKit) otherwise.
+    bool hasEditor() override { return unit_ != nullptr; }
+
+    bool openEditor(const std::string& windowTitle) override
+    {
+        if (editorWin_)
+            return true;
+        if (!unit_)
+            return false;
+
+        NSView* view = createCocoaView();
+        if (!view)
+            view = [[[AUGenericView alloc] initWithAudioUnit:unit_] autorelease];
+        if (!view)
+            return false;
+
+        int w = (int)view.frame.size.width, h = (int)view.frame.size.height;
+        if (w < 80 || h < 40) {
+            w = 560;
+            h = 340;
+        }
+
+        editorwin::Callbacks cbs;
+        cbs.onClose = [this] { closeEditor(); };
+        editorWin_ = editorwin::create(windowTitle, w, h, true, cbs);
+        if (!editorWin_)
+            return false;
+        editorwin::attachView(editorWin_, (void*)view); // window keeps it alive
+        return true;
+    }
+
+    void closeEditor() override
+    {
+        if (!editorWin_)
+            return;
+        void* win = editorWin_;
+        editorWin_ = nullptr;
+        editorwin::destroy(win); // releases the view and its AU listeners
+        for (auto& owned : ownedParameters_)
+            owned->refreshCache();
+    }
+
+    bool editorOpen() const override { return editorWin_ != nullptr; }
+
 private:
+    // The AU's custom UI, if it publishes one (kAudioUnitProperty_CocoaUI).
+    NSView* createCocoaView()
+    {
+        UInt32 size = 0;
+        Boolean writable = false;
+        if (AudioUnitGetPropertyInfo(unit_, kAudioUnitProperty_CocoaUI,
+                                     kAudioUnitScope_Global, 0, &size,
+                                     &writable) != noErr ||
+            size < sizeof(AudioUnitCocoaViewInfo))
+            return nil;
+
+        auto* info = (AudioUnitCocoaViewInfo*)calloc(1, size);
+        NSView* view = nil;
+        if (AudioUnitGetProperty(unit_, kAudioUnitProperty_CocoaUI,
+                                 kAudioUnitScope_Global, 0, info, &size) == noErr) {
+            NSBundle* bundle =
+                [NSBundle bundleWithURL:(NSURL*)info->mCocoaAUViewBundleLocation];
+            Class cls = [bundle classNamed:(NSString*)info->mCocoaAUViewClass[0]];
+            id factory = [[[cls alloc] init] autorelease];
+            if (factory &&
+                [factory respondsToSelector:@selector(uiViewForAudioUnit:withSize:)])
+                view = [factory uiViewForAudioUnit:unit_ withSize:NSMakeSize(600, 400)];
+
+            // the property hands us +1 references; balance them
+            UInt32 numClasses =
+                (UInt32)((size - sizeof(CFURLRef)) / sizeof(CFStringRef));
+            if (info->mCocoaAUViewBundleLocation)
+                CFRelease(info->mCocoaAUViewBundleLocation);
+            for (UInt32 i = 0; i < numClasses; ++i)
+                if (info->mCocoaAUViewClass[i])
+                    CFRelease(info->mCocoaAUViewClass[i]);
+        }
+        free(info);
+        return view;
+    }
+
     static OSStatus renderInput(void* refCon, AudioUnitRenderActionFlags* /*flags*/,
                                 const AudioTimeStamp* /*ts*/, UInt32 /*bus*/,
                                 UInt32 frames, AudioBufferList* buffers)
@@ -355,6 +448,9 @@ private:
     const float* const* currentInput_ = nullptr;
     uint32_t currentInputChannels_ = 0;
     uint32_t currentFrames_ = 0;
+
+    void* editorWin_ = nullptr;
+    uint32_t idleTick_ = 0;
 
     std::vector<std::unique_ptr<AUParameter>> ownedParameters_;
     std::vector<Parameter*> parameters_;

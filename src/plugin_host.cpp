@@ -3,6 +3,7 @@
 // out-of-process enumeration per plugin (Murk's scanner pattern).
 
 #include "snd/plugin_host.h"
+#include "plugin_host/editor_window.h"
 #include "plugin_host/vst3/vst3_format.h"
 
 #include <algorithm>
@@ -26,6 +27,17 @@ extern char** environ;
 
 #if defined(__APPLE__)
 namespace snd::plugin { std::unique_ptr<Format> createAUFormat(); }
+#endif
+
+#if !defined(__APPLE__)
+// Editor windows are macOS-only so far; every other OS reports "no editor".
+namespace snd::plugin::editorwin {
+void* create(const std::string&, int, int, bool, Callbacks) { return nullptr; }
+void* contentView(void*) { return nullptr; }
+void attachView(void*, void*) {}
+void setContentSize(void*, int, int) {}
+void destroy(void*) {}
+} // namespace snd::plugin::editorwin
 #endif
 
 namespace snd::plugin {
