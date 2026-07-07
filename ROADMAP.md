@@ -20,11 +20,11 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 | `snd::audio` | built — devices, Player (gapless loop, RT insert hook), fast load, probe/prefix, resample |
 | `snd::dsp` | built — PFFFT, COLA STFT (−140 dB round-trip) |
 | `snd::plugin` (hosting) | built — VST3+AU, editor GUIs in native windows, out-of-process scanning |
-| `snd::plugin` (client) | **missing — pillar ②** |
+| `snd::plugin` (client) | built — Processor+params, VST3 wrapper, ImGui editor in IPlugView, standalone; AU wrapper pending |
 | `snd::ui` | built v1 — frameless window, native drag, icon buttons, widget set (Palette, knobs, toggle, LED, dB meter, fader, badge) |
-| `snd::midi` | **missing — pillar ③, needs charter blessing** |
+| `snd::midi` | built — Message/Buffer, CoreMIDI I/O, host wiring (VST3 events + IMidiMapping, AU MusicDevice) |
 | `snd::platform` | built — dialogs, configDir, executablePath |
-| state tree / graph / streaming formats | **missing — pillar ④** |
+| state / graph / plumbing | built — snd::state, Graph w/ latency comp, StreamReader, timers/queue, ThreadPool, FLAC/MP3/media |
 
 ## Track 1 — WaveBob: DONE 2026-07-07 (owner-trimmed)
 
