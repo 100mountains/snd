@@ -400,19 +400,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/12] decode + playback: ");
+    printf("[1/13] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/12] capture/record:    ");
+    printf("[2/13] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/12] VST3 hosting:      ");
+    printf("[3/13] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/12] AU hosting:        ");
+    printf("[4/13] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -421,19 +421,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/12] resample:          ");
+    printf("[5/13] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/12] STFT round-trip:   ");
+    printf("[6/13] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/12] player looping:    ");
+    printf("[7/13] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/12] insert hook:       ");
+    printf("[8/13] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -468,7 +468,7 @@ static int runSelftest()
             printf("FAIL (no playback device)\n");
     }
 
-    printf("[9/12] OOP plugin scan:   ");
+    printf("[9/13] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -490,7 +490,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/12] widget set:      ");
+    printf("[10/13] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -543,7 +543,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/12] MIDI loopback:   ");
+    printf("[11/13] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -585,7 +585,7 @@ static int runSelftest()
             printf("FAIL\n");
     }
 
-    printf("[12/12] AU instrument:   ");
+    printf("[12/13] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -630,8 +630,64 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
+    printf("[13/13] client SDK:      ");
+    fflush(stdout);
+    bool ok13;
+    {
+        // DemoFilter was built by OUR plugin SDK; host it through the normal
+        // hosting path and verify it filters, saves state, and offers a UI
+        snd::plugin::HostManager manager;
+        manager.addDefaultFormats();
+        snd::plugin::Format* vst3 = nullptr;
+        for (auto& f : manager.formats())
+            if (std::string(f->name()) == "VST3")
+                vst3 = f.get();
+        auto found = vst3 ? vst3->scan(SND_TEST_DEMOFILTER_PATH)
+                          : std::vector<snd::plugin::Description>{};
+        auto plugin = found.empty() ? nullptr : manager.create(found[0]);
+        ok13 = plugin != nullptr && found[0].name == "SND Demo Filter";
+
+        double passRatio = 0, cutRatio = 0;
+        if (ok13) {
+            const double sr = 48000.0;
+            auto sine = makeSine(8000.0, sr, 48000, 0.5f);
+            double inRms = rms(sine);
+
+            std::vector<float> outOpen, outClosed;
+            plugin->parameterById("1")->setValue(1.0); // cutoff wide open
+            ok13 = processThrough(*plugin, sine, sr, outOpen);
+            plugin->parameterById("1")->setValue(0.0); // cutoff at 40 Hz
+            ok13 = ok13 && processThrough(*plugin, sine, sr, outClosed);
+            passRatio = rms(outOpen) / inRms;
+            cutRatio = rms(outClosed) / inRms;
+            ok13 = ok13 && passRatio > 0.5 && cutRatio < 0.1;
+
+            // state round-trip through the SDK's chunk format (idle() flushes
+            // the queued host-side edit into the plugin before saving)
+            plugin->parameterById("1")->setValue(0.3);
+            plugin->idle();
+            std::vector<uint8_t> st;
+            ok13 = ok13 && plugin->saveState(st) && !st.empty();
+            plugin->parameterById("1")->setValue(0.9);
+            plugin->idle();
+            ok13 = ok13 && plugin->loadState(st.data(), st.size()) &&
+                   std::abs(plugin->parameterById("1")->value() - 0.3) < 0.001;
+
+#if defined(__APPLE__)
+            ok13 = ok13 && plugin->hasEditor(); // ImGui editor advertised
+#endif
+        }
+        if (ok13)
+            printf("PASS (SDK plugin hosted: 8kHz pass %.2f / cut %.3f, state + "
+                   "editor OK)\n",
+                   passRatio, cutRatio);
+        else
+            printf("FAIL (found=%zu pass=%.2f cut=%.3f)\n", found.size(), passRatio,
+                   cutRatio);
+    }
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
-               ok11 && ok12;
+               ok11 && ok12 && ok13;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }

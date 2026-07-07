@@ -48,16 +48,14 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 - MIDI keyboard widget, XY pad, envelope/curve + pattern-grid editors — M/L
 - file-browser panel, drag-number entry, menu/tooltip conventions — S/M
 
-### ② Plugin **client** SDK — the big unlock, start next
-- `snd::plugin::client`: Processor base, declarative params (stable IDs), state chunks — M
-- VST3 wrapper: factory macro + SingleComponentEffect bridge (TestGain generalized) — M
-- **ImGui editor inside IPlugView** — GL context in the host's NSView, input
-  routing, resize, multiple instances — L, the hard part
-- AU nearly free via the VST3 SDK's `auwrapper` — S/M
-- Standalone wrapper = the existing SND app shell — S
-- `snd_add_plugin()` CMake helper — S
-- Dogfood gate (**M1**): an SND-built plugin with an ImGui GUI running inside
-  WaveBob's rack
+### ② Plugin **client** SDK — CORE DONE (M1 hit 2026-07-07)
+- ~~Processor base, declarative params, state chunks, VST3 wrapper w/ runtime
+  factory, ImGui editor inside IPlugView (own GL context + input per
+  instance), standalone shell, snd_add_plugin()~~ done — DemoFilter ships as
+  .vst3 + app; hosted + editor verified through SND's own host (selftest 13
+  + window probe)
+- remaining: AU via the SDK's `auwrapper` — S/M; MIDI-out from client
+  processors; resizable editors; live input in the standalone shell
 
 ### ③ `snd::midi` — BLESSED 2026-07-07, host side DONE
 - ~~event/buffer types, CoreMIDI in/out devices~~ done (virtual-endpoint

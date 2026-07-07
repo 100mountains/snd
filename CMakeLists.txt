@@ -231,14 +231,27 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# Plugin client SDK: write a Processor once, ship VST3 + standalone
+# ---------------------------------------------------------------------------
+
+set(SND_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+include(cmake/SndPlugin.cmake)
+
+snd_add_plugin(demofilter
+    SOURCES test/plugins/demofilter/demofilter.cpp
+    OUTPUT_NAME DemoFilter
+    STANDALONE)
+
+# ---------------------------------------------------------------------------
 # Example app (window + audio device + --selftest)
 # ---------------------------------------------------------------------------
 
 add_executable(snd-example examples/snd-example/main.cpp)
 target_link_libraries(snd-example PRIVATE snd)
-add_dependencies(snd-example testgain)
+add_dependencies(snd-example testgain demofilter)
 
 target_compile_definitions(snd-example PRIVATE
     SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
     SND_TEST_VST3_PATH="${SND_TESTGAIN_BUNDLE}"
+    SND_TEST_DEMOFILTER_PATH="${CMAKE_BINARY_DIR}/DemoFilter.vst3"
 )
