@@ -93,15 +93,36 @@ bool load(const std::string& path, Buffer& out, std::string* error)
     out.sampleRate = decoder.outputSampleRate;
     out.samples.clear();
 
-    float chunk[4096];
-    const ma_uint64 chunkFrames = 4096 / decoder.outputChannels;
-    for (;;) {
-        ma_uint64 read = 0;
-        ma_result r = ma_decoder_read_pcm_frames(&decoder, chunk, chunkFrames, &read);
-        if (read > 0)
-            out.samples.insert(out.samples.end(), chunk, chunk + read * decoder.outputChannels);
-        if (r != MA_SUCCESS || read < chunkFrames)
-            break;
+    // Preallocate from the reported length and decode straight into place --
+    // repeated append/realloc was the slow path on long files.
+    ma_uint64 totalFrames = 0;
+    ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames);
+    if (totalFrames > 0) {
+        out.samples.resize((size_t)totalFrames * out.channels);
+        ma_uint64 done = 0;
+        while (done < totalFrames) {
+            ma_uint64 want = std::min<ma_uint64>(totalFrames - done, 1 << 16);
+            ma_uint64 read = 0;
+            ma_result r = ma_decoder_read_pcm_frames(
+                &decoder, out.samples.data() + done * out.channels, want, &read);
+            done += read;
+            if (r != MA_SUCCESS || read < want)
+                break;
+        }
+        out.samples.resize((size_t)done * out.channels);
+    } else {
+        // Length unknown (some streams): fall back to chunked append.
+        float chunk[4096];
+        const ma_uint64 chunkFrames = 4096 / decoder.outputChannels;
+        for (;;) {
+            ma_uint64 read = 0;
+            ma_result r = ma_decoder_read_pcm_frames(&decoder, chunk, chunkFrames, &read);
+            if (read > 0)
+                out.samples.insert(out.samples.end(), chunk,
+                                   chunk + read * decoder.outputChannels);
+            if (r != MA_SUCCESS || read < chunkFrames)
+                break;
+        }
     }
 
     ma_decoder_uninit(&decoder);
@@ -110,6 +131,40 @@ bool load(const std::string& path, Buffer& out, std::string* error)
         return false;
     }
     return true;
+}
+
+bool probe(const std::string& path, uint32_t& channels, uint32_t& sampleRate,
+           uint64_t& frames)
+{
+    ma_decoder_config cfg = ma_decoder_config_init(ma_format_f32, 0, 0);
+    ma_decoder decoder;
+    if (ma_decoder_init_file(path.c_str(), &cfg, &decoder) != MA_SUCCESS)
+        return false;
+    channels = decoder.outputChannels;
+    sampleRate = decoder.outputSampleRate;
+    ma_uint64 total = 0;
+    ma_decoder_get_length_in_pcm_frames(&decoder, &total);
+    frames = total;
+    ma_decoder_uninit(&decoder);
+    return true;
+}
+
+bool loadPrefix(const std::string& path, Buffer& out, uint64_t maxFrames, std::string* error)
+{
+    ma_decoder_config cfg = ma_decoder_config_init(ma_format_f32, 0, 0);
+    ma_decoder decoder;
+    if (ma_decoder_init_file(path.c_str(), &cfg, &decoder) != MA_SUCCESS) {
+        if (error) *error = "could not open/decode: " + path;
+        return false;
+    }
+    out.channels = decoder.outputChannels;
+    out.sampleRate = decoder.outputSampleRate;
+    out.samples.assign((size_t)maxFrames * out.channels, 0.0f);
+    ma_uint64 read = 0;
+    ma_decoder_read_pcm_frames(&decoder, out.samples.data(), maxFrames, &read);
+    out.samples.resize((size_t)read * out.channels);
+    ma_decoder_uninit(&decoder);
+    return read > 0;
 }
 
 bool saveWav(const std::string& path, const Buffer& buf, std::string* error)
@@ -304,6 +359,9 @@ struct Player::Impl {
     std::atomic<bool> looping{false};
     std::atomic<float> peaks[2] = {0.0f, 0.0f};
 
+    InsertHook hook;
+    std::atomic_flag hookLock = ATOMIC_FLAG_INIT;
+
     void render(float* out, uint32_t frames, uint32_t channels)
     {
         std::memset(out, 0, sizeof(float) * frames * channels);
@@ -320,7 +378,6 @@ struct Player::Impl {
             std::min<uint64_t>(endFrame.load(std::memory_order_relaxed), b.frames());
         const bool loop = looping.load(std::memory_order_relaxed);
 
-        float pk[2] = {0.0f, 0.0f};
         for (uint32_t f = 0; f < frames; ++f) {
             if (pos >= end) {
                 if (loop && end > start)
@@ -332,16 +389,27 @@ struct Player::Impl {
             }
             for (uint32_t c = 0; c < channels; ++c) {
                 uint32_t src = c < b.channels ? c : b.channels - 1;
-                float v = b.samples[pos * b.channels + src];
-                out[f * channels + c] = v;
-                if (c < 2)
-                    pk[c] = std::max(pk[c], std::fabs(v));
+                out[f * channels + c] = b.samples[pos * b.channels + src];
             }
             ++pos;
         }
+        position.store(pos, std::memory_order_relaxed);
+
+        // live insert chain: try-lock so a main-thread hook swap can never
+        // block audio -- worst case one raw block slips through
+        if (!hookLock.test_and_set(std::memory_order_acquire)) {
+            if (hook)
+                hook(out, frames, channels);
+            hookLock.clear(std::memory_order_release);
+        }
+
+        // meters read POST-insert levels
+        float pk[2] = {0.0f, 0.0f};
+        for (uint32_t f = 0; f < frames; ++f)
+            for (uint32_t c = 0; c < std::min(channels, 2u); ++c)
+                pk[c] = std::max(pk[c], std::fabs(out[f * channels + c]));
         peaks[0].store(pk[0], std::memory_order_relaxed);
         peaks[1].store(pk[1], std::memory_order_relaxed);
-        position.store(pos, std::memory_order_relaxed);
     }
 };
 
@@ -397,6 +465,13 @@ void Player::setRange(uint64_t startFrame, uint64_t endFrame)
 {
     impl->rangeStart.store(startFrame);
     impl->endFrame.store(endFrame);
+}
+
+void Player::setInsert(InsertHook hook)
+{
+    while (impl->hookLock.test_and_set(std::memory_order_acquire)) {} // brief
+    impl->hook = std::move(hook);
+    impl->hookLock.clear(std::memory_order_release);
 }
 uint64_t Player::positionFrames() const { return impl->position.load(); }
 void Player::seek(uint64_t frame) { impl->position.store(frame); }

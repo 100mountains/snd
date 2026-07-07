@@ -385,19 +385,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/7] decode + playback: ");
+    printf("[1/8] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/7] capture/record:    ");
+    printf("[2/8] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/7] VST3 hosting:      ");
+    printf("[3/8] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/7] AU hosting:        ");
+    printf("[4/8] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -406,19 +406,54 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/7] resample:          ");
+    printf("[5/8] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/7] STFT round-trip:   ");
+    printf("[6/8] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/7] player looping:    ");
+    printf("[7/8] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7;
+    printf("[8/8] insert hook:       ");
+    fflush(stdout);
+    bool ok8;
+    {
+        // hook halves the output; post-insert peak should read ~half
+        snd::audio::Buffer buf;
+        buf.channels = 2;
+        buf.sampleRate = 48000;
+        auto mono = makeSine(440.0, 48000, 48000, 0.8f);
+        for (float s : mono) {
+            buf.samples.push_back(s);
+            buf.samples.push_back(s);
+        }
+        snd::audio::Player player;
+        ok8 = player.open(48000, 2);
+        if (ok8) {
+            player.setInsert([](float* out, uint32_t frames, uint32_t channels) {
+                for (uint32_t i = 0; i < frames * channels; ++i)
+                    out[i] *= 0.5f;
+            });
+            player.setBuffer(&buf);
+            player.play();
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            float pk = player.outputPeak(0);
+            player.stop();
+            player.close();
+            ok8 = pk > 0.3f && pk < 0.5f;
+            if (ok8)
+                printf("PASS (post-insert peak %.2f of 0.8 raw)\n", pk);
+            else
+                printf("FAIL (post-insert peak %.2f)\n", pk);
+        } else
+            printf("FAIL (no playback device)\n");
+    }
+
+    bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }

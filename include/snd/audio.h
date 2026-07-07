@@ -23,6 +23,15 @@ struct Buffer {
 // Decode any format miniaudio understands (wav/flac/mp3/ogg...) to float32.
 bool load(const std::string& path, Buffer& out, std::string* error = nullptr);
 
+// Header-only probe: channels/rate/length without decoding the audio.
+// Much faster than load() for building file lists.
+bool probe(const std::string& path, uint32_t& channels, uint32_t& sampleRate,
+           uint64_t& frames);
+
+// Decode only the first maxFrames frames (for previews/lead-in analysis).
+bool loadPrefix(const std::string& path, Buffer& out, uint64_t maxFrames,
+                std::string* error = nullptr);
+
 // Write a 32-bit float WAV.
 bool saveWav(const std::string& path, const Buffer& buf, std::string* error = nullptr);
 
@@ -117,8 +126,16 @@ public:
     void seek(uint64_t frame);
 
     // Peak absolute sample level of the most recent audio callback, per
-    // channel (0/1). For UI meters; decays are the caller's business.
+    // channel (0/1), measured AFTER the insert hook. For UI meters.
     float outputPeak(uint32_t channel) const;
+
+    // Insert processor, called on the AUDIO THREAD with the interleaved
+    // block after the buffer is rendered (e.g. a live effect chain).
+    // The hook must be real-time safe: no allocation, locks, or I/O.
+    // Swapping the hook is internally guarded; pass {} to remove.
+    using InsertHook = std::function<void(float* interleaved, uint32_t frames,
+                                          uint32_t channels)>;
+    void setInsert(InsertHook hook);
 
 private:
     struct Impl;
