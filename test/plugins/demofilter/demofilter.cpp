@@ -49,7 +49,7 @@ public:
     void reset() override { z_[0] = z_[1] = 0.0; }
 
     void process(const float* const* in, float* const* out, uint32_t frames,
-                 const snd::midi::Buffer&) override
+                 const snd::midi::Buffer&, snd::midi::Buffer&) override
     {
         // 40 Hz .. 20 kHz on a log sweep
         const double cut = param(kCutoff);

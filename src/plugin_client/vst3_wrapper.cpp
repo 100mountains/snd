@@ -178,8 +178,31 @@ public:
             haveIn = ins[0] && ins[1];
         }
 
+        midiOut_.clear();
         proc_->process(haveIn ? ins : nullptr, outs, (uint32_t)data.numSamples,
-                       midiIn_);
+                       midiIn_, midiOut_);
+
+        if (data.outputEvents) {
+            for (auto& m : midiOut_) {
+                Vst::Event e{};
+                e.busIndex = 0;
+                e.sampleOffset = (int32)m.frame;
+                if (m.isNoteOn()) {
+                    e.type = Vst::Event::kNoteOnEvent;
+                    e.noteOn.channel = (int16)m.channel();
+                    e.noteOn.pitch = (int16)m.data1;
+                    e.noteOn.velocity = (float)m.data2 / 127.0f;
+                    e.noteOn.noteId = -1;
+                } else if (m.isNoteOff()) {
+                    e.type = Vst::Event::kNoteOffEvent;
+                    e.noteOff.channel = (int16)m.channel();
+                    e.noteOff.pitch = (int16)m.data1;
+                    e.noteOff.noteId = -1;
+                } else
+                    continue;
+                data.outputEvents->addEvent(e);
+            }
+        }
         return kResultOk;
     }
 
@@ -288,6 +311,7 @@ private:
     std::unique_ptr<std::atomic<double>[]> values_;
     std::vector<uint32_t> ids_;
     snd::midi::Buffer midiIn_;
+    snd::midi::Buffer midiOut_;
     double sampleRate_ = 48000.0;
     uint32_t maxBlock_ = 0;
 };

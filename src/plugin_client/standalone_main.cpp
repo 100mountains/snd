@@ -67,6 +67,7 @@ int main()
     proc->prepare(48000.0, 512);
 
     static snd::midi::Buffer noMidi;
+    static snd::midi::Buffer midiOutScratch;
     std::vector<float> inL(4096, 0.0f), inR(4096, 0.0f), outL(4096), outR(4096);
 
     snd::audio::Device device;
@@ -77,7 +78,9 @@ int main()
             uint32_t n = std::min<uint32_t>(4096, frames - done);
             const float* ins[2] = {inL.data(), inR.data()};
             float* outs[2] = {outL.data(), outR.data()};
-            p->process(spec.isInstrument ? nullptr : ins, outs, n, noMidi);
+            midiOutScratch.clear();
+            p->process(spec.isInstrument ? nullptr : ins, outs, n, noMidi,
+                       midiOutScratch);
             for (uint32_t f = 0; f < n; ++f) {
                 out[(done + f) * channels] = outL[f];
                 if (channels > 1)

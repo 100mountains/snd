@@ -65,10 +65,12 @@ public:
     virtual void reset() {}
 
     // Audio thread. `in` is stereo channel pointers (nullptr for
-    // instruments), `out` is stereo. `midi` carries this block's events when
-    // the spec asked for them.
+    // instruments), `out` is stereo. `midiIn` carries this block's events
+    // when the spec asked for them; anything appended to `midiOut` is
+    // delivered to the host as note events.
     virtual void process(const float* const* in, float* const* out,
-                         uint32_t frames, const midi::Buffer& midi) = 0;
+                         uint32_t frames, const midi::Buffer& midiIn,
+                         midi::Buffer& midiOut) = 0;
 
     // Optional state beyond parameters.
     virtual void saveExtra(std::vector<uint8_t>&) {}

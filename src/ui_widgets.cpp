@@ -263,6 +263,99 @@ void badge(const char* text, ImU32 fill)
     dl->AddText(font, fs, ImVec2(p.x + 5.0f, p.y + 2.5f), gPalette.text, text);
 }
 
+bool keyboard(const char* id, KeyboardState& st, const ImVec2& size, int firstNote,
+              int octaves, const std::function<void(uint8_t, uint8_t)>& noteOn,
+              const std::function<void(uint8_t)>& noteOff, const bool* lit)
+{
+    const int whites = octaves * 7;
+    if (whites <= 0)
+        return false;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, size);
+    const bool active = ImGui::IsItemActive();
+    auto* dl = ImGui::GetWindowDrawList();
+
+    const float ww = size.x / (float)whites; // white key width
+    const float bw = ww * 0.62f;             // black key width
+    const float bh = size.y * 0.60f;         // black key height
+
+    // semitone offsets within an octave
+    static const int whiteSemi[7] = {0, 2, 4, 5, 7, 9, 11};
+    static const int blackAfterWhite[7] = {1, 1, 0, 1, 1, 1, 0}; // C D (no E) F G A (no B)
+    static const int blackSemi[7] = {1, 3, 0, 6, 8, 10, 0};
+
+    // hit test: black keys first (they sit on top)
+    int hitNote = -1;
+    float hitDepth = 0.0f; // 0 at key top .. 1 at its bottom, for velocity
+    if (ImGui::IsItemHovered() || active) {
+        ImVec2 m = ImGui::GetIO().MousePos;
+        float lx = m.x - p.x, ly = m.y - p.y;
+        if (lx >= 0 && lx < size.x && ly >= 0 && ly < size.y) {
+            if (ly < bh) {
+                for (int w = 0; w < whites && hitNote < 0; ++w) {
+                    int inOct = w % 7;
+                    if (!blackAfterWhite[inOct])
+                        continue;
+                    float bx = (w + 1) * ww - bw * 0.5f;
+                    if (lx >= bx && lx < bx + bw)
+                        hitNote = firstNote + (w / 7) * 12 + blackSemi[inOct];
+                }
+                if (hitNote >= 0)
+                    hitDepth = ly / bh;
+            }
+            if (hitNote < 0) {
+                int w = std::min(whites - 1, (int)(lx / ww));
+                hitNote = firstNote + (w / 7) * 12 + whiteSemi[w % 7];
+                hitDepth = ly / size.y;
+            }
+        }
+    }
+
+    // transitions
+    bool played = false;
+    int want = active ? hitNote : -1;
+    if (want != st.mouseNote) {
+        if (st.mouseNote >= 0 && noteOff)
+            noteOff((uint8_t)st.mouseNote);
+        if (want >= 0 && want < 128 && noteOn) {
+            uint8_t vel = (uint8_t)std::clamp(40.0f + hitDepth * 87.0f, 1.0f, 127.0f);
+            noteOn((uint8_t)want, vel);
+            played = true;
+        }
+        st.mouseNote = want >= 0 && want < 128 ? want : -1;
+    }
+
+    auto isDown = [&](int note) {
+        return note == st.mouseNote || (lit && note >= 0 && note < 128 && lit[note]);
+    };
+
+    // draw: white keys
+    for (int w = 0; w < whites; ++w) {
+        int note = firstNote + (w / 7) * 12 + whiteSemi[w % 7];
+        ImVec2 a(p.x + w * ww, p.y), b(p.x + (w + 1) * ww - 1.0f, p.y + size.y);
+        dl->AddRectFilled(a, b,
+                          isDown(note) ? gPalette.accent : IM_COL32(232, 233, 238, 255),
+                          2.0f, ImDrawFlags_RoundCornersBottom);
+        dl->AddRect(a, b, IM_COL32(40, 42, 50, 255), 2.0f,
+                    ImDrawFlags_RoundCornersBottom);
+    }
+    // black keys on top
+    for (int w = 0; w < whites; ++w) {
+        int inOct = w % 7;
+        if (!blackAfterWhite[inOct] || w == whites - 1)
+            continue;
+        int note = firstNote + (w / 7) * 12 + blackSemi[inOct];
+        float bx = p.x + (w + 1) * ww - bw * 0.5f;
+        ImVec2 a(bx, p.y), b(bx + bw, p.y + bh);
+        dl->AddRectFilled(a, b,
+                          isDown(note) ? gPalette.accentDim : IM_COL32(18, 19, 26, 255),
+                          2.0f, ImDrawFlags_RoundCornersBottom);
+        dl->AddRect(a, b, IM_COL32(0, 0, 0, 255), 2.0f, ImDrawFlags_RoundCornersBottom);
+    }
+    return played;
+}
+
 void sectionHeader(const char* text)
 {
     char buf[64];

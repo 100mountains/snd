@@ -266,16 +266,22 @@ snd_add_plugin(demofilter
     OUTPUT_NAME DemoFilter
     STANDALONE)
 
+snd_add_plugin(demosynth
+    SOURCES test/plugins/demosynth/demosynth.cpp
+    OUTPUT_NAME DemoSynth
+    STANDALONE)
+
 # ---------------------------------------------------------------------------
 # Example app (window + audio device + --selftest)
 # ---------------------------------------------------------------------------
 
 add_executable(snd-example examples/snd-example/main.cpp)
 target_link_libraries(snd-example PRIVATE snd)
-add_dependencies(snd-example testgain demofilter)
+add_dependencies(snd-example testgain demofilter demosynth)
 
 target_compile_definitions(snd-example PRIVATE
     SND_TEST_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/assets"
     SND_TEST_VST3_PATH="${SND_TESTGAIN_BUNDLE}"
     SND_TEST_DEMOFILTER_PATH="${CMAKE_BINARY_DIR}/DemoFilter.vst3"
+    SND_TEST_DEMOSYNTH_PATH="${CMAKE_BINARY_DIR}/DemoSynth.vst3"
 )

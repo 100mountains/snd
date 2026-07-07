@@ -26,6 +26,12 @@ function(snd_add_plugin target)
         set_source_files_properties(
             ${SND_ROOT_DIR}/src/plugin_client/editor_view_mac.mm
             PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        # ObjC classes are process-global: two SND plugins in one host would
+        # collide (the Waves disease). Rename the view class per plugin.
+        # (target_compile_definitions, NOT source-file props -- those are
+        # file-scoped and the last plugin would win for everyone.)
+        target_compile_definitions(${target} PRIVATE
+            SndPluginGLView=SndPluginGLView_${target})
     elseif(WIN32)
         target_sources(${target} PRIVATE
             ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/dllmain.cpp)

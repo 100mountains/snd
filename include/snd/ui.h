@@ -3,6 +3,7 @@
 // ImDrawList. Consumers include this and use ImGui:: directly for widgets.
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -140,5 +141,17 @@ void badge(const char* text, ImU32 fill = 0);
 
 // Dim uppercase caption with a rule to the right: section separators.
 void sectionHeader(const char* text);
+
+// Piano keyboard. Click plays (velocity from how far down the key you hit),
+// dragging glissandos. noteOn/noteOff fire on transitions; also render any
+// externally-held notes by passing them in `lit` (e.g. from incoming MIDI).
+struct KeyboardState {
+    int mouseNote = -1; // note the mouse currently holds, -1 = none
+};
+bool keyboard(const char* id, KeyboardState& st, const ImVec2& size,
+              int firstNote, int octaves,
+              const std::function<void(uint8_t note, uint8_t velocity)>& noteOn,
+              const std::function<void(uint8_t note)>& noteOff,
+              const bool* lit = nullptr /* 128 flags, optional */);
 
 } // namespace snd::ui

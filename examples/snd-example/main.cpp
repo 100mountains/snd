@@ -404,19 +404,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/20] decode + playback: ");
+    printf("[1/21] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/20] capture/record:    ");
+    printf("[2/21] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/20] VST3 hosting:      ");
+    printf("[3/21] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/20] AU hosting:        ");
+    printf("[4/21] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -425,19 +425,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/20] resample:          ");
+    printf("[5/21] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/20] STFT round-trip:   ");
+    printf("[6/21] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/20] player looping:    ");
+    printf("[7/21] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/20] insert hook:       ");
+    printf("[8/21] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -474,7 +474,7 @@ static int runSelftest()
         }
     }
 
-    printf("[9/20] OOP plugin scan:   ");
+    printf("[9/21] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -496,7 +496,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/20] widget set:      ");
+    printf("[10/21] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -549,7 +549,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/20] MIDI loopback:   ");
+    printf("[11/21] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -599,7 +599,7 @@ static int runSelftest()
         }
     }
 
-    printf("[12/20] AU instrument:   ");
+    printf("[12/21] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -644,7 +644,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/20] client SDK:      ");
+    printf("[13/21] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -700,7 +700,7 @@ static int runSelftest()
                    cutRatio);
     }
 
-    printf("[14/20] FLAC encode:     ");
+    printf("[14/21] FLAC encode:     ");
     fflush(stdout);
     bool ok14;
     {
@@ -727,7 +727,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[15/20] MP3 encode:      ");
+    printf("[15/21] MP3 encode:      ");
     fflush(stdout);
     bool ok15 = true;
     if (!snd::audio::mp3EncoderAvailable()) {
@@ -755,7 +755,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[16/20] media extract:   ");
+    printf("[16/21] media extract:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok16;
@@ -796,7 +796,7 @@ static int runSelftest()
     printf("skipped (AVFoundation is macOS-only)\n");
 #endif
 
-    printf("[17/20] state tree:      ");
+    printf("[17/21] state tree:      ");
     fflush(stdout);
     bool ok17;
     {
@@ -836,7 +836,7 @@ static int runSelftest()
                    xml.size());
     }
 
-    printf("[18/20] stream reader:   ");
+    printf("[18/21] stream reader:   ");
     fflush(stdout);
     bool ok18;
     {
@@ -876,7 +876,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[19/20] queue+timer+pool: ");
+    printf("[19/21] queue+timer+pool: ");
     fflush(stdout);
     bool ok19;
     {
@@ -911,7 +911,7 @@ static int runSelftest()
             printf("FAIL (jobs=%d main=%d ticks=%d)\n", jobs.load(), mainSeen, ticks);
     }
 
-    printf("[20/20] graph + latency: ");
+    printf("[20/21] graph + latency: ");
     fflush(stdout);
     bool ok20;
     {
@@ -1002,9 +1002,58 @@ static int runSelftest()
             printf("FAIL (graph build/prepare)\n");
     }
 
+    printf("[21/21] SDK instrument:  ");
+    fflush(stdout);
+    bool ok21;
+    {
+        // M2 proof: an SND-built synth, hosted by SND, sings on noteOn and
+        // decays after noteOff
+        snd::plugin::HostManager manager;
+        manager.addDefaultFormats();
+        snd::plugin::Format* vst3 = nullptr;
+        for (auto& f : manager.formats())
+            if (std::string(f->name()) == "VST3")
+                vst3 = f.get();
+        auto found = vst3 ? vst3->scan(SND_TEST_DEMOSYNTH_PATH)
+                          : std::vector<snd::plugin::Description>{};
+        auto synth = found.empty() ? nullptr : manager.create(found[0]);
+        ok21 = synth != nullptr && found[0].name == "SND Demo Synth" &&
+               synth->prepare(48000.0, 512);
+
+        float peakOn = 0.0f, peakTail = 0.0f;
+        if (ok21) {
+            const uint32_t block = 512;
+            std::vector<float> L(block), R(block);
+            float* outs[2] = {L.data(), R.data()};
+            snd::midi::Buffer on = {snd::midi::Message::noteOn(0, 60, 127)};
+            snd::midi::Buffer off = {snd::midi::Message::noteOff(0, 60)};
+            snd::midi::Buffer none;
+            for (int i = 0; i < 20 && ok21; ++i) { // ~0.2s held
+                ok21 = synth->processMidi(nullptr, 0, outs, 2, block,
+                                          i == 0 ? on : none);
+                for (uint32_t f = 0; f < block; ++f)
+                    peakOn = std::max(peakOn, std::fabs(L[f]));
+            }
+            for (int i = 0; i < 200 && ok21; ++i) { // ~2s after release
+                ok21 = synth->processMidi(nullptr, 0, outs, 2, block,
+                                          i == 0 ? off : none);
+                if (i > 150)
+                    for (uint32_t f = 0; f < block; ++f)
+                        peakTail = std::max(peakTail, std::fabs(L[f]));
+            }
+            ok21 = ok21 && peakOn > 0.05f && peakTail < peakOn * 0.1f;
+        }
+        if (ok21)
+            printf("PASS (noteOn peak %.3f, tail after release %.4f)\n", peakOn,
+                   peakTail);
+        else
+            printf("FAIL (found=%zu on=%.3f tail=%.4f)\n", found.size(), peakOn,
+                   peakTail);
+    }
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
                ok11 && ok12 && ok13 && ok14 && ok15 && ok16 && ok17 && ok18 && ok19 &&
-               ok20;
+               ok20 && ok21;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
