@@ -26,20 +26,15 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 | `snd::platform` | built — dialogs, configDir, executablePath |
 | state tree / graph / streaming formats | **missing — pillar ④** |
 
-## Track 1 — WaveBob to feature-complete (independent; keeps shipping)
+## Track 1 — WaveBob: DONE 2026-07-07 (owner-trimmed)
 
-| # | Item | Size |
-|---|------|------|
-| 1 | Save formats: FLAC + OGG encode, vendored permissive encoders (mp3 = LAME is LGPL — decide or skip) | M |
-| 2 | Log-frequency spectrogram axis (+ freq zoom) | S |
-| 3 | Preview/audition before Apply (effect + plugin dialogs) | M |
-| 4 | Parametric EQ (promote the biquad toolkit from `master.h` into `snd::dsp`) | M |
-| 5 | Pitch shift / time stretch — vendor signalsmith-stretch (MIT) | M |
-| 6 | Noise reduction v2 (temporal smoothing over profile subtract) | M |
-| 7 | Rack latency compensation (query plugin latency; align bounce + live dry path) | M |
-| 8 | Spectral paint extras: harmonic brush, persist marks, loudness-select | M |
-| 9 | Separate-windows mode (needs SND multi-window) | L |
-| 10 | Per-file session sidecar (view/selection/paint marks) | S |
+Shipped: FLAC + MP3 export (LAME dlopen'd), video-soundtrack extraction
+(AVFoundation, 5.1 → 6-lane multichannel docs + split-to-tabs),
+log-frequency spectrogram axis, preview-before-apply in seven dialogs,
+rack bounce latency compensation (+ live latency readout), harmonic brush,
+persistent paint via per-file session sidecars, pop-out windows.
+Owner dropped: parametric EQ, pitch/time-stretch, noise reduction v2.
+Remaining candidates: OGG export, loudness-select for the brush.
 
 ## Track 2 — SND pillars (the Murk enablers)
 
@@ -64,15 +59,14 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
   MusicDeviceMIDIEvent, aumu/aumf in the scan~~ done (DLS-synth-sings selftest)
 - client side: MIDI through the plugin SDK processor API — lands with ② — S
 
-### ④ App plumbing
-- state tree (ValueTree replacement: tree + listeners + undo + serialize;
-  Murk uses it in 25 files) — M/L
-- timers + run-on-main-thread queue — S
-- formats: AIFF read, streaming/seeking reader (the sampler can't full-load
-  every kit), encoders shared with Track 1 — M
-- processor **graph** with latency compensation (AudioProcessorGraph
-  replacement; vendor imgui-node-editor for the UI when needed) — L
-- thread pool / background jobs — S
+### ④ App plumbing — DONE 2026-07-07
+- ~~snd::state (tree + listeners + transactional undo + ValueTree-shaped
+  XML), runOnMain/processMainQueue + frame timers, StreamReader, ThreadPool,
+  snd::plugin::Graph w/ automatic latency compensation,
+  Instance::latencySamples (VST3+AU), FLAC/MP3 encoders, AVFoundation media
+  reads (covers AIFF on mac)~~ all landed with behaviour selftests (20/20)
+- remaining: imgui-node-editor vendoring for the graph UI (with its first
+  consumer); cross-platform AIFF if Murk ever leaves the Mac
 
 ## Track 3 — the Murk port (starts after ②③ and most of ④)
 
@@ -90,8 +84,8 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 
 ## Milestone gates
 
-- **M1** — plugin SDK dogfood: SND-built ImGui plugin runs in WaveBob's rack
-- **M2** — MIDI blessed + wired host and client; keyboard widget live
+- **M1** — ✅ DONE: SND-built ImGui plugin (DemoFilter) hosted + editor verified
+- **M2** — MIDI blessed ✅, host wired ✅; remaining: client-SDK MIDI-in synth demo + keyboard widget
 - **M3** — first Murfy module plugin ships on SND with state compat
 - **M4** — Murfy app shell on SND with first panels; then panel-by-panel
 - **M5** — JUCE deleted from the murk tree
