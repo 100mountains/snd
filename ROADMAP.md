@@ -94,8 +94,8 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
 - **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
   clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
   already-written CreateProcess scan path + LAME dll loading.
-- Blocked on: no container tooling on this Mac yet (P1) and no Windows
-  hardware identified (P3).
+- Hardware: Linux = owner's PC over SSH (`ssh sentience`, powered on by
+  request); Windows = owner has a real PC (access method TBD).
 
 ## Track 3 — the Murk port (starts after ②③ and most of ④)
 
