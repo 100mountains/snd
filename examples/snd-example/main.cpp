@@ -603,8 +603,17 @@ static int runSelftest()
         snd::midi::Output out;
         bool skipped = false;
         if (!ok11) {
-            // no backend on this platform yet (or MIDI unavailable): honest skip
-            printf("skipped (no MIDI backend)\n");
+            // No virtual destination available here (WinMM can't create one;
+            // a headless box may have no MIDI hardware). Confirm the backend is
+            // live by enumerating devices instead of a full loopback.
+            auto ins = snd::midi::inputDevices();
+            auto outs = snd::midi::outputDevices();
+            if (ins.empty() && outs.empty())
+                printf("skipped (no MIDI backend / no devices)\n");
+            else
+                printf("skipped loopback (no virtual port); backend sees "
+                       "%zu in / %zu out\n",
+                       ins.size(), outs.size());
             ok11 = true;
             skipped = true;
         } else {

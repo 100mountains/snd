@@ -471,7 +471,173 @@ bool Output::send(const Message& m)
 
 } // namespace snd::midi
 
-#else // stubs until a Windows backend exists
+#elif defined(_WIN32) // WinMM backend
+
+#include <windows.h>
+#include <mmsystem.h>
+
+#include <cctype>
+
+namespace snd::midi {
+
+namespace {
+
+// Case-insensitive "does the device name contain the query" (query "" matches
+// the first device). WinMM addresses devices by index; we select by name.
+bool nameMatches(const std::string& devName, const std::string& query)
+{
+    if (query.empty())
+        return true;
+    auto lower = [](std::string s) {
+        for (auto& c : s)
+            c = (char)std::tolower((unsigned char)c);
+        return s;
+    };
+    return lower(devName).find(lower(query)) != std::string::npos;
+}
+
+} // namespace
+
+std::vector<std::string> inputDevices()
+{
+    std::vector<std::string> out;
+    const UINT n = midiInGetNumDevs();
+    for (UINT i = 0; i < n; ++i) {
+        MIDIINCAPSA caps{};
+        if (midiInGetDevCapsA(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+            out.emplace_back(caps.szPname);
+    }
+    return out;
+}
+
+std::vector<std::string> outputDevices()
+{
+    std::vector<std::string> out;
+    const UINT n = midiOutGetNumDevs();
+    for (UINT i = 0; i < n; ++i) {
+        MIDIOUTCAPSA caps{};
+        if (midiOutGetDevCapsA(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+            out.emplace_back(caps.szPname);
+    }
+    return out;
+}
+
+// ── Input ──────────────────────────────────────────────────────────────────
+// A namespace-level context (the WinMM callback proc, a free function, cannot
+// name Input's private nested Impl).
+namespace {
+struct WinMidiIn {
+    HMIDIIN handle = nullptr;
+    Input::Callback cb;
+};
+} // namespace
+
+struct Input::Impl {
+    WinMidiIn in;
+};
+
+// WinMM delivers on its own thread. MIM_DATA packs the message in dwParam1
+// (byte0 status, byte1 data1, byte2 data2). Sysex (MIM_LONGDATA) is ignored.
+static void CALLBACK midiInProc(HMIDIIN, UINT msg, DWORD_PTR inst,
+                                DWORD_PTR p1, DWORD_PTR)
+{
+    if (msg != MIM_DATA)
+        return;
+    auto* ctx = reinterpret_cast<WinMidiIn*>(inst);
+    if (!ctx || !ctx->cb)
+        return;
+    Message m;
+    m.status = (uint8_t)(p1 & 0xFF);
+    m.data1 = (uint8_t)((p1 >> 8) & 0xFF);
+    m.data2 = (uint8_t)((p1 >> 16) & 0xFF);
+    m.frame = 0;
+    ctx->cb(m);
+}
+
+Input::Input() : impl(new Impl) {}
+Input::~Input() { close(); }
+
+bool Input::open(const std::string& name, Callback cb, const std::string&)
+{
+    // WinMM cannot create virtual destinations; open a real input by name.
+    close();
+    impl->in.cb = std::move(cb);
+    const UINT n = midiInGetNumDevs();
+    for (UINT i = 0; i < n; ++i) {
+        MIDIINCAPSA caps{};
+        if (midiInGetDevCapsA(i, &caps, sizeof(caps)) != MMSYSERR_NOERROR)
+            continue;
+        if (!nameMatches(caps.szPname, name))
+            continue;
+        if (midiInOpen(&impl->in.handle, i, (DWORD_PTR)midiInProc,
+                       (DWORD_PTR)&impl->in, CALLBACK_FUNCTION) !=
+            MMSYSERR_NOERROR)
+            return false;
+        if (midiInStart(impl->in.handle) != MMSYSERR_NOERROR) {
+            midiInClose(impl->in.handle);
+            impl->in.handle = nullptr;
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+void Input::close()
+{
+    if (impl->in.handle) {
+        midiInStop(impl->in.handle);
+        midiInReset(impl->in.handle);
+        midiInClose(impl->in.handle);
+        impl->in.handle = nullptr;
+    }
+}
+
+// ── Output ─────────────────────────────────────────────────────────────────
+struct Output::Impl {
+    HMIDIOUT handle = nullptr;
+};
+
+Output::Output() : impl(new Impl) {}
+Output::~Output() { close(); }
+
+bool Output::open(const std::string& name)
+{
+    close();
+    const UINT n = midiOutGetNumDevs();
+    for (UINT i = 0; i < n; ++i) {
+        MIDIOUTCAPSA caps{};
+        if (midiOutGetDevCapsA(i, &caps, sizeof(caps)) != MMSYSERR_NOERROR)
+            continue;
+        if (!nameMatches(caps.szPname, name))
+            continue;
+        return midiOutOpen(&impl->handle, i, 0, 0, CALLBACK_NULL) ==
+               MMSYSERR_NOERROR;
+    }
+    return false;
+}
+
+void Output::close()
+{
+    if (impl->handle) {
+        midiOutReset(impl->handle);
+        midiOutClose(impl->handle);
+        impl->handle = nullptr;
+    }
+}
+
+bool Output::send(const Message& m)
+{
+    if (!impl->handle)
+        return false;
+    DWORD packed = (DWORD)m.status | ((DWORD)m.data1 << 8) |
+                   ((DWORD)m.data2 << 16);
+    return midiOutShortMsg(impl->handle, packed) == MMSYSERR_NOERROR;
+}
+
+} // namespace snd::midi
+
+#else // stubs on any other platform
 
 namespace snd::midi {
 
