@@ -224,7 +224,8 @@ if(APPLE)
         "-framework AVFoundation"
         "-framework CoreMedia")
 elseif(WIN32)
-    target_link_libraries(snd PUBLIC opengl32 winmm)
+    target_link_libraries(snd PUBLIC opengl32 winmm
+        mfplat mfreadwrite mfuuid ole32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)

@@ -846,6 +846,36 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 media_done:;
+#elif defined(_WIN32)
+    bool ok16;
+    {
+        // Media Foundation decodes media containers; verify the pipeline by
+        // round-tripping a WAV through loadMediaAudio (MF has a native WAV
+        // source), so no external converter is needed.
+        auto tmpw = tmpDir() + "/snd-selftest-mf.wav";
+        snd::audio::Buffer b;
+        b.channels = 2;
+        b.sampleRate = 44100;
+        auto mono = makeSine(440.0, 44100, 44100, 0.5f);
+        for (float s : mono) {
+            b.samples.push_back(s);
+            b.samples.push_back(s);
+        }
+        std::string err;
+        ok16 = snd::audio::saveWav(tmpw, b, &err);
+        snd::audio::Buffer media;
+        ok16 = ok16 && snd::audio::loadMediaAudio(tmpw, media, &err);
+        double r1 = rms(b.samples), r2 = rms(media.samples);
+        ok16 = ok16 && media.channels == 2 && media.sampleRate == 44100 &&
+               media.frames() > b.frames() / 2 && std::abs(r1 - r2) / r1 < 0.2;
+        remove(tmpw.c_str());
+        if (ok16)
+            printf("PASS (Media Foundation decoded %uch @ %u Hz, RMS %.3f -> "
+                   "%.3f)\n",
+                   media.channels, media.sampleRate, r1, r2);
+        else
+            printf("FAIL (%s)\n", err.c_str());
+    }
 #else
     bool ok16 = true;
     printf("skipped (no media backend on this platform yet)\n");

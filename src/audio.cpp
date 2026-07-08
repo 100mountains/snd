@@ -11,6 +11,11 @@
 // runtime library loading, portable: dlopen on POSIX, LoadLibrary on Windows
 #if defined(_WIN32)
 #include <windows.h>
+// Media Foundation, for media/video-container audio extraction.
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
 #define RTLD_LAZY 0
 #define RTLD_LOCAL 0
 namespace {
@@ -492,10 +497,102 @@ bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error)
     return true;
 }
 #elif defined(_WIN32)
-bool loadMediaAudio(const std::string&, Buffer&, std::string* error)
+// Decode any Media Foundation-supported container (mp4/m4a/mov/wma/mp3/wav...)
+// to interleaved float PCM via IMFSourceReader.
+bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error)
 {
-    if (error) *error = "media extraction: Media Foundation backend pending";
-    return false;
+    auto fail = [&](const std::string& msg) {
+        if (error)
+            *error = msg;
+        return false;
+    };
+
+    std::wstring wpath;
+    int n = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0);
+    if (n > 0) {
+        wpath.resize((size_t)n - 1);
+        MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, wpath.data(), n);
+    }
+
+    if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE)))
+        return fail("MFStartup failed");
+    struct MFGuard {
+        ~MFGuard() { MFShutdown(); }
+    } mfGuard;
+
+    IMFSourceReader* reader = nullptr;
+    if (FAILED(MFCreateSourceReaderFromURL(wpath.c_str(), nullptr, &reader)) ||
+        !reader)
+        return fail("could not open media: " + path);
+
+    reader->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE);
+    reader->SetStreamSelection((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
+
+    // ask the reader to decode to 32-bit float PCM
+    IMFMediaType* want = nullptr;
+    MFCreateMediaType(&want);
+    want->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+    want->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_Float);
+    HRESULT hr = reader->SetCurrentMediaType(
+        (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, want);
+    want->Release();
+    if (FAILED(hr)) {
+        reader->Release();
+        return fail("no decodable audio stream: " + path);
+    }
+
+    UINT32 channels = 0, rate = 0;
+    IMFMediaType* cur = nullptr;
+    if (SUCCEEDED(reader->GetCurrentMediaType(
+            (DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, &cur)) &&
+        cur) {
+        cur->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &channels);
+        cur->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, &rate);
+        cur->Release();
+    }
+    if (channels == 0 || rate == 0) {
+        reader->Release();
+        return fail("could not read audio layout: " + path);
+    }
+
+    out.channels = channels;
+    out.sampleRate = rate;
+    out.samples.clear();
+    for (;;) {
+        DWORD flags = 0;
+        IMFSample* sample = nullptr;
+        hr = reader->ReadSample((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0,
+                                nullptr, &flags, nullptr, &sample);
+        if (FAILED(hr))
+            break;
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) {
+            if (sample)
+                sample->Release();
+            break;
+        }
+        if (!sample)
+            continue;
+        IMFMediaBuffer* buf = nullptr;
+        if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buf)) && buf) {
+            BYTE* data = nullptr;
+            DWORD len = 0;
+            if (SUCCEEDED(buf->Lock(&data, nullptr, &len))) {
+                const float* f = reinterpret_cast<const float*>(data);
+                out.samples.insert(out.samples.end(), f,
+                                   f + len / sizeof(float));
+                buf->Unlock();
+            }
+            buf->Release();
+        }
+        sample->Release();
+    }
+    reader->Release();
+
+    out.samples.resize(out.samples.size() -
+                       out.samples.size() % out.channels);
+    if (out.samples.empty())
+        return fail("media decode produced no audio: " + path);
+    return true;
 }
 #endif
 
