@@ -86,7 +86,16 @@ function(snd_add_plugin target)
             OUTPUT_NAME ${ARG_OUTPUT_NAME}
             PREFIX ""
             SUFFIX ".vst3"
-            LIBRARY_OUTPUT_DIRECTORY ${bundle}/Contents/x86_64-win)
+            LIBRARY_OUTPUT_DIRECTORY ${bundle}/Contents/x86_64-win
+            RUNTIME_OUTPUT_DIRECTORY ${bundle}/Contents/x86_64-win)
+        # Multi-config generators (VS) append a per-config subdir by default,
+        # which would break the .vst3 bundle layout. Pin every config to the
+        # bundle so the DLL lands at Contents/x86_64-win/<name>.vst3.
+        foreach(_cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+            set_target_properties(${target} PROPERTIES
+                LIBRARY_OUTPUT_DIRECTORY_${_cfg} ${bundle}/Contents/x86_64-win
+                RUNTIME_OUTPUT_DIRECTORY_${_cfg} ${bundle}/Contents/x86_64-win)
+        endforeach()
     else()
         set_target_properties(${target} PROPERTIES
             OUTPUT_NAME ${ARG_OUTPUT_NAME}

@@ -16,6 +16,11 @@ if(WIN32)
     # generated export header must not mark the functions __declspec(dllimport).
     add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES
                             _CRT_SECURE_NO_WARNINGS PFFFT_STATIC_DEFINE)
+    # One uniform C runtime (dynamic) across SND and every vendored dep, so a
+    # FILE*/heap pointer never crosses a /MT-vs-/MD boundary (libFLAC's
+    # init_file crashed on the mismatch). Requires CMP0091 (NEW since 3.15).
+    set(CMAKE_MSVC_RUNTIME_LIBRARY
+        "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING "" FORCE)
 endif()
 
 include(FetchContent)
@@ -271,7 +276,13 @@ elseif(WIN32)
         OUTPUT_NAME TestGain
         PREFIX ""
         SUFFIX ".vst3"
-        LIBRARY_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win)
+        LIBRARY_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win
+        RUNTIME_OUTPUT_DIRECTORY ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win)
+    foreach(_cfg DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_target_properties(testgain PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY_${_cfg} ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win
+            RUNTIME_OUTPUT_DIRECTORY_${_cfg} ${SND_TESTGAIN_BUNDLE}/Contents/x86_64-win)
+    endforeach()
 else()
     set_target_properties(testgain PROPERTIES
         OUTPUT_NAME TestGain
