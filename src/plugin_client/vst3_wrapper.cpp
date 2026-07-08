@@ -62,6 +62,17 @@ public:
         return (Vst::IAudioProcessor*)new SndEffect();
     }
 
+    // widest bus we host (the Bob mixer is 34-in / 6-out)
+    static constexpr int kMaxChannels = 64;
+
+    // A discrete N-channel speaker arrangement (N bits set). N=2 -> kStereo.
+    static Vst::SpeakerArrangement arrForChannels(int n)
+    {
+        n = std::clamp(n, 1, kMaxChannels);
+        return n >= 64 ? (Vst::SpeakerArrangement)~0ull
+                       : (Vst::SpeakerArrangement)((1ull << n) - 1);
+    }
+
     // --- component setup ---------------------------------------------------
 
     tresult PLUGIN_API initialize(FUnknown* context) override
@@ -71,8 +82,8 @@ public:
             return r;
 
         if (!spec_.isInstrument)
-            addAudioInput(USTRING("In"), Vst::SpeakerArr::kStereo);
-        addAudioOutput(USTRING("Out"), Vst::SpeakerArr::kStereo);
+            addAudioInput(USTRING("In"), arrForChannels(spec_.inputChannels));
+        addAudioOutput(USTRING("Out"), arrForChannels(spec_.outputChannels));
         if (spec_.wantsMidi || spec_.isInstrument)
             addEventInput(USTRING("MIDI In"), 16);
 
@@ -95,13 +106,16 @@ public:
                                           Vst::SpeakerArrangement* outputs,
                                           int32 numOuts) override
     {
-        // stereo-only, by design of the client API
-        if (numOuts != 1 || outputs[0] != Vst::SpeakerArr::kStereo)
+        // one output bus with the spec's channel count
+        if (numOuts != 1 ||
+            Vst::SpeakerArr::getChannelCount(outputs[0]) != spec_.outputChannels)
             return kResultFalse;
         if (spec_.isInstrument)
             return numIns == 0 ? kResultTrue : kResultFalse;
-        return numIns == 1 && inputs[0] == Vst::SpeakerArr::kStereo ? kResultTrue
-                                                                    : kResultFalse;
+        return numIns == 1 && Vst::SpeakerArr::getChannelCount(inputs[0]) ==
+                                  spec_.inputChannels
+                   ? kResultTrue
+                   : kResultFalse;
     }
 
     tresult PLUGIN_API setupProcessing(Vst::ProcessSetup& setup) override
@@ -170,18 +184,25 @@ public:
         if (data.numSamples <= 0 || data.numOutputs < 1)
             return kResultOk;
 
+        // build channel-pointer arrays sized to the spec (kMaxChannels covers
+        // the widest bob module -- the 34-in mixer). Missing host channels are
+        // left null; the processor treats them as silent.
         auto& outBus = data.outputs[0];
-        if (outBus.numChannels < 2 || !outBus.channelBuffers32)
+        if (outBus.numChannels < 1 || !outBus.channelBuffers32)
             return kResultOk;
-        float* outs[2] = {outBus.channelBuffers32[0], outBus.channelBuffers32[1]};
+        const int outN = std::min(spec_.outputChannels, kMaxChannels);
+        float* outs[kMaxChannels] = {};
+        for (int c = 0; c < outN && c < outBus.numChannels; ++c)
+            outs[c] = outBus.channelBuffers32[c];
 
-        const float* ins[2] = {nullptr, nullptr};
+        const float* ins[kMaxChannels] = {};
         bool haveIn = false;
         if (!spec_.isInstrument && data.numInputs > 0 &&
-            data.inputs[0].numChannels >= 2 && data.inputs[0].channelBuffers32) {
-            ins[0] = data.inputs[0].channelBuffers32[0];
-            ins[1] = data.inputs[0].channelBuffers32[1];
-            haveIn = ins[0] && ins[1];
+            data.inputs[0].channelBuffers32) {
+            const int inN = std::min(spec_.inputChannels, kMaxChannels);
+            for (int c = 0; c < inN && c < data.inputs[0].numChannels; ++c)
+                ins[c] = data.inputs[0].channelBuffers32[c];
+            haveIn = ins[0] != nullptr;
         }
 
         if (data.processContext) {
