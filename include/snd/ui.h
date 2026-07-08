@@ -163,11 +163,14 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
 // Breakpoint envelope over 0..1 in both axes. Drag points, double-click
 // empty space to add, right-click a point to delete. Points stay x-sorted;
 // first/last stay pinned to x=0/x=1. Returns true while editing.
+// Optional `tensions`: per-segment bend, -1..1 (entry i curves the segment
+// points[i]->points[i+1]; kept the same length as points). Dragging the
+// middle of a segment bends it; segments draw as eased curves.
 struct EnvPoint {
     float x = 0.0f, y = 0.0f;
 };
 bool envelopeEditor(const char* id, std::vector<EnvPoint>& points,
-                    const ImVec2& size);
+                    const ImVec2& size, std::vector<float>* tensions = nullptr);
 
 // 2D pad controlling two normalized values. Returns true while dragging.
 bool xyPad(const char* id, float* x, float* y, const ImVec2& size);

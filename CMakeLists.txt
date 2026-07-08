@@ -276,7 +276,9 @@ endif()
 # Plugin client SDK: write a Processor once, ship VST3 + standalone
 # ---------------------------------------------------------------------------
 
-set(SND_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+# Cached so apps that pull SND in via FetchContent can call snd_add_plugin()
+# from their own scope (bob2 is the first external consumer).
+set(SND_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE INTERNAL "SND source root")
 include(cmake/SndPlugin.cmake)
 
 snd_add_plugin(demofilter

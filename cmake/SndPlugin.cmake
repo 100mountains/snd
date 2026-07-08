@@ -16,6 +16,15 @@
 function(snd_add_plugin target)
     cmake_parse_arguments(ARG "STANDALONE"
         "OUTPUT_NAME;AU_TYPE;AU_SUBTYPE;AU_MANUFACTURER" "SOURCES" ${ARGN})
+
+    # Callers outside the SND tree don't see the FetchContent dirs SND
+    # populated in its own scope; recover them from the global registry.
+    if(NOT vst3sdk_SOURCE_DIR)
+        FetchContent_GetProperties(vst3sdk)
+    endif()
+    if(APPLE AND NOT audiounitsdk_SOURCE_DIR)
+        FetchContent_GetProperties(audiounitsdk)
+    endif()
     if(NOT ARG_OUTPUT_NAME)
         set(ARG_OUTPUT_NAME ${target})
     endif()

@@ -424,19 +424,48 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
     return changed;
 }
 
-bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2& size)
+// Segment ease used when tensions are present: +t = slow start, -t = fast
+// start (matches Bob's envelope contours so edited shapes sound identical).
+static float easeSegment(float t, float ten)
+{
+    ten = std::clamp(ten, -1.0f, 1.0f);
+    if (ten > 0.0f)
+        return std::pow(t, 1.0f + ten * 3.0f);
+    if (ten < 0.0f)
+        return 1.0f - std::pow(1.0f - t, 1.0f - ten * 3.0f);
+    return t;
+}
+
+bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2& size,
+                    std::vector<float>* tensions)
 {
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton(id, size);
     auto* dl = ImGui::GetWindowDrawList();
     ImGuiStorage* store = ImGui::GetStateStorage();
     ImGuiID dragKey = ImGui::GetItemID();
+    ImGuiID segKey = dragKey + 1;
 
     if (points.empty())
         points = {{0.0f, 0.5f}, {1.0f, 0.5f}};
+    if (tensions)
+        tensions->resize(points.size(), 0.0f);
 
     auto toScreen = [&](const EnvPoint& e) {
         return ImVec2(p.x + e.x * size.x, p.y + (1.0f - e.y) * size.y);
+    };
+    auto segTen = [&](size_t i) {
+        return tensions && i < tensions->size() ? (*tensions)[i] : 0.0f;
+    };
+    // envelope value at normalized x, honoring tensions
+    auto evalAt = [&](float x) {
+        size_t i = 0;
+        while (i + 2 < points.size() && x > points[i + 1].x)
+            ++i;
+        const auto& a = points[i];
+        const auto& b = points[i + 1];
+        float t = std::clamp((x - a.x) / std::max(1e-6f, b.x - a.x), 0.0f, 1.0f);
+        return a.y + (b.y - a.y) * easeSegment(t, segTen(i));
     };
 
     ImVec2 m = ImGui::GetIO().MousePos;
@@ -451,12 +480,30 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
             break;
         }
     }
+    // hot segment: near the curve but not a point (only when bending exists)
+    int hotSeg = -1;
+    if (tensions && hot < 0 && points.size() >= 2 && m.x >= p.x &&
+        m.x <= p.x + size.x) {
+        float nx = std::clamp((m.x - p.x) / size.x, 0.0f, 1.0f);
+        float sy = p.y + (1.0f - evalAt(nx)) * size.y;
+        if (std::fabs(m.y - sy) < grab) {
+            size_t i = 0;
+            while (i + 2 < points.size() && nx > points[i + 1].x)
+                ++i;
+            hotSeg = (int)i;
+        }
+    }
 
     int dragging = store->GetInt(dragKey, -1);
-    if (ImGui::IsItemActivated())
+    int dragSeg = store->GetInt(segKey, -1);
+    if (ImGui::IsItemActivated()) {
         store->SetInt(dragKey, dragging = hot);
-    if (!ImGui::IsItemActive())
+        store->SetInt(segKey, dragSeg = hot < 0 ? hotSeg : -1);
+    }
+    if (!ImGui::IsItemActive()) {
         store->SetInt(dragKey, dragging = -1);
+        store->SetInt(segKey, dragSeg = -1);
+    }
 
     if (dragging >= 0 && dragging < (int)points.size()) {
         auto& e = points[(size_t)dragging];
@@ -470,6 +517,18 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
         e.x = std::clamp((m.x - p.x) / size.x, std::min(lo, hi), std::max(lo, hi));
         e.y = std::clamp(1.0f - (m.y - p.y) / size.y, 0.0f, 1.0f);
         changed = true;
+    } else if (tensions && dragSeg >= 0 && dragSeg + 1 < (int)points.size()) {
+        // vertical drag bends the segment toward the mouse
+        float dy = ImGui::GetIO().MouseDelta.y;
+        if (dy != 0.0f) {
+            float dir = points[(size_t)dragSeg + 1].y >= points[(size_t)dragSeg].y
+                            ? 1.0f
+                            : -1.0f;
+            (*tensions)[(size_t)dragSeg] = std::clamp(
+                (*tensions)[(size_t)dragSeg] + dir * dy * (3.0f / size.y), -1.0f,
+                1.0f);
+            changed = true;
+        }
     }
 
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0) && hot < 0) {
@@ -477,20 +536,42 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
                    std::clamp(1.0f - (m.y - p.y) / size.y, 0.0f, 1.0f)};
         auto it = std::find_if(points.begin(), points.end(),
                                [&](const EnvPoint& q) { return q.x > e.x; });
+        if (tensions)
+            tensions->insert(tensions->begin() + (it - points.begin()), 0.0f);
         points.insert(it, e);
         changed = true;
     }
     if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(1) && hot > 0 &&
         hot < (int)points.size() - 1) {
         points.erase(points.begin() + hot);
+        if (tensions && hot < (int)tensions->size())
+            tensions->erase(tensions->begin() + hot);
         changed = true;
     }
 
     // draw
     dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
-    for (size_t i = 1; i < points.size(); ++i)
-        dl->AddLine(toScreen(points[i - 1]), toScreen(points[i]), gPalette.accent,
-                    2.0f);
+    for (size_t i = 1; i < points.size(); ++i) {
+        float ten = segTen(i - 1);
+        ImU32 col = tensions && (int)(i - 1) == (hotSeg >= 0 ? hotSeg : dragSeg)
+                        ? gPalette.text
+                        : gPalette.accent;
+        if (ten == 0.0f) {
+            dl->AddLine(toScreen(points[i - 1]), toScreen(points[i]), col, 2.0f);
+        } else {
+            const int steps = 16;
+            ImVec2 prev = toScreen(points[i - 1]);
+            for (int s = 1; s <= steps; ++s) {
+                float t = (float)s / steps;
+                EnvPoint q{points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+                           points[i - 1].y +
+                               (points[i].y - points[i - 1].y) * easeSegment(t, ten)};
+                ImVec2 cur = toScreen(q);
+                dl->AddLine(prev, cur, col, 2.0f);
+                prev = cur;
+            }
+        }
+    }
     for (int i = 0; i < (int)points.size(); ++i) {
         ImVec2 s = toScreen(points[(size_t)i]);
         dl->AddCircleFilled(s, i == hot || i == dragging ? 6.0f : 4.5f,
