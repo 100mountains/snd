@@ -25,16 +25,10 @@ const snd::plugin::client::PluginSpec& sndPluginSpec();
 std::unique_ptr<snd::plugin::client::Processor> sndCreateProcessor();
 
 namespace snd::plugin::client {
-// mac editor factory (editor_view_mac.mm); returns nullptr where unsupported
+// per-platform editor factory (editor_view_mac.mm / _x11.cpp / _win.cpp)
 Steinberg::IPlugView* createEditorView(Processor& proc, UiHost& host, int width,
                                        int height, bool resizable, int minW,
                                        int minH);
-#if defined(_WIN32)
-Steinberg::IPlugView* createEditorView(Processor&, UiHost&, int, int, bool, int, int)
-{
-    return nullptr; // Windows editor embedding pending
-}
-#endif
 } // namespace snd::plugin::client
 
 namespace {

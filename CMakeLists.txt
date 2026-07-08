@@ -182,6 +182,10 @@ if(UNIX AND NOT APPLE)
     target_sources(snd PRIVATE src/plugin_host/editor_window_x11.cpp)
 endif()
 
+if(WIN32)
+    target_sources(snd PRIVATE src/plugin_host/editor_window_win.cpp)
+endif()
+
 if(APPLE)
     target_sources(snd PRIVATE
         src/audio_media_mac.mm

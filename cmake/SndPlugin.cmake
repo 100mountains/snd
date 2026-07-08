@@ -49,6 +49,7 @@ function(snd_add_plugin target)
             SndPluginGLView=SndPluginGLView_${target})
     elseif(WIN32)
         target_sources(${target} PRIVATE
+            ${SND_ROOT_DIR}/src/plugin_client/editor_view_win.cpp
             ${vst3sdk_SOURCE_DIR}/public.sdk/source/main/dllmain.cpp)
     else()
         target_sources(${target} PRIVATE

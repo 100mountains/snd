@@ -29,21 +29,13 @@ extern char** environ;
 namespace snd::plugin { std::unique_ptr<Format> createAUFormat(); }
 #endif
 
-#if defined(_WIN32)
-// Editor windows: Windows backend pending; report "no editor".
-namespace snd::plugin::editorwin {
-void* create(const std::string&, int, int, bool, Callbacks) { return nullptr; }
-void* contentView(void*) { return nullptr; }
-void attachView(void*, void*) {}
-void setContentSize(void*, int, int) {}
-void destroy(void*) {}
-void pump() {}
-} // namespace snd::plugin::editorwin
-#elif defined(__APPLE__)
+#if defined(__APPLE__)
 namespace snd::plugin::editorwin {
 void pump() {} // Cocoa pumps itself
 } // namespace snd::plugin::editorwin
 #endif
+// _WIN32 + Linux provide the full editorwin backend in their own TUs
+// (editor_window_win.cpp / editor_window_x11.cpp).
 
 namespace snd::plugin {
 
