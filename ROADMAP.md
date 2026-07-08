@@ -116,15 +116,25 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
 - Hardware: Linux = owner's PC over SSH (`ssh sentience`, powered on by
   request); Windows = owner has a real PC (access method TBD).
 
-## Track 3 — the Murk port (starts after ②③ and most of ④)
+## Track 3 — the bob port (Murk renamed "bob" 2026-07-08)
 
-1. Engine first: DSP + ONNX (AidModel/AidBaker/AdtRunner…) — mostly
-   JUCE-light, std:: swaps — M
-2. Module plugins one at a time onto the client SDK, smallest first — L cumulative
+Lives in a NEW repo **bob2** (`github.com/100mountains/bob2`, `~/github/bob2`);
+`~/Documents/murk` (renamed in-tree to `Bob/`) stays read-only reference.
+Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
+`snd_add_plugin()`, ImGui editor with `snd::ui`. See `bob2/PORTING.md`.
+
+1. Engine first: DSP + ONNX (AidModel/AidBaker/GrooveModel/FeelModel…) —
+   ✅ DONE, ported into the modules that use them (ONNX Runtime 1.27 vendored
+   as the `bob_ort` target; groove/feel/NxD models load + run from assets).
+2. Module plugins onto the client SDK — ✅ **14 of 15 done, all selftests
+   green**: filter, mixer, drummixer, auxreturns, morph (beat-reverb),
+   pbquntise, scale, basscontroller, drums, synth, seq, pattern (generative,
+   ONNX), sampler, nxd (neural drum, ONNX). Last one **bassmodel** (embeds the
+   AID engine + Faust bass voices + shared filter) in progress.
 3. App shell + panels: Manager/PluginList panels (host UI already exists in
    SND), GraphEditorPanel → imgui-node-editor, SampleEditView → componentized
    WaveBob edit view, LoopSequencer/pattern editors → new widgets —
-   **XL, the long tail**
+   **XL, the long tail** (not started — modules first, shell after)
 4. State migration: ValueTree XML → snd state tree (converter or read-compat) — M
 5. Parked / unknowns: `android/` build (SND excludes Android by charter),
    `web/` dir, accessibility (ImGui has none — known regression), AAX (never
@@ -133,10 +143,12 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
 ## Milestone gates
 
 - **M1** — ✅ DONE: SND-built ImGui plugin (DemoFilter) hosted + editor verified
-- **M2** — MIDI blessed ✅, host wired ✅; remaining: client-SDK MIDI-in synth demo + keyboard widget
-- **M3** — first Murfy module plugin ships on SND with state compat
-- **M4** — Murfy app shell on SND with first panels; then panel-by-panel
-- **M5** — JUCE deleted from the murk tree
+- **M2** — ✅ DONE: MIDI blessed, host wired, client-SDK MIDI-in synth (DemoSynth) + keyboard widget
+- **M3** — ✅ DONE (and then some): 14 of 15 bob modules ship on SND as
+  VST3+AU+standalone with behaviour-verifying selftests, incl. the ONNX ones
+  (pattern groove/feel, nxd neural drum). Last module bassmodel in flight.
+- **M4** — bob app shell on SND with first panels; then panel-by-panel
+- **M5** — JUCE deleted from the bob tree
 
 ## Still-true operational notes
 
