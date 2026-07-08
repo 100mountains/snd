@@ -87,6 +87,11 @@ public:
     virtual void saveExtra(std::vector<uint8_t>&) {}
     virtual bool loadExtra(const uint8_t*, size_t) { return true; }
 
+    // Processing latency in samples, for host delay compensation. Queried
+    // after prepare() (on activation); dynamic changes mid-flight are not
+    // signalled yet.
+    virtual uint32_t latencySamples() const { return 0; }
+
     // ImGui editor body, called per frame while the editor is open (only
     // when spec.hasUi). Draw with ImGui:: / snd::ui::; the surrounding
     // window, GL context and input routing are the wrapper's job.

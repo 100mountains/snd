@@ -120,6 +120,11 @@ public:
         return SingleComponentEffect::setActive(state);
     }
 
+    uint32 PLUGIN_API getLatencySamples() override
+    {
+        return proc_ ? proc_->latencySamples() : 0;
+    }
+
     // --- processing ----------------------------------------------------------
 
     tresult PLUGIN_API process(Vst::ProcessData& data) override
