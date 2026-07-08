@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
@@ -36,6 +37,18 @@
 // ---------------------------------------------------------------------------
 // selftest helpers
 // ---------------------------------------------------------------------------
+
+// Portable temp dir (Windows has no /tmp; TMPDIR is unset there).
+static std::string tmpDir()
+{
+    std::error_code ec;
+    auto p = std::filesystem::temp_directory_path(ec).string();
+    if (ec || p.empty())
+        p = getenv("TMPDIR") ? getenv("TMPDIR") : ".";
+    while (!p.empty() && (p.back() == '/' || p.back() == '\\'))
+        p.pop_back();
+    return p;
+}
 
 static double rms(const std::vector<float>& v)
 {
@@ -732,7 +745,7 @@ static int runSelftest()
         for (float s : mono)
             for (int c = 0; c < 6; ++c)
                 b.samples.push_back(s * (0.2f + 0.1f * c));
-        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+        auto tmp = tmpDir() +
                    "/snd-selftest.flac";
         std::string err;
         snd::audio::Buffer back;
@@ -761,7 +774,7 @@ static int runSelftest()
             b.samples.push_back(s);
             b.samples.push_back(s);
         }
-        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+        auto tmp = tmpDir() +
                    "/snd-selftest.mp3";
         std::string err;
         snd::audio::Buffer back;
@@ -783,9 +796,9 @@ static int runSelftest()
         // wav -> AAC in an .m4a via the OS tool (afconvert on mac, ffmpeg on
         // Linux), then pull the audio back out through loadMediaAudio --
         // the same path video files take
-        auto tmpw = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+        auto tmpw = tmpDir() +
                     "/snd-selftest-src.wav";
-        auto tmpm = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+        auto tmpm = tmpDir() +
                     "/snd-selftest.m4a";
         snd::audio::Buffer b;
         b.channels = 2;
@@ -874,7 +887,7 @@ media_done:;
     bool ok18;
     {
         // seek+read random chunks and compare against the full decode
-        auto tmp = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp") +
+        auto tmp = tmpDir() +
                    "/snd-selftest-stream.wav";
         snd::audio::Buffer b;
         b.channels = 2;

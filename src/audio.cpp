@@ -28,6 +28,7 @@ void* dlsym(void* lib, const char* sym)
 #include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <cstring>
 #include <vector>
 
@@ -234,9 +235,42 @@ bool saveFlac(const std::string& path, const Buffer& buf, std::string* error)
     FLAC__stream_encoder_set_sample_rate(enc, buf.sampleRate);
     FLAC__stream_encoder_set_compression_level(enc, 5);
 
-    if (FLAC__stream_encoder_init_file(enc, path.c_str(), nullptr, nullptr) !=
-        FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+    // Write through our own std::ofstream rather than libFLAC's init_file:
+    // portable, and it avoids libFLAC's own Windows file layer.
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) {
         if (error) *error = "could not open for writing: " + path;
+        FLAC__stream_encoder_delete(enc);
+        return false;
+    }
+    auto writeCb = [](const FLAC__StreamEncoder*, const FLAC__byte buffer[],
+                      size_t bytes, uint32_t, uint32_t, void* cd)
+        -> FLAC__StreamEncoderWriteStatus {
+        auto* os = static_cast<std::ofstream*>(cd);
+        os->write(reinterpret_cast<const char*>(buffer), (std::streamsize)bytes);
+        return os->good() ? FLAC__STREAM_ENCODER_WRITE_STATUS_OK
+                          : FLAC__STREAM_ENCODER_WRITE_STATUS_FATAL_ERROR;
+    };
+    auto seekCb = [](const FLAC__StreamEncoder*, FLAC__uint64 off, void* cd)
+        -> FLAC__StreamEncoderSeekStatus {
+        auto* os = static_cast<std::ofstream*>(cd);
+        os->seekp((std::streamoff)off);
+        return os->good() ? FLAC__STREAM_ENCODER_SEEK_STATUS_OK
+                          : FLAC__STREAM_ENCODER_SEEK_STATUS_ERROR;
+    };
+    auto tellCb = [](const FLAC__StreamEncoder*, FLAC__uint64* off, void* cd)
+        -> FLAC__StreamEncoderTellStatus {
+        auto* os = static_cast<std::ofstream*>(cd);
+        auto p = os->tellp();
+        if (p < 0)
+            return FLAC__STREAM_ENCODER_TELL_STATUS_ERROR;
+        *off = (FLAC__uint64)p;
+        return FLAC__STREAM_ENCODER_TELL_STATUS_OK;
+    };
+    if (FLAC__stream_encoder_init_stream(enc, writeCb, seekCb, tellCb, nullptr,
+                                         &out) !=
+        FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+        if (error) *error = "FLAC encoder init failed: " + path;
         FLAC__stream_encoder_delete(enc);
         return false;
     }
