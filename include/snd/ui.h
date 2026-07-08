@@ -84,6 +84,26 @@ enum class Icon {
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);
 
+// --- SVG assets -> bitmap / GPU texture -------------------------------------
+// Parse + rasterize an SVG document (nanosvg) so vector logos/icons stay crisp
+// at any size or DPI. Rasterizes heightPx tall; width follows the source
+// aspect. tint != 0 multiplies every texel (recolour a monochrome glyph, or
+// fade one to a watermark). rasterizeSvg is GL-free and headless-safe;
+// loadSvgTexture uploads to a GL texture, so call it once a context exists
+// (after Window::create / inside the frame loop).
+struct SvgBitmap {
+    std::vector<unsigned char> rgba; // straight-alpha RGBA8, row-major
+    int w = 0, h = 0;                // rgba is empty on a parse failure
+};
+SvgBitmap rasterizeSvg(const char* svgText, int heightPx, ImU32 tint = 0);
+
+struct SvgTexture {
+    ImTextureID id = ImTextureID_Invalid; // 0 on failure; feed to ImGui::Image
+    int w = 0, h = 0;
+};
+SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint = 0);
+void releaseTexture(ImTextureID id); // glDeleteTextures a loadSvgTexture id
+
 // --- The audio widget set ---------------------------------------------------
 // Themed controls for audio apps: knobs, switches, LEDs, meters, faders.
 // They read the Palette below, so one setPalette() call when the app's theme

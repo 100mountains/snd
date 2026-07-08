@@ -114,6 +114,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pffft)
 
+# nanosvg -- header-only SVG parse + rasterize (zlib). Powers snd::ui SVG
+# assets (logos, vector icons). Header-only: point SOURCE_SUBDIR at a
+# nonexistent dir so its own CMake/examples are skipped; we just add the
+# include path below.
+FetchContent_Declare(
+    nanosvg
+    GIT_REPOSITORY https://github.com/memononen/nanosvg.git
+    GIT_TAG 48120e91e64b2f409ed600cdfd6d790a49ba11ab # pinned (no upstream tags)
+    SOURCE_SUBDIR cmake-disabled
+)
+FetchContent_MakeAvailable(nanosvg)
+
 # Steinberg VST3 SDK (MIT) -- used for its hosting utilities (Module,
 # PlugProvider, HostProcessData, ParameterChanges) and to build the test
 # plugin. Samples/utilities/VSTGUI all disabled; only the library targets
@@ -160,6 +172,7 @@ add_library(snd STATIC
     src/midi.cpp
     src/ui.cpp
     src/ui_widgets.cpp
+    src/svg.cpp
     src/dsp.cpp
     src/platform.cpp
     src/state.cpp
@@ -207,6 +220,7 @@ target_include_directories(snd
     PRIVATE
         ${pffft_SOURCE_DIR}/src
         ${pffft_SOURCE_DIR}/include/pffft
+        ${nanosvg_SOURCE_DIR}/src
 )
 
 target_link_libraries(snd PUBLIC glfw sdk_hosting nfd FLAC)

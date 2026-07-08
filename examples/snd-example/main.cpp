@@ -422,19 +422,19 @@ static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/22] decode + playback: ");
+    printf("[1/23] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/22] capture/record:    ");
+    printf("[2/23] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/22] VST3 hosting:      ");
+    printf("[3/23] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/22] AU hosting:        ");
+    printf("[4/23] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -443,19 +443,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/22] resample:          ");
+    printf("[5/23] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/22] STFT round-trip:   ");
+    printf("[6/23] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/22] player looping:    ");
+    printf("[7/23] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/22] insert hook:       ");
+    printf("[8/23] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -492,7 +492,7 @@ static int runSelftest()
         }
     }
 
-    printf("[9/22] OOP plugin scan:   ");
+    printf("[9/23] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -514,7 +514,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/22] widget set:      ");
+    printf("[10/23] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -582,7 +582,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/22] MIDI loopback:   ");
+    printf("[11/23] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -641,7 +641,7 @@ static int runSelftest()
         }
     }
 
-    printf("[12/22] AU instrument:   ");
+    printf("[12/23] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -686,7 +686,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/22] client SDK:      ");
+    printf("[13/23] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -742,7 +742,7 @@ static int runSelftest()
                    cutRatio);
     }
 
-    printf("[14/22] FLAC encode:     ");
+    printf("[14/23] FLAC encode:     ");
     fflush(stdout);
     bool ok14;
     {
@@ -769,7 +769,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[15/22] MP3 encode:      ");
+    printf("[15/23] MP3 encode:      ");
     fflush(stdout);
     bool ok15 = true;
     if (!snd::audio::mp3EncoderAvailable()) {
@@ -797,7 +797,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[16/22] media extract:   ");
+    printf("[16/23] media extract:   ");
     fflush(stdout);
 #if defined(__APPLE__) || defined(__linux__)
     bool ok16;
@@ -881,7 +881,7 @@ media_done:;
     printf("skipped (no media backend on this platform yet)\n");
 #endif
 
-    printf("[17/22] state tree:      ");
+    printf("[17/23] state tree:      ");
     fflush(stdout);
     bool ok17;
     {
@@ -921,7 +921,7 @@ media_done:;
                    xml.size());
     }
 
-    printf("[18/22] stream reader:   ");
+    printf("[18/23] stream reader:   ");
     fflush(stdout);
     bool ok18;
     {
@@ -961,7 +961,7 @@ media_done:;
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[19/22] queue+timer+pool: ");
+    printf("[19/23] queue+timer+pool: ");
     fflush(stdout);
     bool ok19;
     {
@@ -996,7 +996,7 @@ media_done:;
             printf("FAIL (jobs=%d main=%d ticks=%d)\n", jobs.load(), mainSeen, ticks);
     }
 
-    printf("[20/22] graph + latency: ");
+    printf("[20/23] graph + latency: ");
     fflush(stdout);
     bool ok20;
     {
@@ -1087,7 +1087,7 @@ media_done:;
             printf("FAIL (graph build/prepare)\n");
     }
 
-    printf("[21/22] SDK instrument:  ");
+    printf("[21/23] SDK instrument:  ");
     fflush(stdout);
     bool ok21;
     {
@@ -1136,7 +1136,7 @@ media_done:;
                    peakTail);
     }
 
-    printf("[22/22] AU wrapper:      ");
+    printf("[22/23] AU wrapper:      ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok22;
@@ -1192,9 +1192,29 @@ media_done:;
     printf("skipped (AU is macOS-only)\n");
 #endif
 
+    // ── [23/23] SVG rasterize (nanosvg -> RGBA; the GL-free path) ────────────
+    printf("[23/23] svg raster:      ");
+    bool ok23 = false;
+    {
+        const char* svg =
+            "<svg width='32' height='32' viewBox='0 0 32 32' "
+            "xmlns='http://www.w3.org/2000/svg'>"
+            "<circle cx='16' cy='16' r='15' fill='#ffffff'/></svg>";
+        auto bmp = snd::ui::rasterizeSvg(svg, 16, IM_COL32(255, 0, 0, 255));
+        if (!bmp.rgba.empty() && bmp.w == 16 && bmp.h == 16) {
+            auto px = [&](int x, int y, int c) {
+                return bmp.rgba[((size_t)y * bmp.w + x) * 4 + c];
+            };
+            // opaque tinted (red) centre, transparent corner: coverage + tint
+            ok23 = px(8, 8, 3) > 200 && px(8, 8, 0) > 200 && px(8, 8, 1) < 40 &&
+                   px(0, 0, 3) < 40;
+        }
+        printf(ok23 ? "PASS\n" : "FAIL\n");
+    }
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
                ok11 && ok12 && ok13 && ok14 && ok15 && ok16 && ok17 && ok18 && ok19 &&
-               ok20 && ok21 && ok22;
+               ok20 && ok21 && ok22 && ok23;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
