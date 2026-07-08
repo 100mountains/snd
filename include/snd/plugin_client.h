@@ -14,6 +14,7 @@
 // test/plugins/demofilter/ for the complete pattern.
 #pragma once
 
+#include "snd/control.h"
 #include "snd/midi.h"
 
 #include <atomic>
@@ -39,6 +40,14 @@ struct PluginSpec {
     uint32_t uid[4] = {0, 0, 0, 0};   // unique per plugin; pick once, keep forever
     bool isInstrument = false;        // no audio input; MIDI drives it
     bool wantsMidi = false;           // receive note events in process()
+    // Audio channel counts. Default is stereo. Set higher for multi-bus
+    // plugins (a mixer's many lanes, aux sends/returns): process() then
+    // receives/produces this many channel pointers in `in`/`out`. Instruments
+    // ignore inputChannels. The in-process graph and the VST3/AU wrappers
+    // arrange the buses to match.
+    int inputChannels = 2;
+    int outputChannels = 2;
+    bool wantsControl = false;        // participates in the snd::control bus
     bool hasUi = false;               // drawUi() is implemented
     bool uiResizable = false;         // host may resize the editor
     int uiWidth = 480, uiHeight = 320;
@@ -103,6 +112,28 @@ public:
     // wrapper wiring -- not for plugin code
     void _setTransport(const Transport& t) { transport_ = t; }
 
+    // ── control bus (in-process graph only) ────────────────────────────────
+    // Control events routed to this plugin this block (empty in a DAW host).
+    const control::Buffer& controlIn() const
+    {
+        static const control::Buffer kEmpty;
+        return controlIn_ ? *controlIn_ : kEmpty;
+    }
+    // Broadcast a control event to whoever is wired to this plugin's control
+    // output. No-op when there's no control bus (a DAW host).
+    void emitControl(const control::Event& e)
+    {
+        if (controlOut_)
+            controlOut_->push_back(e);
+    }
+
+    // wrapper/graph wiring -- not for plugin code
+    void _setControlBuffers(const control::Buffer* in, control::Buffer* out)
+    {
+        controlIn_ = in;
+        controlOut_ = out;
+    }
+
     // RT-safe normalized parameter read, usable inside process().
     double param(uint32_t id) const
     {
@@ -126,6 +157,8 @@ private:
     const uint32_t* paramIds_ = nullptr;
     size_t paramCount_ = 0;
     Transport transport_;
+    const control::Buffer* controlIn_ = nullptr;
+    control::Buffer* controlOut_ = nullptr;
 };
 
 } // namespace snd::plugin::client
