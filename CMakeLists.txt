@@ -9,6 +9,14 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if(APPLE)
     enable_language(OBJC OBJCXX)
 endif()
+if(WIN32)
+    # Standard MSVC hygiene: keep <windows.h> from defining min/max macros
+    # (they break std::min/std::max) and give us M_PI from <cmath>.
+    # PFFFT_STATIC_DEFINE: we compile pffft's .c straight into snd, so its
+    # generated export header must not mark the functions __declspec(dllimport).
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES
+                            _CRT_SECURE_NO_WARNINGS PFFFT_STATIC_DEFINE)
+endif()
 
 include(FetchContent)
 
