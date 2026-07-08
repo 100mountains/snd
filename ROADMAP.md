@@ -79,8 +79,8 @@ Remaining candidates: OGG export, loudness-select for the brush.
 
 SND's deps were chosen cross-platform from day one (miniaudio = WASAPI/ALSA,
 GLFW, ImGui, NFD, libFLAC, VST3 SDK w/ module_win32/linux, NFD, std-only
-state/graph/dsp). What is genuinely macOS-only today is four .mm files and
-the fact that nothing has ever been COMPILED off-Mac.
+state/graph/dsp). All three platforms now build and pass `--selftest`; the
+per-OS backends (MIDI, media extraction, editor windows) exist for each.
 
 | Gap | Windows backend | Linux backend |
 |---|---|---|
@@ -110,11 +110,24 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
   Verified live on the box: our host opened our plugin's editor on the
   real display. Linux is now at FULL parity minus AU (Apple-only forever)
   and Windows P3.
-- **P3 — Windows**: needs a Windows machine/VM the owner controls. MSVC or
-  clang-cl build, WinMM MIDI, Media Foundation, HWND/WGL editors, verify the
-  already-written CreateProcess scan path + LAME dll loading.
-- Hardware: Linux = owner's PC over SSH (`ssh sentience`, powered on by
-  request); Windows = owner has a real PC (access method TBD).
+- **P3 — Windows: DONE 2026-07-08** on the `bob-winbuild` KVM/libvirt VM on
+  sentience, driven headless over WinRM (pywinrm; source synced Mac → sentience
+  → HTTP → VM; MSVC / VS Build Tools 2022 + cmake + ninja). First MSVC compile
+  needed only NOMINMAX + WIN32_LEAN_AND_MEAN + _USE_MATH_DEFINES +
+  PFFFT_STATIC_DEFINE + a uniform /MD runtime. Backends landed + verified in
+  `--selftest` (**ALL PASS**, 13 checks): WinMM MIDI (enumerates devices;
+  WinMM has no virtual ports, so loopback verifies enumeration), Media
+  Foundation extraction (IMFSourceReader → float PCM, WAV round-trip PASS),
+  HWND host editor window + WGL client editor view (compile + factory
+  verified; full GL render needs real GPU — the VM's GL is 1.1). Also fixed:
+  FLAC-encode crash (libFLAC's Windows file layer → std::ofstream stream API),
+  VST3 bundle output path (multi-config Debug/ subdir), portable temp dir.
+  Device/loopback/MP3 skip on the headless VM (no audio/MIDI device, no LAME).
+- Hardware: Linux = owner's PC over SSH (`ssh sentience`); Windows = a
+  libvirt VM on the same box, reached over WinRM.
+
+**SND is now cross-platform: macOS, Linux, and Windows all build + pass
+`--selftest`.**
 
 ## Track 3 — the bob port (Murk renamed "bob" 2026-07-08)
 
