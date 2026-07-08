@@ -1,30 +1,29 @@
 # SND
 
-**A JUCE/iPlug replacement attempt.** SND is a small, permissively-licensed,
-in-house audio+UI foundation library — cross-platform audio I/O, a GUI shell,
-and headless VST3/AU plugin hosting, without JUCE's AGPLv3-or-pay licensing.
-Apps (Snoredacity first) build on SND instead of on JUCE.
+**A permissively-licensed JUCE/iPlug replacement.** SND is a small, in-house
+audio+UI foundation library — cross-platform audio I/O, a GUI shell, plugin
+hosting, and a write-once plugin SDK — without JUCE's AGPLv3-or-pay licensing.
+Apps (WaveBob, bob) build on SND instead of on JUCE.
 
-## What works right now
+## Modules
 
-- `snd::audio` — device playback/capture, file decode (wav/flac/mp3/ogg),
-  WAV writing, a simple `Player` (wraps miniaudio)
-- `snd::ui` — window + Dear ImGui frame shell (GLFW/OpenGL underneath),
-  file drag-and-drop, first custom widgets (`gradientPanel`, `gradientButton`
-  drawn via ImDrawList — ImGui itself stays unmodified)
-- `snd::plugin` — headless plugin hosting:
-  - **VST3** everywhere, built on the VST3 SDK's own hosting utilities
-  - **AU** on macOS via AudioToolbox directly
-  - format-agnostic API (`Format` / `HostManager` / `Instance` /
-    `Parameter`), stable parameter IDs (never indices), spin-lock +
-    deferred-parameter threading model per the JUCE audit, dead-man's-pedal
-    crash-loop protection for scanning
-  - no editor-GUI embedding yet, deliberately; no MIDI, deliberately
-- `TestGain` — SND's own minimal VST3 plugin, built as part of the tree so
-  hosting tests never depend on what's installed on a machine
+- `snd::audio` — device playback/capture, file decode (wav/aiff/flac/mp3/ogg),
+  streaming reads, encoders (FLAC, MP3), resampling, a gapless `Player`
+- `snd::ui` — native window + Dear ImGui frame shell (GLFW/OpenGL underneath),
+  frameless windows with app-drawn title bars, multi-window, file
+  drag-and-drop, and a themed audio widget set (knobs, meters, faders,
+  keyboard, pattern grid, envelope editor, …). See `UI_PROGRAMMING_GUIDE.md`.
+- `snd::plugin` — VST3 + AU **hosting** (editor GUIs in native windows, MIDI,
+  host transport) and a **client SDK**: write a `Processor` + ImGui editor once
+  and build it as VST3, AU, and a standalone app. Multichannel buses, an
+  inter-plugin control bus, out-of-process crash-safe scanning.
+- `snd::midi` — MIDI events + CoreMIDI/ALSA device I/O
+- `snd::dsp` — real FFT + COLA STFT (PFFFT)
+- `snd::state` — a ValueTree-shaped state tree with XML round-trip + undo
+- `snd::platform` — native file dialogs, per-OS config dir
 
-See `ROADMAP.md` for phases and `docs/research/` for the JUCE/VST3 audits
-this design came from. `DESIGN.md` records the architecture decisions.
+Mac and Linux are supported; Windows is planned. `DESIGN.md` records the
+architecture, `PROGRAMMING-GUIDE.md` the how-to, `docs/research/` the audits.
 
 ## Build & test
 
@@ -42,21 +41,19 @@ cmake --build build
 ./build/snd-example              # window + audio device demo
 ```
 
-`--selftest` verifies real behaviour, not just compilation: decodes and plays
-a bundled file, records from the input device, loads TestGain and confirms
-audio is actually altered by a parameter set via stable ID (and that state
-save/restore round-trips), and hosts Apple's AULowpass confirming an 8kHz
-sine gets attenuated.
+`--selftest` verifies real behaviour, not just compilation: decode+playback,
+capture, VST3/AU hosting (parameter behaviour + stable-ID state round-trip),
+and the plugin-client SDK.
 
-**There is no CI here, and there won't be.** A previous project's GitHub
-Actions produced a surprise bill; this repo only builds when someone runs the
+**There is no CI here, and there won't be** — private-repo Actions minutes are
+metered and easy to over-trigger. This repo only builds when someone runs the
 script by hand.
 
 ## What's vendored vs. original
 
-- **Vendored, unmodified, pinned** (via CMake `FetchContent`): miniaudio
-  0.11.25, Dear ImGui v1.92.8, GLFW 3.4, VST3 SDK v3.8.0 (MIT — used for its
-  hosting utilities and to build TestGain)
+- **Vendored, unmodified, pinned** (via CMake `FetchContent`): miniaudio,
+  Dear ImGui, GLFW, VST3 SDK, Apple AudioUnitSDK, PFFFT, NFD, imgui-knobs,
+  libFLAC
 - **Original**: everything under `include/snd/` and `src/` — SND's own API
   and the backends behind it
 

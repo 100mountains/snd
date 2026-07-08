@@ -9,6 +9,9 @@ style of the app.
 Keep this document current whenever a feature establishes a standard pattern
 that other code should follow.
 
+UI programming (the `snd::ui` window shell, frame loop, and widgets) has its
+own reference: `UI_PROGRAMMING_GUIDE.md`.
+
 ## Core Rule
 
 Before adding a new helper, owner, scheduler, style, or data path, look for the

@@ -17,21 +17,15 @@ root `PROGRAMMING-GUIDE.md`.
 
 ## What This Repo Is
 
-This is the seed of **SND** — a small, permissively-licensed, in-house audio+UI
-foundation library, in the shape of JUCE or iPlug2, built by wrapping
+**SND** is a small, permissively-licensed, in-house audio+UI foundation
+library, in the shape of JUCE or iPlug2, built by wrapping
 [miniaudio](https://github.com/mackron/miniaudio) (audio I/O + decoding) and
-[Dear ImGui](https://github.com/ocornut/imgui) (UI) behind an original API.
-Snoredacity, and any future app, gets built on top of it rather than on JUCE.
+[Dear ImGui](https://github.com/ocornut/imgui) (UI) behind an original API in
+`include/snd/`. Apps are built on top of it rather than on JUCE.
 
-Right now the repo is only a placeholder proving the foundation actually builds
-and runs (`main.cpp` calls miniaudio and Dear ImGui directly — see `README.md`).
-SND's own wrapper API (`include/snd/`) doesn't exist yet. This section describes
-the intended direction, not current implementation status.
-
-SND is being built as its own thing right now, independent of any specific app.
-Snoredacity is the anticipated first consumer, not the thing currently being
-worked on — decisions here should be driven by what makes SND a coherent,
-reusable foundation, not narrowed to one downstream app's requirements.
+SND is its own thing, independent of any specific app: decisions here are
+driven by what makes SND a coherent, reusable foundation, not narrowed to one
+downstream app's requirements. WaveBob and bob are consumers.
 
 ## Why Not JUCE
 
@@ -90,10 +84,10 @@ license already permits using it freely as-is, so forking it would only mean
 permanently maintaining a copy of someone else's audio-I/O code, with no
 corresponding benefit.
 
-## Plugin Hosting (VST3 + AU) — BUILT, headless v1
+## Plugin Hosting (VST3 + AU)
 
-`snd::plugin` exists and passes selftest. Shape (from the audits in
-`docs/research/`):
+`snd::plugin` hosts VST3 and AU plugins, with editor GUIs in native windows.
+Shape (from the audits in `docs/research/`):
 
 - `Format` (per-format base) / `HostManager` (registry + scanning) /
   `Instance` (unified across formats) / `Parameter` — mirrors JUCE's proven
@@ -106,8 +100,7 @@ corresponding benefit.
   `ParameterChanges` (sample-accurate) and to the controller at the next
   `idle()` on the main thread. Setup/state calls are main-thread-only.
   **State restore clears pending parameter queues** — restored state is the
-  new truth; a stale queued change must not overwrite it (selftest caught
-  exactly this on first run).
+  new truth; a stale queued change must not overwrite it.
 - **VST3 backend** wraps the SDK's own hosting utilities (`Module`,
   `PlugProvider`, `HostProcessData`, `ParameterChanges`) rather than
   reimplementing them. Bus-arrangement calls always pass valid pointers even
@@ -116,42 +109,25 @@ corresponding benefit.
 - **AU backend** (macOS only, compiled out elsewhere) uses
   AudioToolbox/AudioComponent directly: registry discovery
   (`AudioComponentFindNext`), render-callback input feeding, state via
-  `kAudioUnitProperty_ClassInfo` plists. AU v2 effects only for now; AUv3
+  `kAudioUnitProperty_ClassInfo` plists. AU v2 effects and instruments; AUv3
   async instantiation is future work.
-- **Crash-loop protection**: dead-man's-pedal file around scanning
-  (mark-before-load / clear-after-success / skip-if-still-marked). True
-  out-of-process isolation remains a later hardening phase.
-- **No MIDI** (owner decision): hosted plugins get an empty event list.
-- **No editor-GUI embedding yet**: `Instance` has no window concept. When
-  wanted, the per-OS embedding (NSView/HWND/X11) belongs in SND, and the AU
-  side has three tiers to support (CocoaUI / RequestViewController /
-  AUGenericView — see the JUCE audit).
-- `TestGain` (test/plugins/testgain) is SND's own single-component VST3 gain
-  plugin, built in-tree so selftest never depends on installed plugins.
-
-## Formerly Deferred: Plugin Hosting (original rationale, kept for history)
-
-Not needed for Snoredacity (VST hosting there is a "maybe," not a requirement),
-and not attempted yet. When it's actually wanted:
-
-- It's a separate, additive module, the same shape as JUCE's own
-  `juce_audio_processors` — sitting alongside the audio-device layer rather
-  than requiring it to be rebuilt.
-- It's hard but charted territory, not blind research: JUCE's own source,
-  Steinberg's published VST3 SDK examples, and existing prior art with more
-  permissive licensing than JUCE are all real reference material —
-  specifically **iPlug2** (supports AU/VST3/AUv3, GPU-accelerated graphics,
-  already integrates Faust) and **DPF/DISTRHO** (ISC license, but explicitly
-  lacks AU support, which rules it out for anything needing Apple's format).
-- Building it is a real, multi-stage effort in its own right. Scope it as its
-  own project when it's actually needed, rather than folding it into the
-  audio+UI foundation work.
+- **Crash-loop protection**: out-of-process scanning (a child process per
+  plugin, killed on a hard timeout) is the default; a dead-man's-pedal file
+  (mark-before-load / clear-after-success / skip-if-still-marked) is the
+  in-process fallback.
+- **MIDI**: hosted plugins receive note/CC events and can emit them, via
+  `snd::midi`. Host transport (tempo/bars) is supplied to the plugin.
+- **Editor GUIs**: hosted in floating native windows per OS
+  (NSView / HWND / X11), with an `IComponentHandler` for parameter edits and
+  `IPlugFrame` for resize. The AU side uses the Cocoa/generic view tiers.
+- The in-tree demo plugins (`test/plugins/demofilter`, `demosynth`) are SND's
+  own VST3/AU builds, so selftest never depends on installed plugins.
 
 ## Why This Repo Stays Private
 
 Deliberate, not an oversight: no obligation to keep an API stable for external
 consumers, no docs/issue/PR overhead, and freedom to redesign as real usage
-(Snoredacity, and possibly Murk later) reveals what's actually needed. Going
+(WaveBob, and possibly Murk later) reveals what's actually needed. Going
 private → public is a one-click decision that can be made anytime later; the
 reverse isn't, so there's no cost to deferring that choice.
 
@@ -166,19 +142,13 @@ to configure around it: `tools/build.sh` is a local, manually-run, one-shot
 script (configure, build, run `--selftest`) — nothing runs unless someone runs
 it by hand, on their own machine, on purpose.
 
-The app binary has a `--selftest` mode (see `main.cpp`) that exercises the
-real audio path headlessly: decode-and-play a bundled test file, record
-briefly from the input device, and report pass/fail with a matching process
-exit code. This is the model going forward as SND grows — verification lives
-in the app itself as a runnable check, not in a separate test framework or
-remote pipeline. New capabilities should extend `--selftest` with a real
-check of the actual behaviour (not just "did it compile"), the same way
-Murk's own Debug build supports a `--selftest` flag for its own smoke checks.
-
-`--selftest` now covers all four capabilities with behaviour checks:
-decode+playback, capture, VST3 hosting (TestGain: RMS actually changes with
-the gain parameter; state + stable-ID round-trip), AU hosting (AULowpass
-attenuates an 8kHz sine). The selftest binary is `snd-example`.
+The `snd-example` binary has a `--selftest` mode that exercises the real audio
+path headlessly and reports pass/fail with a matching process exit code:
+decode+playback, capture, VST3 and AU hosting (parameter behaviour + stable-ID
+state round-trip), and the plugin-client SDK. Verification lives in the app
+itself as a runnable check, not a separate test framework or remote pipeline.
+Every new capability must extend `--selftest` with a real check of the actual
+behaviour, not just "did it compile."
 
 ## Fundamental Model
 
