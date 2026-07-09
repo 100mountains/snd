@@ -113,6 +113,6 @@ small test plugin/selftest assertion for tempo and project-quarter position.
   `include/snd/midi.h`, `include/snd/plugin_host.h`, `include/snd/state.h`,
   `src/midi.cpp`, and `src/state.cpp`.
 - Uncommitted owner-status documentation update, 2026-07-09: recorded that the
-  Murk-facing surface is done on SND/GL and that Arrange and Perform pages are
-  done. This status is owner-provided downstream context, not inferred from the
-  SND source tree.
+  downstream GL surface is done on SND/GL and that Arrange and Perform pages
+  are done. This status is owner-provided downstream context, not inferred from
+  the SND source tree.

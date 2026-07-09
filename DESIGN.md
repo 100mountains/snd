@@ -1,6 +1,6 @@
 # Design
 
-Verified against: `bb98209e009095769dae5fe8dd64bd1452190c29`.
+Verified against: `fb0b8612c23253c3dc54fbddafd29e873a5a7f9c`.
 
 This is the current high-level design for this project. It records architectural
 decisions, ownership boundaries, and the technical reasons behind them.
@@ -32,10 +32,10 @@ driven by what makes SND a coherent, reusable foundation, not narrowed to one
 downstream app's requirements. WaveBob and bob are consumers.
 
 Current downstream status, owner-updated 2026-07-09: bob is the active
-Murk/Murfy successor, and the Murk-facing surface is done on SND/GL, including
-the Arrange and Perform pages. Treat those pages as proven consumer pressure
-for SND's UI/plugin/MIDI APIs, but keep product-specific behaviour in the
-downstream app rather than folding it into the foundation.
+consumer, and its SND/GL surface is complete, including the Arrange and Perform
+pages. Treat those pages as proven consumer pressure for SND's UI/plugin/MIDI
+APIs, but keep product-specific behaviour in the downstream app rather than
+folding it into the foundation.
 
 ## Why Not JUCE
 
@@ -54,9 +54,9 @@ merely depends on them. Building on these instead of JUCE means SND's own
 licensing can be chosen by the project owner without dependency-driven copyleft
 or fee obligations.
 
-SND began separate from Murk, whose old JUCE tree remains read-only reference
-material. The current bob/Murk surface now consumes SND through the GL UI and
-plugin layers; SND itself remains a from-scratch foundation rather than a
+SND began separate from the legacy JUCE app, whose old tree remains read-only
+reference material. The current bob surface now consumes SND through the GL UI
+and plugin layers; SND itself remains a from-scratch foundation rather than a
 forked retrofit of the old app.
 
 ## Layering, Modeled On JUCE's Own Module Boundaries
@@ -95,6 +95,73 @@ Forking and renaming miniaudio's own source was considered and rejected: the
 license already permits using it freely as-is, so forking it would only mean
 permanently maintaining a copy of someone else's audio-I/O code, with no
 corresponding benefit.
+
+## UI Architecture
+
+SND has one shared UI toolkit with two authoring models:
+
+- **Immediate mode**: `snd::ui` in `include/snd/ui.h`, built on the existing
+  Dear ImGui frame loop, native window shell, embedded icon fonts, SVG helpers,
+  and SND audio widgets.
+- **Retained mode**: `snd::ui::retained` in `include/snd/ui_retained.h`, a
+  headless tree model for stable node IDs, parent/child lifetime, bounds,
+  dirty state, focus traversal, hit testing, default event dispatch, custom
+  event callbacks, layout, renderer-facing snapshots, and platform-neutral
+  semantics. The user-facing name can settle independently; the C++ API stays
+  in the retained namespace unless a separate API rename is approved.
+
+These are not separate visual toolkits. Immediate and retained widgets should
+share SND paint, style, icon, and semantic vocabulary. The shared draw-only
+surface lives under `snd::ui::paint`; retained widgets should map their local
+interaction state into those helpers rather than copying visual code.
+
+The retained tree owns only UI-local state: node lifetime, layout bounds,
+focus/pressed flags, hit-test state, dirty invalidation, and semantic metadata.
+It must not own product model data, plugin parameters, DSP state, undo history,
+or audio-thread mutation paths. Value controls use callback-backed
+`ValueBinding` adapters so callers remain the owners of their state. When a
+bound value changes outside retained event dispatch, callers can invoke
+`refreshBoundValues()` on the UI thread to mark affected nodes dirty and refresh
+binding-derived states such as toggle checked state.
+
+The first retained layout model is deliberately small: stack, row, column,
+padding, gap, alignment, fixed size, intrinsic size, and weighted fill. Do not
+add grids, docking, or constraint solving until a real SND consumer proves the
+need.
+
+Canvas is the preferred retained primitive for direct-to-screen, custom-drawn,
+or live animated regions. A Canvas node owns retained layout, focus, hit-test,
+dirty, and semantic space while delegating the pixels inside its bounds to a
+custom draw path or renderer style.
+
+The retained layer exposes two snapshots. `nodeSnapshot()` is the
+renderer/widget hook:
+ordered visible nodes with bounds, role, value, derived states, and
+hovered/pressed/focused/disabled interaction flags. `semanticSnapshot()` is the
+accessibility hook: roles, names, descriptions, labelled-by relationships,
+numeric/text values, states, actions, stable IDs, parent IDs, and bounds.
+Custom retained widgets may provide semantics directly. Accessibility adapters
+should use `semanticNode(id)`, `performSemanticAction(id, action)`, `value(id)`,
+`setValue(id, value)`, `incrementValue(id)`, and `decrementValue(id)` rather
+than reaching into renderer state. Custom widgets that advertise semantic
+actions use `setOnAction(...)` to implement them. Hidden semantic nodes are not
+operable by those adapter-facing calls. Toggle checked state is derived in the
+core from live bindings or semantic numeric values, so renderers and
+accessibility adapters read the same truth. `validate()` checks basic tree
+identity invariants such as empty or duplicate node IDs so renderer and
+accessibility adapters can fail early. Native accessibility adapters remain
+private future work and must run on the UI/main thread. Retained UI is not
+accessibility-complete until at least one native inspector or screen-reader
+path is proven.
+
+Dirty state currently means "tree/layout/semantics need repaint or resnapshot."
+It is not yet an event-loop scheduling contract. Dirty-driven sleeping,
+standalone accessibility objects, and plugin-hosted accessibility must be
+designed separately so they do not disrupt host idle, timers, editor embedding,
+or audio realtime constraints.
+
+Practical UI authoring guidance belongs in `UI_PROGRAMMING_GUIDE.md`. Keep that
+as the canonical guide filename unless the owner explicitly approves a rename.
 
 ## Plugin Hosting (VST3 + AU)
 

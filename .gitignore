@@ -1,5 +1,10 @@
 build/
 imgui.ini
 
+# Local AI worker instructions/state
+AGENTS.md
+agents/
+docs/research/
+
 # macOS
 .DS_Store

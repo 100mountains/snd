@@ -8,9 +8,13 @@ How to build a user interface on `snd::ui`. Complements PROGRAMMING-GUIDE.md
 `snd::ui` is **Dear ImGui** (immediate mode) plus a thin native-window shell
 and a set of audio-oriented widgets drawn on top via `ImDrawList`. ImGui is
 vendored unmodified. You include `snd/ui.h`, open a `Window`, and each frame
-call stock `ImGui::` functions and `snd::ui::` widgets to declare the UI; there
-is no retained widget tree. State lives in *your* variables, not in the
-widgets.
+call stock `ImGui::` functions and `snd::ui::` widgets to declare the UI. State
+lives in *your* variables, not in the immediate widgets.
+
+SND's retained-mode UI layer is currently exposed in C++ as
+`snd::ui::retained` through `snd/ui_retained.h` and retained widget helpers. It
+uses a stable tree for layout, focus, events, dirty state, and semantics, but
+shares SND's paint/style vocabulary with immediate widgets.
 
 Immediate-mode consequences:
 
@@ -105,6 +109,115 @@ palette — set `ImGui::GetStyle()` colours if you want them to match.
 
 For a look outside the palette's reach (a bespoke skin), draw directly with
 `ImGui::GetWindowDrawList()` and your own colours, as the widgets do internally.
+
+## Shared paint and semantics
+
+SND-owned immediate and retained widgets share visuals through `snd/ui_paint.h`.
+Those helpers are draw-only: callers still own layout, hit-testing, value
+binding, and accessibility nodes.
+
+Use the same control states in both modes: `hovered` previews, `active`
+presses/drags, `focused` draws `paint::drawFocusRing`, `disabled` mutes and
+rejects actions, and `selected` marks latched state.
+
+Widget layers must provide accessibility semantics. Icon-only controls need an
+accessible name and action; sliders/knobs/faders need range, value, value text,
+and value actions; meters expose read-only value text; decorative icons or LEDs
+must be hidden or marked as non-interactive status.
+
+## Retained widgets
+
+Include `snd/ui_retained_widgets.h` to build retained panels with the shared
+SND look. The helper namespace is `snd::ui::retained::widgets`; the renderer is
+`snd::ui::retained::PaintRenderer`.
+
+Current helpers cover `row`, `column`, `panel`, `label`, `sectionHeader`,
+`badge`, `listItem`, `button`, `iconButton`, `toggle`, `knob`, `fader`,
+`meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, and `canvas`. Value
+controls use `ValueBinding`; the caller still owns plugin parameters, app
+state, undo, and audio-thread handoff. Knobs and faders support retained
+pointer editing through the ImGui input bridge. Meters and LEDs can also use
+`ValueBinding` so a stable retained tree can display changing audio/UI state
+without recreating nodes. `xyPad` takes separate X/Y bindings, while
+`patternGrid` edits a caller-owned row-major bool array and can read a dynamic
+playhead callback.
+
+The normal retained frame call is:
+
+```cpp
+snd::ui::retained::drawImGui(tree, renderer, {360.0f, 180.0f});
+```
+
+That refreshes `ValueBinding` values with `tree.refreshBoundValues()`, lays out
+the tree, reserves the ImGui item rectangle, dispatches current mouse/keyboard
+input, and renders through the shared paint layer. If you wire the pieces
+manually, call `tree.refreshBoundValues()` before rendering or taking semantic
+snapshots whenever caller-owned model values may have changed.
+
+Use `canvas` for direct-to-screen animated regions such as waveforms, spectra,
+meters, playheads, and other views whose node should own layout, focus,
+hit-testing, and semantics while custom code draws inside its bounds.
+Canvas-backed controls expose focus and names today; add richer custom value
+text where practical, and prefer built-in helpers when one exists.
+
+Use `widgets::patternGrid(id, name, cells, rows, steps, &renderer, size,
+playheadFn)` for step grids. `cells` stays caller-owned, mouse drag paints, and
+Alt-drag erases. Use `widgets::xyPad(id, name, xBinding, yBinding, &renderer,
+size)` for two-axis controls over normalized values. Use
+`widgets::keyboard(id, name, firstNote, octaves, noteOn, noteOff, lit,
+&renderer, size)` for piano surfaces; `noteOn`/`noteOff` fire from retained
+pointer transitions and `lit` is an optional caller-owned `bool[128]`.
+
+Minimal retained panel:
+
+```cpp
+namespace r = snd::ui::retained;
+namespace w = snd::ui::retained::widgets;
+
+struct PanelModel {
+    double bypass = 0.0;
+    double gain = 0.65;
+    double fader = 0.75;
+    double level = 0.35;
+    double ready = 1.0;
+};
+
+r::ValueBinding bind(double& v, double min = 0.0, double max = 1.0)
+{
+    double* target = &v;
+    r::ValueBinding b;
+    b.get = [target] { return *target; };
+    b.set = [target](double next) { *target = next; };
+    b.min = min;
+    b.max = max;
+    b.step = 0.01;
+    return b;
+}
+
+r::PaintRenderer renderer;
+PanelModel model;
+auto root = w::column("panel", 8.0f, r::Insets::all(8.0f));
+auto top = w::row("panel.top", 8.0f);
+top->addChild(w::button("transport.play", "Play", [](r::Node&) {}, &renderer));
+top->addChild(w::toggle("effect.bypass", "Bypass", bind(model.bypass), &renderer));
+top->addChild(w::knob("gain", "Gain", bind(model.gain), &renderer));
+top->addChild(w::fader("output.fader", "Output", bind(model.fader), &renderer));
+top->addChild(w::meter("output.meter", "Output level", bind(model.level), &renderer));
+top->addChild(w::led("device.ready", "Device ready", bind(model.ready), false, &renderer));
+root->addChild(std::move(top));
+root->addChild(w::canvas("scope", "Waveform", {320.0f, 64.0f},
+    [](ImDrawList& dl, const r::Node&, r::Rect bounds,
+       const snd::ui::paint::ControlState&) {
+        dl.AddLine({bounds.x, bounds.y + bounds.h * 0.5f},
+                   {bounds.x + bounds.w, bounds.y + bounds.h * 0.5f},
+                   snd::ui::palette().accent, 1.5f);
+    },
+    &renderer, true));
+
+r::Tree tree(std::move(root));
+// Each UI frame:
+r::drawImGui(tree, renderer, {360.0f, 160.0f});
+```
 
 ## Widget reference
 

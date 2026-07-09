@@ -1,6 +1,6 @@
 // snd::plugin::HostManager -- format registry, scanning with crash-loop
 // protection: either the "dead man's pedal" file (JUCE audit) or, better,
-// out-of-process enumeration per plugin (Murk's scanner pattern).
+// out-of-process enumeration per plugin.
 
 #include "snd/plugin_host.h"
 #include "plugin_host/editor_window.h"

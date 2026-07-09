@@ -2,7 +2,7 @@
 
 **A source-available JUCE/iPlug replacement.** SND is a small, in-house
 audio+UI foundation library — cross-platform audio I/O, a GUI shell, plugin
-hosting, and a write-once plugin SDK. Apps (WaveBob, bob) build on SND instead
+hosting, and a write-once plugin SDK. Apps build on SND instead
 of on JUCE. Free for any noncommercial use; commercial use needs a licence —
 see [License](#license).
 
@@ -61,8 +61,8 @@ script by hand.
 
 ## Dev workflow
 
-See `AGENTS.md` for the multi-agent dev workflow (genericized from Murk's)
-that applies to work in this repo.
+See `AGENTS.md` for the multi-agent dev workflow that applies to work in this
+repo.
 
 ## License
 

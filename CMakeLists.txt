@@ -172,7 +172,10 @@ add_library(snd STATIC
     src/midi.cpp
     src/ui.cpp
     src/ui_widgets.cpp
+    src/ui_paint.cpp
     src/ui_fonts.cpp
+    src/ui_retained_widgets.cpp
+    src/ui_retained.cpp
     src/svg.cpp
     src/dsp.cpp
     src/platform.cpp

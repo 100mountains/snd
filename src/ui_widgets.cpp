@@ -3,6 +3,7 @@
 // SND's own ImDrawList drawing.
 
 #include "snd/ui.h"
+#include "snd/ui_paint.h"
 
 #include "imgui-knobs.h"
 
@@ -21,37 +22,6 @@ namespace {
 
 Palette gPalette;
 
-ImU32 withAlpha(ImU32 c, uint32_t a) { return (c & 0x00FFFFFF) | (a << 24); }
-
-ImVec4 toVec4(ImU32 c) { return ImGui::ColorConvertU32ToFloat4(c); }
-
-ImU32 mixCol(ImU32 a, ImU32 b, float t)
-{
-    t = std::clamp(t, 0.0f, 1.0f);
-    ImU32 out = 0;
-    for (int shift = 0; shift < 32; shift += 8) {
-        uint32_t ca = (a >> shift) & 0xFF, cb = (b >> shift) & 0xFF;
-        out |= (uint32_t)(ca + (cb - (float)ca) * t + 0.5f) << shift;
-    }
-    return out;
-}
-
-// linear amplitude -> 0..1 position on a floorDb..0 scale
-float dbNorm(float lin, float floorDb)
-{
-    if (lin <= 0.0f)
-        return 0.0f;
-    float db = 20.0f * std::log10(lin);
-    return std::clamp(1.0f - db / floorDb, 0.0f, 1.0f);
-}
-
-// Rotary sweep: 270° with the gap at the bottom -- frac 0 = 7 o'clock,
-// frac 1 = 5 o'clock. Angles are ImGui draw angles (0 = +x, +cw, y-down).
-constexpr float kKnobA0 = -3.92699082f; // -225 deg
-constexpr float kKnobA1 = 0.78539816f;  // +45 deg
-float knobAngle(float f) { return kKnobA0 + std::clamp(f, 0.0f, 1.0f) * (kKnobA1 - kKnobA0); }
-ImVec2 dirAt(float a) { return ImVec2(std::cos(a), std::sin(a)); }
-
 } // namespace
 
 void setPalette(const Palette& p) { gPalette = p; }
@@ -61,9 +31,9 @@ bool knob(const char* label, float* value, float size, const char* format)
 {
     if (size <= 0.0f)
         size = ImGui::GetFontSize() * 3.4f;
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, toVec4(gPalette.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toVec4(gPalette.accentDim));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, paint::toVec4(gPalette.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, paint::toVec4(gPalette.accentDim));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
     bool changed = ImGuiKnobs::Knob(label, value, 0.0f, 1.0f, 0.0f, format,
                                     ImGuiKnobVariant_Wiper, size);
     ImGui::PopStyleColor(3);
@@ -74,9 +44,9 @@ bool knobDb(const char* label, float* db, float minDb, float maxDb, float size)
 {
     if (size <= 0.0f)
         size = ImGui::GetFontSize() * 3.4f;
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, toVec4(gPalette.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, toVec4(gPalette.accentDim));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, paint::toVec4(gPalette.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, paint::toVec4(gPalette.accentDim));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
     bool changed = ImGuiKnobs::Knob(label, db, minDb, maxDb, 0.0f, "%.1f dB",
                                     ImGuiKnobVariant_Tick, size);
     ImGui::PopStyleColor(3);
@@ -119,55 +89,16 @@ bool knob(const char* label, float* value, float minV, float maxV,
             }
         }
     }
-    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
-
     const float R = size * 0.5f;
     const ImVec2 c(p.x + R, p.y + R);
     float frac = (maxV != minV) ? (*value - minV) / (maxV - minV) : 0.0f;
     frac = std::clamp(frac, 0.0f, 1.0f);
-    const float valAng = knobAngle(frac);
     auto* dl = ImGui::GetWindowDrawList();
-
-    if (style == KnobStyle::Ring) {
-        const float lineW = std::min(5.0f, R * 0.42f);
-        const float rr = R - lineW * 0.5f - 1.0f;
-        dl->PathArcTo(c, rr, kKnobA0, kKnobA1, 40);
-        dl->PathStroke(gPalette.frameBright, 0, lineW); // background ring
-        const float aFrom = bipolar ? knobAngle(0.5f) : kKnobA0;
-        if (valAng != aFrom) {
-            dl->PathArcTo(c, rr, std::min(aFrom, valAng), std::max(aFrom, valAng), 40);
-            dl->PathStroke(accent, 0, lineW); // value arc
-        }
-        const ImVec2 d = dirAt(valAng);
-        dl->AddCircleFilled(ImVec2(c.x + d.x * rr, c.y + d.y * rr), lineW * 0.55f,
-                            hot ? IM_COL32(255, 255, 255, 255) : accent);
-    } else { // Davies
-        dl->AddCircleFilled(ImVec2(c.x, c.y + 1.4f), R, IM_COL32(0, 0, 0, 90)); // shadow
-        dl->AddCircleFilled(c, R, IM_COL32(0xc8, 0xcc, 0xd2, 255));       // chrome skirt
-        dl->AddCircle(c, R - 0.8f, IM_COL32(255, 255, 255, 60), 0, 1.2f); // bevel highlight
-        const float faceR = R - std::max(2.5f, R * 0.12f);
-        const ImU32 face = mixCol(gPalette.frame, IM_COL32(0, 0, 0, 255), 0.30f);
-        dl->AddCircleFilled(c, faceR, face);                            // dished dark face
-        dl->AddCircleFilled(ImVec2(c.x, c.y - faceR * 0.30f), faceR * 0.42f,
-                            IM_COL32(255, 255, 255, 15));               // top sheen
-        dl->AddCircle(c, faceR, IM_COL32(10, 10, 10, 255), 0, 1.0f);    // inner edge
-        dl->AddCircle(c, R, IM_COL32(0x19, 0x1b, 0x1e, 255), 0, 1.0f);  // outer edge
-        for (int i = 0; i < 11; ++i) {                                  // tick ring
-            const ImVec2 d = dirAt(knobAngle((float)i / 10.0f));
-            dl->AddLine(ImVec2(c.x + d.x * faceR * 0.74f, c.y + d.y * faceR * 0.74f),
-                        ImVec2(c.x + d.x * faceR * 0.92f, c.y + d.y * faceR * 0.92f),
-                        withAlpha(gPalette.text, 0x40), 1.3f);
-        }
-        const ImVec2 d = dirAt(valAng); // pointer
-        const ImU32 ptr = IM_COL32(0xee, 0xf1, 0xf5, 255);
-        dl->AddLine(ImVec2(c.x + d.x * faceR * 0.12f, c.y + d.y * faceR * 0.12f),
-                    ImVec2(c.x + d.x * faceR * 0.80f, c.y + d.y * faceR * 0.80f), ptr, 2.4f);
-        dl->AddCircleFilled(ImVec2(c.x + d.x * faceR * 0.80f, c.y + d.y * faceR * 0.80f),
-                            1.2f, ptr);
-        dl->AddCircleFilled(c, 2.0f, ptr); // hub
-        if (hot)
-            dl->AddCircle(c, R + 1.5f, withAlpha(accent, 0x66), 0, 1.5f);
-    }
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawKnob(dl, p, size, frac, style, gPalette, state, bipolar, accent);
 
     ImFont* font = ImGui::GetFont();
     if (hasLabel) {
@@ -208,15 +139,11 @@ bool toggle(const char* label, bool* on)
     store->SetFloat(id, anim);
 
     auto* dl = ImGui::GetWindowDrawList();
-    const float r = h * 0.5f;
-    ImU32 track = mixCol(gPalette.frame, gPalette.accent, anim);
-    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + h), track, r);
-    dl->AddRect(p, ImVec2(p.x + w, p.y + h), gPalette.frameBright, r);
-
-    float nx = p.x + r + anim * (w - h);
-    ImU32 nub = ImGui::IsItemHovered() ? IM_COL32(255, 255, 255, 255)
-                                       : IM_COL32(228, 230, 238, 255);
-    dl->AddCircleFilled(ImVec2(nx, p.y + r), r - 2.5f, nub);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawToggle(dl, p, w, h, anim, gPalette, state);
 
     if (labelSize.x > 0)
         dl->AddText(ImVec2(p.x + w + style.ItemInnerSpacing.x,
@@ -241,18 +168,11 @@ bool led(const char* id, bool on, float radius, bool clickable, ImU32 onColor)
 
     ImVec2 c(p.x + sz.x * 0.5f, p.y + sz.y * 0.5f);
     auto* dl = ImGui::GetWindowDrawList();
-    if (on) {
-        dl->AddCircleFilled(c, radius * 2.4f, withAlpha(onColor, 0x22));
-        dl->AddCircleFilled(c, radius * 1.7f, withAlpha(onColor, 0x55));
-        dl->AddCircleFilled(c, radius, onColor);
-        dl->AddCircleFilled(ImVec2(c.x - radius * 0.3f, c.y - radius * 0.35f),
-                            radius * 0.35f, IM_COL32(255, 255, 255, 180));
-    } else {
-        dl->AddCircleFilled(c, radius, gPalette.ledOff);
-        dl->AddCircle(c, radius, gPalette.frameBright);
-    }
-    if (clickable && ImGui::IsItemHovered())
-        dl->AddCircle(c, radius * 1.9f, gPalette.textDim);
+    paint::ControlState state;
+    state.hovered = clickable && ImGui::IsItemHovered();
+    state.active = clickable && ImGui::IsItemActive();
+    state.focused = clickable && ImGui::IsItemFocused();
+    paint::drawLed(dl, c, radius, on, gPalette, state, onColor);
     return clicked;
 }
 
@@ -272,49 +192,7 @@ void meter(const char* id, MeterState& st, float level, const ImVec2& size,
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::Dummy(size);
     auto* dl = ImGui::GetWindowDrawList();
-
-    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 2.0f);
-
-    const bool horizontal = size.x > size.y;
-    const float fill = dbNorm(st.shown, floorDb);
-    const float z1 = dbNorm(std::pow(10.0f, -12.0f / 20.0f), floorDb);
-    const float z2 = dbNorm(std::pow(10.0f, -3.0f / 20.0f), floorDb);
-
-    // three hardware zones, each clipped by the fill level
-    struct Zone {
-        float a, b;
-        ImU32 col;
-    } zones[3] = {{0.0f, z1, gPalette.meterLow},
-                  {z1, z2, gPalette.meterMid},
-                  {z2, 1.0f, gPalette.meterHot}};
-    for (auto& z : zones) {
-        float a = z.a, b = std::min(z.b, fill);
-        if (b <= a)
-            continue;
-        if (horizontal)
-            dl->AddRectFilled(ImVec2(p.x + size.x * a, p.y),
-                              ImVec2(p.x + size.x * b, p.y + size.y), z.col, 1.5f);
-        else
-            dl->AddRectFilled(ImVec2(p.x, p.y + size.y * (1.0f - b)),
-                              ImVec2(p.x + size.x, p.y + size.y * (1.0f - a)), z.col,
-                              1.5f);
-    }
-
-    // peak-hold tick
-    float pk = dbNorm(st.peak, floorDb);
-    if (pk > 0.001f) {
-        ImU32 pc = pk > z2 ? gPalette.meterHot : pk > z1 ? gPalette.meterMid
-                                                         : gPalette.meterLow;
-        if (horizontal) {
-            float x = p.x + size.x * pk;
-            dl->AddLine(ImVec2(x, p.y), ImVec2(x, p.y + size.y), pc, 1.0f);
-        } else {
-            float y = p.y + size.y * (1.0f - pk);
-            dl->AddLine(ImVec2(p.x, y), ImVec2(p.x + size.x, y), pc, 1.0f);
-        }
-    }
-
-    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 2.0f);
+    paint::drawMeter(dl, p, size, st.shown, st.peak, floorDb, gPalette);
     (void)id;
 }
 
@@ -333,46 +211,25 @@ bool fader(const char* id, float* value, const ImVec2& size)
     }
 
     auto* dl = ImGui::GetWindowDrawList();
-    const float capH = 14.0f;
-    const float cx = p.x + size.x * 0.5f;
-
-    // slot
-    dl->AddRectFilled(ImVec2(cx - 2.0f, p.y), ImVec2(cx + 2.0f, p.y + size.y),
-                      gPalette.frame, 2.0f);
-    dl->AddRect(ImVec2(cx - 2.0f, p.y), ImVec2(cx + 2.0f, p.y + size.y),
-                gPalette.frameBright, 2.0f);
-
-    // travel below the cap picks up the accent
-    float capY = p.y + (1.0f - *value) * (size.y - capH);
-    dl->AddRectFilled(ImVec2(cx - 2.0f, capY + capH * 0.5f),
-                      ImVec2(cx + 2.0f, p.y + size.y),
-                      withAlpha(gPalette.accent, 0x66), 2.0f);
-
-    // cap
-    bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
-    dl->AddRectFilled(ImVec2(p.x, capY), ImVec2(p.x + size.x, capY + capH),
-                      hot ? gPalette.frameBright : gPalette.frame, 3.0f);
-    dl->AddRect(ImVec2(p.x, capY), ImVec2(p.x + size.x, capY + capH),
-                gPalette.frameBright, 3.0f);
-    dl->AddLine(ImVec2(p.x + 2.0f, capY + capH * 0.5f),
-                ImVec2(p.x + size.x - 2.0f, capY + capH * 0.5f), gPalette.accent,
-                1.5f);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawFader(dl, p, size, *value, gPalette, state);
     return changed;
 }
 
 void badge(const char* text, ImU32 fill)
 {
     if (fill == 0)
-        fill = withAlpha(gPalette.accent, 0x46);
+        fill = paint::withAlpha(gPalette.accent, 0x46);
     ImFont* font = ImGui::GetFont();
     const float fs = ImGui::GetFontSize() * 0.78f;
     ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImVec2 sz(ts.x + 10.0f, fs + 5.0f);
     ImGui::Dummy(sz);
-    auto* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(p, ImVec2(p.x + sz.x, p.y + sz.y), fill, 3.0f);
-    dl->AddText(font, fs, ImVec2(p.x + 5.0f, p.y + 2.5f), gPalette.text, text);
+    paint::drawBadge(ImGui::GetWindowDrawList(), font, p, text, fs, fill, gPalette);
 }
 
 bool iconButton(const char* id, const char* glyph, const ImVec2& size, ImFont* font,
@@ -386,36 +243,15 @@ bool iconButton(const char* id, const char* glyph, const ImVec2& size, ImFont* f
 
     ImVec2 p = ImGui::GetCursorScreenPos();
     bool clicked = ImGui::InvisibleButton(id, sz);
-    const bool held = ImGui::IsItemActive();
-    const bool hovered = ImGui::IsItemHovered();
-    const bool down = held || toggled; // pressed / inset look
-
-    // face: a light-grey hardware button by default, darker when pressed
-    ImU32 light = face ? face : IM_COL32(0xc6, 0xc9, 0xcf, 255);
-    if (hovered && !down)
-        light = mixCol(light, IM_COL32(255, 255, 255, 255), 0.12f);
-    ImU32 dark = face ? mixCol(face, IM_COL32(0, 0, 0, 255), 0.55f)
-                      : IM_COL32(0x35, 0x38, 0x3e, 255);
-    ImU32 faceCol = down ? dark : light;
-
-    auto* dl = ImGui::GetWindowDrawList();
-    const float r = 4.0f;
-    const ImVec2 mx(p.x + sz.x, p.y + sz.y);
-    dl->AddRectFilled(p, mx, faceCol, r);
-    // bevel: raised = light top edge / dark bottom edge; inset flips it
-    ImU32 topEdge = down ? IM_COL32(0, 0, 0, 110) : IM_COL32(255, 255, 255, 150);
-    ImU32 botEdge = down ? IM_COL32(255, 255, 255, 40) : IM_COL32(0, 0, 0, 90);
-    dl->AddLine(ImVec2(p.x + r, p.y + 1.0f), ImVec2(mx.x - r, p.y + 1.0f), topEdge, 1.6f);
-    dl->AddLine(ImVec2(p.x + r, mx.y - 1.5f), ImVec2(mx.x - r, mx.y - 1.5f), botEdge, 1.6f);
-    dl->AddRect(p, mx, IM_COL32(0, 0, 0, 110), r, 0, 1.0f);
-
-    // the icon glyph, centred (nudged down 1px when pressed)
+    const bool down = ImGui::IsItemActive() || toggled; // pressed / inset look
     ImFont* f = font ? font : ImGui::GetFont();
-    const float iconPx = sz.y * 0.60f;
-    ImU32 iconCol = down ? IM_COL32(0xec, 0xef, 0xf3, 255) : IM_COL32(0x2b, 0x2e, 0x34, 255);
-    ImVec2 ts = f->CalcTextSizeA(iconPx, FLT_MAX, 0.0f, glyph);
-    ImVec2 gp(p.x + (sz.x - ts.x) * 0.5f, p.y + (sz.y - ts.y) * 0.5f + (down ? 1.0f : 0.0f));
-    dl->AddText(f, iconPx, gp, iconCol, glyph);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    state.selected = toggled;
+    paint::drawTactileIconButton(ImGui::GetWindowDrawList(), f, p, sz, glyph,
+                                 gPalette, state, down, face);
     return clicked;
 }
 
@@ -482,33 +318,12 @@ bool keyboard(const char* id, KeyboardState& st, const ImVec2& size, int firstNo
         st.mouseNote = want >= 0 && want < 128 ? want : -1;
     }
 
-    auto isDown = [&](int note) {
-        return note == st.mouseNote || (lit && note >= 0 && note < 128 && lit[note]);
-    };
-
-    // draw: white keys
-    for (int w = 0; w < whites; ++w) {
-        int note = firstNote + (w / 7) * 12 + whiteSemi[w % 7];
-        ImVec2 a(p.x + w * ww, p.y), b(p.x + (w + 1) * ww - 1.0f, p.y + size.y);
-        dl->AddRectFilled(a, b,
-                          isDown(note) ? gPalette.accent : IM_COL32(232, 233, 238, 255),
-                          2.0f, ImDrawFlags_RoundCornersBottom);
-        dl->AddRect(a, b, IM_COL32(40, 42, 50, 255), 2.0f,
-                    ImDrawFlags_RoundCornersBottom);
-    }
-    // black keys on top
-    for (int w = 0; w < whites; ++w) {
-        int inOct = w % 7;
-        if (!blackAfterWhite[inOct] || w == whites - 1)
-            continue;
-        int note = firstNote + (w / 7) * 12 + blackSemi[inOct];
-        float bx = p.x + (w + 1) * ww - bw * 0.5f;
-        ImVec2 a(bx, p.y), b(bx + bw, p.y + bh);
-        dl->AddRectFilled(a, b,
-                          isDown(note) ? gPalette.accentDim : IM_COL32(18, 19, 26, 255),
-                          2.0f, ImDrawFlags_RoundCornersBottom);
-        dl->AddRect(a, b, IM_COL32(0, 0, 0, 255), 2.0f, ImDrawFlags_RoundCornersBottom);
-    }
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawKeyboard(dl, p, size, firstNote, octaves, st.mouseNote, lit,
+                        gPalette, state);
     return played;
 }
 
@@ -526,12 +341,7 @@ void sectionHeader(const char* text)
     ImVec2 p = ImGui::GetCursorScreenPos();
     float w = std::max(ts.x, ImGui::GetContentRegionAvail().x);
     ImGui::Dummy(ImVec2(w, fs + 8.0f));
-    auto* dl = ImGui::GetWindowDrawList();
-    dl->AddText(font, fs, ImVec2(p.x, p.y + 4.0f), gPalette.textDim, buf);
-    if (w > ts.x + 12.0f)
-        dl->AddLine(ImVec2(p.x + ts.x + 8.0f, p.y + 4.0f + fs * 0.55f),
-                    ImVec2(p.x + w, p.y + 4.0f + fs * 0.55f),
-                    withAlpha(gPalette.frameBright, 0xAA), 1.0f);
+    paint::drawSectionHeader(ImGui::GetWindowDrawList(), font, p, buf, fs, w, gPalette);
 }
 
 bool patternGrid(const char* id, bool* cells, int rows, int steps,
@@ -541,9 +351,9 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
         return false;
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton(id, size);
-    auto* dl = ImGui::GetWindowDrawList();
 
-    const float cw = size.x / steps, ch = size.y / rows;
+    const float cw = size.x / steps;
+    const float ch = size.y / rows;
     bool changed = false;
 
     if (ImGui::IsItemActive()) {
@@ -558,23 +368,12 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
         }
     }
 
-    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
-    if (playheadStep >= 0 && playheadStep < steps)
-        dl->AddRectFilled(ImVec2(p.x + playheadStep * cw, p.y),
-                          ImVec2(p.x + (playheadStep + 1) * cw, p.y + size.y),
-                          withAlpha(gPalette.accent, 0x24));
-
-    for (int r = 0; r < rows; ++r)
-        for (int c = 0; c < steps; ++c) {
-            ImVec2 a(p.x + c * cw + 1.5f, p.y + r * ch + 1.5f);
-            ImVec2 b(p.x + (c + 1) * cw - 1.5f, p.y + (r + 1) * ch - 1.5f);
-            bool on = cells[r * steps + c];
-            ImU32 col = on ? (c == playheadStep ? gPalette.text : gPalette.accent)
-                           : withAlpha(gPalette.frameBright,
-                                       (c / 4) % 2 ? 0x30 : 0x55);
-            dl->AddRectFilled(a, b, col, 2.0f);
-        }
-    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawPatternGrid(ImGui::GetWindowDrawList(), p, size, cells, rows, steps,
+                           playheadStep, gPalette, state);
     return changed;
 }
 
@@ -733,6 +532,8 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
                                                       : gPalette.accent);
     }
     dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    if (ImGui::IsItemFocused())
+        paint::drawFocusRing(dl, p, ImVec2(p.x + size.x, p.y + size.y), gPalette, 3.0f);
     return changed;
 }
 
@@ -740,7 +541,6 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
 {
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton(id, size);
-    auto* dl = ImGui::GetWindowDrawList();
     bool changed = false;
 
     if (ImGui::IsItemActive()) {
@@ -752,17 +552,11 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
         *y = ny;
     }
 
-    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
-    // crosshair
-    float cx = p.x + *x * size.x, cy = p.y + (1.0f - *y) * size.y;
-    dl->AddLine(ImVec2(cx, p.y), ImVec2(cx, p.y + size.y),
-                withAlpha(gPalette.accent, 0x50));
-    dl->AddLine(ImVec2(p.x, cy), ImVec2(p.x + size.x, cy),
-                withAlpha(gPalette.accent, 0x50));
-    dl->AddCircleFilled(ImVec2(cx, cy), 6.0f, gPalette.accent);
-    dl->AddCircleFilled(ImVec2(cx - 1.5f, cy - 1.8f), 1.6f,
-                        IM_COL32(255, 255, 255, 170));
-    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawXYPad(ImGui::GetWindowDrawList(), p, size, *x, *y, gPalette, state);
     return changed;
 }
 
@@ -770,7 +564,7 @@ bool selectableList(const char* id, const std::vector<std::string>& items,
                     int* selected, const ImVec2& size)
 {
     bool changed = false;
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, paint::toVec4(gPalette.frame));
     if (ImGui::BeginChild(id, size, ImGuiChildFlags_Borders)) {
         for (int i = 0; i < (int)items.size(); ++i) {
             ImGui::PushID(i);
@@ -791,9 +585,9 @@ bool selectableList(const char* id, const std::vector<std::string>& items,
 bool dragNumber(const char* label, float* value, float speed, float minV, float maxV,
                 const char* format)
 {
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, toVec4(gPalette.frame));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, toVec4(gPalette.frameBright));
-    ImGui::PushStyleColor(ImGuiCol_Text, toVec4(gPalette.text));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, paint::toVec4(gPalette.frameBright));
+    ImGui::PushStyleColor(ImGuiCol_Text, paint::toVec4(gPalette.text));
     bool changed = ImGui::DragFloat(label, value, speed, minV, maxV, format);
     ImGui::PopStyleColor(3);
     return changed;
@@ -845,9 +639,9 @@ bool fileBrowser(const char* id, FileBrowserState& st, const ImVec2& size,
         st.selected.clear();
     }
     ImGui::SameLine();
-    ImGui::TextColored(toVec4(gPalette.textDim), "%s", st.dir.c_str());
+    ImGui::TextColored(paint::toVec4(gPalette.textDim), "%s", st.dir.c_str());
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, toVec4(gPalette.frame));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, paint::toVec4(gPalette.frame));
     if (ImGui::BeginChild("##files", ImVec2(size.x, size.y - ImGui::GetFrameHeight()),
                           ImGuiChildFlags_Borders)) {
         std::error_code ec;

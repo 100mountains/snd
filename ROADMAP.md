@@ -1,18 +1,13 @@
-# Roadmap — SND after WaveBob and the Murk GL surface
+# Roadmap — SND after WaveBob and the downstream GL surface
 
 SND is the backbone: audio I/O, UI, plugin hosting, DSP, and all
-platform-specific glue live here behind one API. Two apps ride on it:
-**WaveBob** (wave editor — near feature-complete, keeps shipping) and
-**bob** (the Murk/Murfy successor). The original phase 1–4 SND build plan and
-the Murk GL surface port are complete; this file now tracks residual SND work
-and any downstream pressure that should feed back into the foundation.
+platform-specific glue live here behind one API.
 
-Historical Murk surface (what the port had to cover): 1 JUCE GUI app +
-MurfyMainPlugin (Standalone/VST3/AU) + ~6 module plugins (Pattern, Seq,
-PbQuntise, BassController, module-plugin set) + 3 panel-preview dev tools; 57
-app source files, **53 of them touching MIDI**; ONNX engine on the side
-(JUCE-light). Current state: the Murk-facing surface is done on SND/GL, with
-Arrange and Perform pages done.
+Historical downstream surface covered by the port: 1 JUCE GUI app + main
+plugin targets (Standalone/VST3/AU) + module plugins (Pattern, Seq, PbQuntise,
+BassController, module-plugin set) + panel-preview dev tools; 57 app source
+files, **53 of them touching MIDI**; ONNX engine on the side. Current state:
+the downstream surface is done on SND/GL, with Arrange and Perform pages done.
 
 Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as ever.
 
@@ -39,9 +34,9 @@ persistent paint via per-file session sidecars, pop-out windows.
 Owner dropped: parametric EQ, pitch/time-stretch, noise reduction v2.
 Remaining candidates: OGG export, loudness-select for the brush.
 
-## Track 2 — SND pillars (the bob/Murk enablers)
+## Track 2 — SND pillars
 
-### ① Widgets — v1 done; Murk GL surface covered
+### ① Widgets — v1 done; downstream GL surface covered
 - Arrange and Perform page needs are covered by the current SND/GL surface.
 - Remaining polish candidates: list/table helpers and menu/tooltip conventions
   if another real consumer needs them.
@@ -134,10 +129,10 @@ Phases (verification is LOCAL AND MANUAL — no CI, ever):
 **SND is now cross-platform: macOS, Linux, and Windows all build + pass
 `--selftest`.**
 
-## Track 3 — the bob port (Murk renamed "bob" 2026-07-08)
+## Track 3 — the bob port
 
 Lives in a NEW repo **bob2** (`github.com/100mountains/bob2`, `~/github/bob2`);
-`~/Documents/murk` (renamed in-tree to `Bob/`) stays read-only reference.
+the legacy JUCE tree stays read-only reference.
 Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
 `snd_add_plugin()`, ImGui editor with `snd::ui`. See `bob2/PORTING.md`.
 
@@ -149,7 +144,7 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
    pbquntise, scale, basscontroller, drums, synth, seq, pattern (generative,
    ONNX), sampler, nxd (neural drum, ONNX). Last one **bassmodel** (embeds the
    AID engine + Faust bass voices + shared filter) in progress.
-3. App shell + GL surface — ✅ DONE: the Murk-facing surface is running on
+3. App shell + GL surface — ✅ DONE: the downstream surface is running on
    SND/GL, with Arrange and Perform pages done. Manager/PluginList, graph,
    sample edit, and sequencer/pattern surface work are no longer tracked here
    as future SND blockers; any remaining issues should come back as specific
@@ -166,7 +161,7 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
 - **M3** — ✅ DONE (and then some): 14 of 15 bob modules ship on SND as
   VST3+AU+standalone with behaviour-verifying selftests, incl. the ONNX ones
   (pattern groove/feel, nxd neural drum). Last module bassmodel in flight.
-- **M4** — ✅ DONE: bob app shell and Murk GL surface on SND, including
+- **M4** — ✅ DONE: bob app shell and downstream GL surface on SND, including
   Arrange and Perform pages
 - **M5** — JUCE deleted from the bob tree
 
@@ -176,10 +171,10 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
   needs the library-validation entitlement — SND documents/owns this.
 - Every capability lands with a behaviour-verifying `--selftest` check, run
   by hand via `tools/build.sh`. No CI, ever.
-- Murk (`~/Documents/murk`, renamed in-tree to `Bob/`) remains read-only
-  reference material when historical behaviour needs checking; current work
-  lands in bob/SND, not in that reference tree.
+- The legacy JUCE tree remains read-only reference material when historical
+  behaviour needs checking; current work lands in bob/SND, not in that
+  reference tree.
 
-**How much, in one line:** the old SND buildout and Murk GL surface work are
-done; remaining roadmap items should be concrete foundation fixes, downstream
-bug reports, or owner-approved cleanup.
+**How much, in one line:** the old SND buildout and downstream GL surface work
+are done; remaining roadmap items should be concrete foundation fixes,
+downstream bug reports, or owner-approved cleanup.

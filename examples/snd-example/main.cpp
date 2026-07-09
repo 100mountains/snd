@@ -17,7 +17,9 @@
 #include "snd/state.h"
 #include "snd/icons.h"
 #include "snd/ui.h"
+#include "snd/ui_retained.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -26,6 +28,7 @@
 #include <filesystem>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifndef SND_TEST_ASSETS_DIR
@@ -419,23 +422,405 @@ static bool selftestLooping()
     return false;
 }
 
+static bool selftestRetainedUi()
+{
+    namespace r = snd::ui::retained;
+
+    auto named = [](r::Role role, const char* name) {
+        r::Semantics sem;
+        sem.role = role;
+        sem.name = name;
+        return sem;
+    };
+    auto hasAction = [](const r::SemanticNode* node, r::Action action) {
+        return node && std::find(node->actions.begin(), node->actions.end(), action) !=
+                           node->actions.end();
+    };
+
+    auto root = r::Node::make("root", r::Role::Group);
+    r::Layout rootLayout;
+    rootLayout.kind = r::LayoutKind::Column;
+    rootLayout.padding = r::Insets::all(8.0f);
+    rootLayout.gap = 4.0f;
+    rootLayout.crossAlign = r::Align::Stretch;
+    root->setLayout(rootLayout);
+    root->setSemantics(named(r::Role::Group, "Test panel"));
+
+    auto row = r::Node::make("controls", r::Role::Group);
+    row->setSize(r::Length::fill(), r::Length::fixed(32.0f));
+    r::Layout rowLayout;
+    rowLayout.kind = r::LayoutKind::Row;
+    rowLayout.gap = 4.0f;
+    rowLayout.crossAlign = r::Align::Stretch;
+    row->setLayout(rowLayout);
+
+    int activated = 0;
+    auto play = r::Node::make("transport.play", r::Role::Button);
+    play->setSize(r::Length::fixed(60.0f), r::Length::fill());
+    play->setFocusable(true);
+    play->setSemantics(named(r::Role::Button, "Play"));
+    play->setOnActivate([&](r::Node&) { ++activated; });
+
+    double gain = 0.5;
+    auto slider = r::Node::make("mixer.gain", r::Role::Slider);
+    slider->setSize(r::Length::fill(), r::Length::fill());
+    slider->setFocusable(true);
+    slider->setSemantics(named(r::Role::Slider, "Gain"));
+    r::ValueBinding binding;
+    binding.get = [&] { return gain; };
+    binding.set = [&](double value) { gain = value; };
+    binding.format = [](double value) {
+        char text[32];
+        std::snprintf(text, sizeof text, "%.0f%%", value * 100.0);
+        return std::string(text);
+    };
+    binding.min = 0.0;
+    binding.max = 1.0;
+    binding.step = 0.1;
+    slider->setValueBinding(std::move(binding));
+
+    row->addChild(std::move(play));
+    row->addChild(std::move(slider));
+
+    auto meter = r::Node::make("output.meter", r::Role::Meter);
+    meter->setSize(r::Length::fill(), r::Length::fixed(12.0f));
+    r::Semantics meterSem = named(r::Role::Meter, "Output level");
+    meterSem.value.hasNumeric = true;
+    meterSem.value.value = 0.25;
+    meterSem.value.min = 0.0;
+    meterSem.value.max = 1.0;
+    meterSem.value.text = "-12 dB";
+    meter->setSemantics(meterSem);
+
+    int canvasActions = 0;
+    auto canvas = r::Node::make("scope.canvas", r::Role::Canvas);
+    canvas->setSize(r::Length::fill(), r::Length::fixed(24.0f));
+    canvas->setFocusable(true);
+    r::Semantics canvasSemantics = named(r::Role::Canvas, "Oscilloscope");
+    canvasSemantics.actions.push_back(r::Action::Activate);
+    canvas->setSemantics(canvasSemantics);
+    canvas->setOnAction([&](r::Node&, r::Action action, double) {
+        if (action != r::Action::Activate)
+            return false;
+        ++canvasActions;
+        return true;
+    });
+
+    auto stop = r::Node::make("transport.stop", r::Role::Button);
+    stop->setSize(r::Length::fill(), r::Length::fixed(22.0f));
+    stop->setFocusable(true);
+    stop->setEnabled(false);
+    stop->setSemantics(named(r::Role::Button, "Stop"));
+    stop->setOnActivate([&](r::Node&) { activated += 100; });
+
+    auto overlay = r::Node::make("overlay", r::Role::Group);
+    overlay->setSize(r::Length::fill(), r::Length::fixed(16.0f));
+    r::Layout stackLayout;
+    stackLayout.kind = r::LayoutKind::Stack;
+    stackLayout.mainAlign = r::Align::Stretch;
+    stackLayout.crossAlign = r::Align::Stretch;
+    overlay->setLayout(stackLayout);
+
+    auto decorative = r::Node::make("decor.icon", r::Role::Text);
+    decorative->setSize(r::Length::fill(), r::Length::fill());
+    r::Semantics decorSem = named(r::Role::Text, "decorative icon");
+    decorSem.hidden = true;
+    decorative->setSemantics(decorSem);
+
+    auto front = r::Node::make("overlay.front", r::Role::Text);
+    front->setSize(r::Length::fill(), r::Length::fill());
+    front->setSemantics(named(r::Role::Text, "Overlay"));
+    int customEvents = 0;
+    front->setOnEvent([&](r::Node&, const r::Event& event) {
+        if (event.type != r::EventType::MouseMove)
+            return false;
+        ++customEvents;
+        return true;
+    });
+
+    overlay->addChild(std::move(decorative));
+    overlay->addChild(std::move(front));
+
+    root->addChild(std::move(row));
+    root->addChild(std::move(meter));
+    root->addChild(std::move(canvas));
+    root->addChild(std::move(stop));
+    root->addChild(std::move(overlay));
+
+    r::Tree tree(std::move(root));
+    tree.layout({200.0f, 120.0f});
+    bool ok = tree.validate().empty();
+
+    const auto* playNode = tree.find("transport.play");
+    const auto* sliderNode = tree.find("mixer.gain");
+    const auto* frontNode = tree.find("overlay.front");
+    ok = ok && playNode && sliderNode && frontNode;
+
+    if (ok) {
+        r::Rect playBounds = playNode->bounds();
+        r::Rect sliderBounds = sliderNode->bounds();
+        ok = playBounds.x == 8.0f && playBounds.y == 8.0f &&
+             playBounds.w == 60.0f && playBounds.h == 32.0f &&
+             sliderBounds.x == 72.0f && sliderBounds.y == 8.0f &&
+             sliderBounds.w == 120.0f && sliderBounds.h == 32.0f;
+    }
+
+    tree.clearDirty();
+    ok = ok && !tree.dirty();
+
+    r::Event move;
+    move.type = r::EventType::MouseMove;
+    move.position = {10.0f, 10.0f};
+    ok = ok && tree.dispatch(move) && tree.hovered() &&
+         tree.hovered()->id() == "transport.play" && tree.dirty();
+
+    auto nodeSnapshot = tree.nodeSnapshot();
+    auto findNode = [&](const char* id) -> const r::NodeSnapshot* {
+        auto it = std::find_if(
+            nodeSnapshot.begin(), nodeSnapshot.end(),
+            [&](const r::NodeSnapshot& node) { return node.id == id; });
+        return it == nodeSnapshot.end() ? nullptr : &*it;
+    };
+    const r::NodeSnapshot* playSnap = findNode("transport.play");
+    const r::NodeSnapshot* gainSnap = findNode("mixer.gain");
+    const r::NodeSnapshot* canvasSnap = findNode("scope.canvas");
+    const r::NodeSnapshot* stopSnap = findNode("transport.stop");
+    ok = ok && playSnap && playSnap->interaction.hovered &&
+         !playSnap->interaction.disabled;
+    ok = ok && gainSnap && gainSnap->value.hasNumeric &&
+         std::abs(gainSnap->value.value - 0.5) < 0.0001;
+    ok = ok && canvasSnap && canvasSnap->role == r::Role::Canvas;
+    ok = ok && stopSnap && stopSnap->interaction.disabled;
+    ok = ok && findNode("decor.icon") != nullptr; // renderable, but semantic-hidden
+
+    move.position = {10.0f, frontNode ? frontNode->bounds().y + 1.0f : 65.0f};
+    ok = ok && tree.dispatch(move) && customEvents == 1 && tree.hovered() &&
+         tree.hovered()->id() == "overlay.front";
+    r::Event drag;
+    drag.type = r::EventType::MouseDown;
+    drag.position = move.position;
+    ok = ok && tree.dispatch(drag);
+    drag.type = r::EventType::MouseMove;
+    drag.position = {10.0f, 10.0f};
+    ok = ok && tree.dispatch(drag) && customEvents == 2;
+    drag.type = r::EventType::MouseUp;
+    ok = ok && tree.dispatch(drag);
+    tree.clearDirty();
+
+    ok = ok && tree.focusNext() && tree.focused() &&
+         tree.focused()->id() == "transport.play";
+    r::Event key;
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Space;
+    ok = ok && tree.dispatch(key) && activated == 1;
+
+    r::Event mouse;
+    mouse.type = r::EventType::MouseDown;
+    mouse.position = {10.0f, 10.0f};
+    ok = ok && tree.dispatch(mouse);
+    mouse.type = r::EventType::MouseUp;
+    ok = ok && tree.dispatch(mouse) && activated == 2;
+
+    key.key = r::Key::Tab;
+    ok = ok && tree.dispatch(key) && tree.focused() &&
+         tree.focused()->id() == "mixer.gain";
+    key.key = r::Key::Right;
+    ok = ok && tree.dispatch(key) && std::abs(gain - 0.6) < 0.0001;
+    ok = ok && tree.performAction("mixer.gain", r::Action::SetValue, 0.25) &&
+         std::abs(gain - 0.25) < 0.0001;
+    ok = ok && tree.performAction("mixer.gain", r::Action::Decrement) &&
+         std::abs(gain - 0.15) < 0.0001;
+
+    key.key = r::Key::Tab;
+    ok = ok && tree.dispatch(key) && tree.focused() &&
+         tree.focused()->id() == "scope.canvas";
+    ok = ok && tree.dispatch(key) && tree.focused() &&
+         tree.focused()->id() == "transport.play"; // disabled Stop is skipped
+    ok = ok && !tree.performAction("transport.stop", r::Action::Activate) &&
+         activated == 2;
+
+    const auto* hit = tree.hitTest({10.0f, frontNode ? frontNode->bounds().y + 1.0f : 65.0f});
+    ok = ok && hit && hit->id() == "overlay.front";
+
+    auto semantics = tree.semanticSnapshot();
+    auto findSem = [&](const char* id) -> const r::SemanticNode* {
+        auto it = std::find_if(semantics.begin(), semantics.end(),
+                               [&](const r::SemanticNode& node) { return node.id == id; });
+        return it == semantics.end() ? nullptr : &*it;
+    };
+    const r::SemanticNode* playSem = findSem("transport.play");
+    const r::SemanticNode* gainSem = findSem("mixer.gain");
+    const r::SemanticNode* meterSemNode = findSem("output.meter");
+    const r::SemanticNode* canvasSem = findSem("scope.canvas");
+    const r::SemanticNode* stopSem = findSem("transport.stop");
+
+    r::SemanticNode oneSem;
+    r::NodeSnapshot oneNode;
+    r::ValueRange oneValue;
+    ok = ok && tree.semanticNode("mixer.gain", oneSem) &&
+         oneSem.id == "mixer.gain";
+    ok = ok && !tree.semanticNode("decor.icon", oneSem);
+    ok = ok && tree.nodeSnapshot("decor.icon", oneNode) &&
+         oneNode.id == "decor.icon";
+    ok = ok && tree.value("mixer.gain", oneValue) &&
+         std::abs(oneValue.value - 0.15) < 0.0001;
+
+    ok = ok && playSem && playSem->role == r::Role::Button &&
+         playSem->name == "Play" && hasAction(playSem, r::Action::Activate);
+    ok = ok && gainSem && gainSem->role == r::Role::Slider &&
+         gainSem->value.hasNumeric && std::abs(gainSem->value.value - 0.15) < 0.0001 &&
+         gainSem->value.text == "15%" && hasAction(gainSem, r::Action::Increment) &&
+         hasAction(gainSem, r::Action::SetValue) &&
+         r::hasState(gainSem->states, r::SemanticState::Focusable);
+    ok = ok && meterSemNode && meterSemNode->value.hasNumeric &&
+         !hasAction(meterSemNode, r::Action::Focus);
+    ok = ok && canvasSem && canvasSem->role == r::Role::Canvas &&
+         canvasSem->name == "Oscilloscope" && hasAction(canvasSem, r::Action::Focus) &&
+         hasAction(canvasSem, r::Action::Activate);
+    ok = ok && tree.performSemanticAction("scope.canvas", r::Action::Activate) &&
+         canvasActions == 1;
+    ok = ok && stopSem && r::hasState(stopSem->states, r::SemanticState::Disabled);
+    ok = ok && !tree.performSemanticAction("transport.stop", r::Action::Activate);
+    ok = ok && tree.setValue("mixer.gain", 0.4) && std::abs(gain - 0.4) < 0.0001;
+    ok = ok && tree.incrementValue("mixer.gain") && std::abs(gain - 0.5) < 0.0001;
+    ok = ok && tree.decrementValue("mixer.gain") && std::abs(gain - 0.4) < 0.0001;
+    ok = ok && findSem("decor.icon") == nullptr;
+    ok = ok && !tree.performSemanticAction("decor.icon", r::Action::Activate);
+    ok = ok && tree.dirty();
+
+    auto duplicateRoot = r::Node::make("dup.root");
+    duplicateRoot->addChild(r::Node::make("dup.child"));
+    duplicateRoot->addChild(r::Node::make("dup.child"));
+    r::Tree duplicateTree(std::move(duplicateRoot));
+    auto validation = duplicateTree.validate();
+    ok = ok && validation.size() == 1 &&
+         validation[0].kind == r::ValidationIssueKind::DuplicateId &&
+         validation[0].id == "dup.child";
+
+    auto unnamedRoot = r::Node::make("unnamed.root");
+    unnamedRoot->addChild(r::Node::make("unnamed.button", r::Role::Button));
+    r::Tree unnamedTree(std::move(unnamedRoot));
+    validation = unnamedTree.validate();
+    ok = ok && validation.size() == 1 &&
+         validation[0].kind == r::ValidationIssueKind::MissingAccessibleName &&
+         validation[0].id == "unnamed.button";
+
+    auto hiddenRoot = r::Node::make("hidden.root");
+    auto hiddenButton = r::Node::make("hidden.button", r::Role::Button);
+    r::Semantics hiddenSem;
+    hiddenSem.role = r::Role::Button;
+    hiddenSem.states |= r::SemanticState::Hidden;
+    hiddenButton->setSemantics(hiddenSem);
+    hiddenRoot->addChild(std::move(hiddenButton));
+    r::Tree hiddenTree(std::move(hiddenRoot));
+    ok = ok && hiddenTree.validate().empty() &&
+         hiddenTree.semanticSnapshot().size() == 1;
+
+    double toggleValue = 1.0;
+    auto toggleRoot = r::Node::make("toggle.root");
+    auto boundToggle = r::Node::make("toggle.bound", r::Role::Toggle);
+    boundToggle->setSemantics(named(r::Role::Toggle, "Bypass"));
+    r::ValueBinding toggleBinding;
+    toggleBinding.get = [&] { return toggleValue; };
+    toggleBinding.set = [&](double value) { toggleValue = value; };
+    toggleBinding.min = 0.0;
+    toggleBinding.max = 1.0;
+    toggleBinding.step = 1.0;
+    boundToggle->setValueBinding(std::move(toggleBinding));
+    toggleRoot->addChild(std::move(boundToggle));
+    r::Tree toggleTree(std::move(toggleRoot));
+    toggleTree.layout({80.0f, 24.0f});
+    auto toggleSemantics = toggleTree.semanticSnapshot();
+    auto findToggleSem = [&](const std::vector<r::SemanticNode>& nodes) {
+        auto it = std::find_if(nodes.begin(), nodes.end(),
+                               [](const r::SemanticNode& node) {
+                                   return node.id == "toggle.bound";
+                               });
+        return it == nodes.end() ? nullptr : &*it;
+    };
+    const r::SemanticNode* toggleSem = findToggleSem(toggleSemantics);
+    ok = ok && toggleSem &&
+         r::hasState(toggleSem->states, r::SemanticState::Checked);
+
+    toggleTree.clearDirty();
+    toggleValue = 0.0;
+    ok = ok && toggleTree.refreshBoundValues() && toggleTree.dirty();
+    toggleSemantics = toggleTree.semanticSnapshot();
+    toggleSem = findToggleSem(toggleSemantics);
+    ok = ok && toggleSem &&
+         !r::hasState(toggleSem->states, r::SemanticState::Checked) &&
+         std::abs(toggleSem->value.value) < 0.0001;
+    auto toggleNodes = toggleTree.nodeSnapshot();
+    auto toggleNodeIt = std::find_if(toggleNodes.begin(), toggleNodes.end(),
+                                     [](const r::NodeSnapshot& node) {
+                                         return node.id == "toggle.bound";
+                                     });
+    ok = ok && toggleNodeIt != toggleNodes.end() &&
+         !toggleNodeIt->interaction.checked;
+
+    if (r::Node* toggleNode = toggleTree.find("toggle.bound")) {
+        toggleNode->semantics().states |= r::SemanticState::Checked;
+        toggleTree.clearDirty();
+        toggleSemantics = toggleTree.semanticSnapshot();
+        toggleSem = findToggleSem(toggleSemantics);
+        ok = ok && toggleSem &&
+             !r::hasState(toggleSem->states, r::SemanticState::Checked);
+    } else {
+        ok = false;
+    }
+    ok = ok && toggleTree.performSemanticAction("toggle.bound", r::Action::Activate) &&
+         std::abs(toggleValue - 1.0) < 0.0001;
+    toggleSemantics = toggleTree.semanticSnapshot();
+    toggleSem = findToggleSem(toggleSemantics);
+    ok = ok && toggleSem &&
+         r::hasState(toggleSem->states, r::SemanticState::Checked);
+
+    double readonlyValue = 0.7;
+    auto readonlyRoot = r::Node::make("readonly.root");
+    auto readonly = r::Node::make("readonly.meter", r::Role::Meter);
+    readonly->setSemantics(named(r::Role::Meter, "Read-only level"));
+    r::ValueBinding readonlyBinding;
+    readonlyBinding.get = [&] { return readonlyValue; };
+    readonlyBinding.min = 0.0;
+    readonlyBinding.max = 1.0;
+    readonly->setValueBinding(std::move(readonlyBinding));
+    readonlyRoot->addChild(std::move(readonly));
+    r::Tree readonlyTree(std::move(readonlyRoot));
+    r::SemanticNode readonlySem;
+    ok = ok && readonlyTree.semanticNode("readonly.meter", readonlySem) &&
+         readonlySem.value.hasNumeric &&
+         std::abs(readonlySem.value.value - 0.7) < 0.0001 &&
+         !hasAction(&readonlySem, r::Action::SetValue) &&
+         !hasAction(&readonlySem, r::Action::Increment) &&
+         !hasAction(&readonlySem, r::Action::Decrement) &&
+         !readonlyTree.setValue("readonly.meter", 0.2) &&
+         !readonlyTree.incrementValue("readonly.meter");
+
+    if (ok)
+        printf("PASS (layout/focus/events/semantics/dirty state)\n");
+    else
+        printf("FAIL (activated=%d gain=%.3f custom=%d semantics=%zu)\n",
+               activated, gain, customEvents, semantics.size());
+    return ok;
+}
+
 static int runSelftest()
 {
     printf("=== SND self-test ===\n");
 
-    printf("[1/23] decode + playback: ");
+    printf("[1/24] decode + playback: ");
     fflush(stdout);
     bool ok1 = selftestDecodeAndPlay();
 
-    printf("[2/23] capture/record:    ");
+    printf("[2/24] capture/record:    ");
     fflush(stdout);
     bool ok2 = selftestRecord();
 
-    printf("[3/23] VST3 hosting:      ");
+    printf("[3/24] VST3 hosting:      ");
     fflush(stdout);
     bool ok3 = selftestVST3();
 
-    printf("[4/23] AU hosting:        ");
+    printf("[4/24] AU hosting:        ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok4 = selftestAU();
@@ -444,19 +829,19 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[5/23] resample:          ");
+    printf("[5/24] resample:          ");
     fflush(stdout);
     bool ok5 = selftestResample();
 
-    printf("[6/23] STFT round-trip:   ");
+    printf("[6/24] STFT round-trip:   ");
     fflush(stdout);
     bool ok6 = selftestStft();
 
-    printf("[7/23] player looping:    ");
+    printf("[7/24] player looping:    ");
     fflush(stdout);
     bool ok7 = selftestLooping();
 
-    printf("[8/23] insert hook:       ");
+    printf("[8/24] insert hook:       ");
     fflush(stdout);
     bool ok8;
     {
@@ -493,7 +878,7 @@ static int runSelftest()
         }
     }
 
-    printf("[9/23] OOP plugin scan:   ");
+    printf("[9/24] OOP plugin scan:   ");
     fflush(stdout);
     bool ok9;
     {
@@ -515,7 +900,7 @@ static int runSelftest()
                    junk.size());
     }
 
-    printf("[10/23] widget set:      ");
+    printf("[10/24] widget set:      ");
     fflush(stdout);
     bool ok10;
     {
@@ -559,7 +944,7 @@ static int runSelftest()
             snd::ui::meter("m", ms, 0.5f, ImVec2(10, 80));
             interacted = snd::ui::fader("f", &fad, ImVec2(24, 100)) || interacted;
             snd::ui::badge("VST3");
-            snd::ui::sectionHeader("murk-parity widgets");
+            snd::ui::sectionHeader("audio widgets");
         static bool cells[4 * 16] = {};
         static int step = 0;
         step = (step + 1) % (16 * 8);
@@ -592,7 +977,7 @@ static int runSelftest()
                    ms.shown, drawLists);
     }
 
-    printf("[11/23] MIDI loopback:   ");
+    printf("[11/24] MIDI loopback:   ");
     fflush(stdout);
     bool ok11;
     {
@@ -651,7 +1036,7 @@ static int runSelftest()
         }
     }
 
-    printf("[12/23] AU instrument:   ");
+    printf("[12/24] AU instrument:   ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok12;
@@ -696,7 +1081,7 @@ static int runSelftest()
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    printf("[13/23] client SDK:      ");
+    printf("[13/24] client SDK:      ");
     fflush(stdout);
     bool ok13;
     {
@@ -752,7 +1137,7 @@ static int runSelftest()
                    cutRatio);
     }
 
-    printf("[14/23] FLAC encode:     ");
+    printf("[14/24] FLAC encode:     ");
     fflush(stdout);
     bool ok14;
     {
@@ -779,7 +1164,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[15/23] MP3 encode:      ");
+    printf("[15/24] MP3 encode:      ");
     fflush(stdout);
     bool ok15 = true;
     if (!snd::audio::mp3EncoderAvailable()) {
@@ -807,7 +1192,7 @@ static int runSelftest()
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[16/23] media extract:   ");
+    printf("[16/24] media extract:   ");
     fflush(stdout);
 #if defined(__APPLE__) || defined(__linux__)
     bool ok16;
@@ -891,7 +1276,7 @@ media_done:;
     printf("skipped (no media backend on this platform yet)\n");
 #endif
 
-    printf("[17/23] state tree:      ");
+    printf("[17/24] state tree:      ");
     fflush(stdout);
     bool ok17;
     {
@@ -931,7 +1316,7 @@ media_done:;
                    xml.size());
     }
 
-    printf("[18/23] stream reader:   ");
+    printf("[18/24] stream reader:   ");
     fflush(stdout);
     bool ok18;
     {
@@ -971,7 +1356,7 @@ media_done:;
             printf("FAIL (%s)\n", err.c_str());
     }
 
-    printf("[19/23] queue+timer+pool: ");
+    printf("[19/24] queue+timer+pool: ");
     fflush(stdout);
     bool ok19;
     {
@@ -1006,7 +1391,7 @@ media_done:;
             printf("FAIL (jobs=%d main=%d ticks=%d)\n", jobs.load(), mainSeen, ticks);
     }
 
-    printf("[20/23] graph + latency: ");
+    printf("[20/24] graph + latency: ");
     fflush(stdout);
     bool ok20;
     {
@@ -1097,7 +1482,7 @@ media_done:;
             printf("FAIL (graph build/prepare)\n");
     }
 
-    printf("[21/23] SDK instrument:  ");
+    printf("[21/24] SDK instrument:  ");
     fflush(stdout);
     bool ok21;
     {
@@ -1146,7 +1531,7 @@ media_done:;
                    peakTail);
     }
 
-    printf("[22/23] AU wrapper:      ");
+    printf("[22/24] AU wrapper:      ");
     fflush(stdout);
 #if defined(__APPLE__)
     bool ok22;
@@ -1202,8 +1587,8 @@ media_done:;
     printf("skipped (AU is macOS-only)\n");
 #endif
 
-    // ── [23/23] SVG rasterize (nanosvg -> RGBA; the GL-free path) ────────────
-    printf("[23/23] svg raster:      ");
+    // ── [23/24] SVG rasterize (nanosvg -> RGBA; the GL-free path) ────────────
+    printf("[23/24] svg raster:      ");
     bool ok23 = false;
     {
         const char* svg =
@@ -1222,9 +1607,13 @@ media_done:;
         printf(ok23 ? "PASS\n" : "FAIL\n");
     }
 
+    printf("[24/24] retained UI:     ");
+    fflush(stdout);
+    bool ok24 = selftestRetainedUi();
+
     bool all = ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7 && ok8 && ok9 && ok10 &&
                ok11 && ok12 && ok13 && ok14 && ok15 && ok16 && ok17 && ok18 && ok19 &&
-               ok20 && ok21 && ok22 && ok23;
+               ok20 && ok21 && ok22 && ok23 && ok24;
     printf("=== %s ===\n", all ? "ALL PASS" : "FAILED");
     return all ? 0 : 1;
 }
@@ -1320,7 +1709,7 @@ int main(int argc, char** argv)
         snd::ui::badge("VST3");
         ImGui::SameLine();
         snd::ui::badge("48k");
-        snd::ui::sectionHeader("murk-parity widgets");
+        snd::ui::sectionHeader("audio widgets");
         static bool cells[4 * 16] = {};
         static int step = 0;
         step = (step + 1) % (16 * 8);

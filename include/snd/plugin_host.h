@@ -136,7 +136,7 @@ public:
     virtual std::unique_ptr<Instance> create(const Description& desc) = 0;
 };
 
-// --- Out-of-process scanning (Murk's crash-isolation pattern) ---
+// --- Out-of-process scanning ---
 // Enumerating a plugin file loads its binary, and a broken plugin can crash
 // or hang the whole process. The fix: re-run the app's own executable as a
 // one-shot scan worker per plugin. A crash or hang takes down only that
