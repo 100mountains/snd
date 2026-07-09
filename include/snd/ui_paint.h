@@ -32,6 +32,7 @@ struct KnobPaintArgs {
     ImU32 accent = 0;
     const Palette* palette = nullptr;
     const ControlState* state = nullptr;
+    KnobMod mod; // depth 0 + value < 0 = no modulation overlay
 };
 
 struct ButtonPaintArgs {
@@ -91,6 +92,12 @@ void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
               KnobStyle style, const Palette& pal, const ControlState& state,
               bool bipolar = false, ImU32 accent = 0);
+// Modulation overlay: depth arc from the value angle + live position dot at
+// the knob rim. SND owns this overlay (drawKnobWithPainter applies it after
+// the body, before the focus ring) so custom faces keep the shared mod look.
+void drawKnobModRing(ImDrawList* dl, const ImVec2& topLeft, float size,
+                     float frac, const KnobMod& mod, const Palette& pal,
+                     ImU32 accent = 0);
 void drawDefaultKnob(const KnobPaintArgs& args);
 void drawKnobWithPainter(const KnobPaintArgs& args,
                          const KnobPainter& painter = {});
@@ -115,6 +122,13 @@ void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                            const Palette& pal, const ControlState& state,
                            bool down, ImU32 face = 0);
 
+// Tactile key plus an integrated status LED ring inset at the face edge.
+// ledLevel 0 = unlit, 1 = fully lit (widgets animate it for arm-blink).
+void drawLedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* glyph, float ledLevel,
+                   const Palette& pal, const ControlState& state, bool down,
+                   ImU32 ledColor = 0, ImU32 face = 0);
+
 void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
                           const ImVec2& size, Icon icon, ImU32 accent,
                           const Palette& pal, const ControlState& state,
@@ -123,6 +137,21 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,
                 const ControlState& state, float fontScale = 0.90f);
+
+// Pill group of mutually exclusive segments. `selected` is the current
+// option, `hovered` the segment under the pointer (-1 = none); the pressed
+// tint follows state.active on the hovered segment.
+void drawSegmented(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* const* labels, int count,
+                   int selected, int hovered, const Palette& pal,
+                   const ControlState& state, float fontScale = 0.90f);
+
+// Multi-state value button body: flat button face with the current option
+// label and a pip row marking `index` within `count` states.
+void drawCycleButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                     const ImVec2& size, const char* text, int index, int count,
+                     const Palette& pal, const ControlState& state,
+                     float fontScale = 0.90f);
 void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const ImVec2& size, const char* text,
                        const Palette& pal, const ControlState& state,
@@ -130,6 +159,13 @@ void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawDefaultButton(const ButtonPaintArgs& args);
 void drawButtonWithPainter(const ButtonPaintArgs& args,
                            const ButtonPainter& painter = {});
+
+void drawMenuPanel(ImDrawList* dl, const ImVec2& topLeft,
+                   const ImVec2& size, const Palette& pal);
+void drawMenuItem(ImDrawList* dl, ImFont* font, ImFont* iconFont,
+                  const ImVec2& topLeft, const ImVec2& size,
+                  const MenuItem& item, const Palette& pal,
+                  const ControlState& state, float fontScale = 0.90f);
 
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   const ImVec2& size, const char* text, const Palette& pal,
@@ -161,6 +197,19 @@ void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   int hotPoint, int activePoint,
                   int hotSegment, int activeSegment,
                   const Palette& pal, const ControlState& state);
+
+void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                   const ImVec2& pan, float zoom, const Palette& pal,
+                   const ControlState& state);
+void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
+               const Palette& pal, const ControlState& state,
+               ImU32 color = 0, float thickness = 2.6f);
+// Draws module chrome only. GraphNode/ModuleBox internals such as meters,
+// readouts, toggles, actions, and ports remain structured UI parts.
+void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* title, const Palette& pal,
+                   const ControlState& state, bool bypassed = false,
+                   bool error = false);
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const char* text, float fontSize, float width,

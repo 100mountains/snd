@@ -122,11 +122,15 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <div class="brand"><span>UI toolkit</span></div>
     <div class="grp">Controls</div>
     <a href="#knobs" class="nl">Knobs</a>
+    <a href="#modring" class="nl">Knob mod ring</a>
     <a href="#fader" class="nl">Fader</a>
     <a href="#toggle" class="nl">Toggle</a>
     <a href="#buttons" class="nl">Buttons</a>
+    <a href="#segmented" class="nl">Segmented</a>
+    <a href="#cycle" class="nl">Cycle button</a>
     <a href="#custom-paint" class="nl">Animated · custom</a>
     <a href="#tactile" class="nl">Tactile key</a>
+    <a href="#ledbtn" class="nl">LED button</a>
     <div class="grp">Indicators</div>
     <a href="#led" class="nl">LED</a>
     <a href="#meter" class="nl">Meter</a>
@@ -145,7 +149,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <div class="eyebrow">SND · component library</div>
     <h1>The UI toolkit</h1>
     <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, a keyboard, an XY pad, a step grid — rendered here from the same geometry as <code style="color:var(--dim)">snd::ui::paint</code>, and re-themable: pick an accent and the whole rack follows.</p>
-    <div class="tryhint"><b>Try it —</b> drag the knobs &amp; faders, grab the XY handle, play the keys, click the switches and grid cells. The meter is the only thing running on its own.</div>
+    <div class="tryhint"><b>Try it —</b><span>drag the knobs &amp; faders (hold <b>⇧&nbsp;Shift</b> for 10× fine adjust), grab the XY handle, play the keys, click the switches and grid cells. The meter and the mod ring run on their own.</span></div>
 
     <div class="themebar">
       <span class="cap">Accent</span>
@@ -170,9 +174,19 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       </div>
     </section>
 
+    <section id="modring">
+      <div class="sechead"><h2>Knob modulation ring</h2><span class="tag">paint::drawKnobModRing · KnobMod</span></div>
+      <p class="desc">A second thin arc shows modulation depth from the value; the dot is the live modulated position. SND draws the overlay after any body — built-in styles <b>or custom painters</b> — then the focus ring, so modulated knobs keep one shared look. <b class="try">Drag the knobs — the LFO keeps riding the new value.</b></p>
+      <div class="rack">
+        <div class="unit"><canvas class="cv live" data-w="modknob"  width="72" height="72"></canvas><div class="cellcap">Ring · depth +0.30</div></div>
+        <div class="unit"><canvas class="cv live" data-w="modknob2" width="72" height="72"></canvas><div class="cellcap">Davies · depth −0.25</div></div>
+        <div class="unit"><canvas class="cv live" data-w="modknob3" width="72" height="72"></canvas><div class="cellcap">custom painter + mod</div></div>
+      </div>
+    </section>
+
     <section id="fader">
       <div class="sechead"><h2>Fader</h2><span class="tag">paint::drawFader</span></div>
-      <p class="desc">Channel fader — centre rail, accent fill below the cap, cap brightens while grabbed. <b class="try">Drag a cap up / down.</b></p>
+      <p class="desc">Channel fader — centre rail, accent fill below the cap, cap brightens while grabbed. <b class="try">Drag a cap up / down — hold ⇧&nbsp;Shift for 10× fine.</b></p>
       <div class="rack">
         <div class="unit"><canvas class="cv live" data-w="fader0" width="30" height="120"></canvas></div>
         <div class="unit"><canvas class="cv live" data-w="fader1" width="30" height="120"></canvas></div>
@@ -215,6 +229,25 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       </div>
     </section>
 
+    <section id="segmented">
+      <div class="sechead"><h2>Segmented</h2><span class="tag">snd::ui::segmented · paint::drawSegmented</span></div>
+      <p class="desc">A pill group of mutually exclusive options — mono/stereo, filter slope, A/B. One selection; Left/Right arrows move it when focused; equal-width segments sized to the widest label. <b class="try">Click a segment.</b></p>
+      <div class="rack">
+        <div class="unit"><canvas class="cv live" data-w="seg"    width="216" height="26"></canvas><div class="cellcap">3 options</div></div>
+        <div class="unit"><canvas class="cv live" data-w="segab"  width="110" height="26"></canvas><div class="cellcap">A / B</div></div>
+        <div class="unit"><canvas class="cv"      data-w="segdis" width="216" height="26"></canvas><div class="cellcap">disabled</div></div>
+      </div>
+    </section>
+
+    <section id="cycle">
+      <div class="sechead"><h2>Cycle button</h2><span class="tag">snd::ui::cycleButton · paint::drawCycleButton</span></div>
+      <p class="desc">A multi-state value button: click cycles the enum in place, right-click steps back — one control, no dropdown. Pips mark the position in the cycle, and the button is sized to the widest option so nothing jumps. <b class="try">Click / right-click.</b></p>
+      <div class="rack">
+        <div class="unit"><canvas class="cv live" data-w="cyc"  width="110" height="26"></canvas><div class="cellcap">filter slope</div></div>
+        <div class="unit"><canvas class="cv live" data-w="cyc2" width="74"  height="26"></canvas><div class="cellcap">rate multiplier</div></div>
+      </div>
+    </section>
+
 
     <section id="custom-paint">
       <div class="sechead"><h2>Animated &amp; custom paint</h2><span class="tag">animatedButton · ButtonPainter · KnobPainter</span></div>
@@ -235,6 +268,16 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <div class="statecol"><button class="tkey">&#xe61b;</button><div class="cellcap">tune</div></div>
         <div class="statecol"><button class="tkey press">&#xe029;</button><div class="cellcap">held</div></div>
         <div class="statecol"><button class="tkey lc">&#xe3fb;</button><div class="cellcap">lucide</div></div>
+      </div>
+    </section>
+
+    <section id="ledbtn">
+      <div class="sechead"><h2>LED button</h2><span class="tag">snd::ui::ledButton · paint::drawLedButton</span></div>
+      <p class="desc">The tactile key with an integrated status ring — record-arm, input monitor, transport latches. Latched buttons hold the inset face with the ring lit in the accent; <b>arm</b> pulses while pending. <b class="try">Click to latch / release.</b></p>
+      <div class="rack">
+        <div class="statecol"><canvas class="cv live" data-w="ledrec" width="46" height="40"></canvas><div class="cellcap">record · latched</div></div>
+        <div class="statecol"><canvas class="cv live" data-w="ledarm" width="46" height="40"></canvas><div class="cellcap">arm · blinking</div></div>
+        <div class="statecol"><canvas class="cv live" data-w="ledmon" width="46" height="40"></canvas><div class="cellcap">monitor · off</div></div>
       </div>
     </section>
 
@@ -369,6 +412,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   function hex(c){var n=parseInt(c.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
   function rgba(c,a){var r=hex(c);return'rgba('+r[0]+','+r[1]+','+r[2]+','+a+')';}
   function mix(c1,c2,t){var a=hex(c1),b=hex(c2);return'rgb('+Math.round(a[0]+(b[0]-a[0])*t)+','+Math.round(a[1]+(b[1]-a[1])*t)+','+Math.round(a[2]+(b[2]-a[2])*t)+')';}
+  function mixH(c1,c2,t){var a=hex(c1),b=hex(c2);return'#'+[0,1,2].map(function(i){var v=Math.round(a[i]+(b[i]-a[i])*t);return(v<16?'0':'')+v.toString(16);}).join('');}
   var A0=-3.926990817, A1=0.785398163;
   function kang(f){f=Math.max(0,Math.min(1,f));return A0+f*(A1-A0);}
   function dbNorm(lin,floor){if(lin<=0)return 0;var db=20*Math.log10(lin);return Math.max(0,Math.min(1,1-db/floor));}
@@ -542,6 +586,59 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     var t='OSCILLATOR';g.fillText(t,0,4);var tw=g.measureText(t).width;
     g.strokeStyle=rgba(PAL.frameB,0.67);g.lineWidth=1;g.beginPath();g.moveTo(tw+8,11);g.lineTo(W,11);g.stroke();
   }
+
+  var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function knobMod(g,W,H,frac,depth,modV){ // SND-owned overlay after any body
+    var r=W/2,cx=r,cy=r,rr=r-1,lw=Math.max(1.4,Math.min(2,r*0.09));
+    var col=mixH(A.accent,PAL.ink,0.55);
+    if(depth!==0){var end=cl(frac+depth),a0=kang(Math.min(frac,end)),a1=kang(Math.max(frac,end));
+      if(a1-a0>0.001){g.lineCap='butt';g.beginPath();g.arc(cx,cy,rr,a0,a1);g.strokeStyle=rgba(col,0.71);g.lineWidth=lw;g.stroke();}}
+    if(modV>=0){var a=kang(cl(modV)),dx=Math.cos(a),dy=Math.sin(a);
+      g.beginPath();g.arc(cx+dx*rr,cy+dy*rr,lw*1.05,0,7);g.fillStyle=col;g.fill();}
+  }
+  function modPos(s){var ph=RM?0.8:0.5+0.5*Math.sin(T*2.6);return cl(s.v+s.depth*ph);}
+  function segmentedC(g,W,H,labels,sel,hov,act,dis){
+    var r=H/2,n=labels.length,sw=W/n;
+    g.fillStyle=dis?mix(PAL.frame,'#000000',0.3):PAL.frame;roundRect(g,0,0,W,H,r);g.fill();
+    for(var i=0;i<n;i++){
+      var x0=i*sw,isSel=i===sel,isHot=!dis&&i===hov;
+      if(isSel){g.fillStyle=mix(PAL.frame,A.accent,dis?0.18:(isHot&&act?0.5:0.4));roundRect(g,x0+2,2,sw-4,H-4,r-2);g.fill();}
+      else if(isHot){g.fillStyle=act?mix(PAL.frameB,A.accent,0.2):PAL.frameB;roundRect(g,x0+2,2,sw-4,H-4,r-2);g.fill();}
+      if(i>0&&!isSel&&sel!==i-1){g.strokeStyle=rgba(PAL.frameB,0.7);g.lineWidth=1;
+        g.beginPath();g.moveTo(x0,H*0.26);g.lineTo(x0,H*0.74);g.stroke();}
+      g.font='12px system-ui,sans-serif';g.textAlign='center';g.textBaseline='middle';
+      g.fillStyle=dis?PAL.dim:isSel?PAL.ink:isHot?mix(PAL.dim,PAL.ink,0.55):PAL.dim;
+      g.fillText(labels[i],x0+sw/2,H/2+0.5);
+    }
+    g.textAlign='start';g.textBaseline='alphabetic';
+    g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,r);g.stroke();
+  }
+  function cycleBtn(g,W,H,label,idx,n,hov,act){
+    g.fillStyle=act?mix(PAL.frame,A.accent,0.4):hov?PAL.frameB:PAL.frame;roundRect(g,0,0,W,H,4);g.fill();
+    g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,4);g.stroke();
+    g.font='12px system-ui,sans-serif';g.textAlign='center';g.textBaseline='middle';
+    g.fillStyle=PAL.ink;g.fillText(label,W/2,H/2-1.5);
+    g.textAlign='start';g.textBaseline='alphabetic';
+    var gap=6,x0=W/2-gap*(n-1)/2,y=H-4.5;
+    for(var i=0;i<n;i++){g.beginPath();g.arc(x0+gap*i,y,i===idx?1.8:1.3,0,7);
+      g.fillStyle=i===idx?A.accent:rgba(PAL.frameB,0.9);g.fill();}
+  }
+  function ledBtn(g,W,H,glyph,level,down,hov){
+    var light=hov&&!down?mix('#c6c9cf','#ffffff',0.12):'#c6c9cf';
+    g.fillStyle=down?'#35383e':light;roundRect(g,0,0,W,H,4);g.fill();
+    g.strokeStyle=down?'rgba(0,0,0,.43)':'rgba(255,255,255,.59)';g.lineWidth=1.6;
+    g.beginPath();g.moveTo(4,1.2);g.lineTo(W-4,1.2);g.stroke();
+    g.strokeStyle=down?'rgba(255,255,255,.16)':'rgba(0,0,0,.35)';
+    g.beginPath();g.moveTo(4,H-1.4);g.lineTo(W-4,H-1.4);g.stroke();
+    g.strokeStyle='rgba(0,0,0,.43)';g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,4);g.stroke();
+    g.font=Math.round(H*0.5)+'px mdf';g.textAlign='center';g.textBaseline='middle';
+    g.fillStyle=down?'#eceff3':'#2b2e34';g.fillText(glyph,W/2,H/2+(down?1:0)+1);
+    g.textAlign='start';g.textBaseline='alphabetic';
+    if(level>0){g.strokeStyle=rgba(A.accent,0.32*level);g.lineWidth=3;roundRect(g,1,1,W-2,H-2,5);g.stroke();}
+    g.strokeStyle=level>0?mix(PAL.ledOff,A.accent,level):PAL.ledOff;
+    g.lineWidth=1.8;roundRect(g,2.5,2.5,W-5,H-5,3);g.stroke();
+  }
+  function armLv(){return RM?1:0.35+0.65*(0.5+0.5*Math.sin(T*6));}
   function roundRect(g,x,y,w,h,r){r=Math.min(r,w/2,h/2);g.beginPath();
     g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
   function roundRectB(g,x,y,w,h,r){g.beginPath();g.moveTo(x,y);g.lineTo(x+w,y);g.lineTo(x+w,y+h-r);
@@ -552,9 +649,16 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   (function(){var seed=[[0,4,8,12],[4,12],[2,6,10,14,3,11],[7,15,0]];
     for(var r=0;r<ROWS;r++)for(var c=0;c<STEPS;c++)pat[r*STEPS+c]=seed[r].indexOf(c)>=0;})();
   var S={ring:{v:0.62},ringbi:{v:0.5},seq:{v:0.55},synth:{v:0.66},davies:{v:0.4},nxd:{v:0.42},ringdis:{v:0.7},custom:{v:0.68},
+    modknob:{v:0.45,depth:0.30},modknob2:{v:0.60,depth:-0.25},modknob3:{v:0.35,depth:0.40},
     fader0:{v:0.62},fader1:{v:0.72},fader2:{v:0.4},fader3:{v:0.9},
     toggle:{v:1,anim:1},toggleon:{v:1,anim:1},toggleoff:{v:0,anim:0},
     ledblink:{on:true},ledon:{on:true},ledoff:{on:false},
+    seg:{sel:1,hov:-1,act:false,n:3,labels:['Mono','Stereo','Wide']},
+    segab:{sel:0,hov:-1,act:false,n:2,labels:['A','B']},
+    segdis:{sel:0,hov:-1,act:false,n:3,labels:['Mono','Stereo','Wide']},
+    cyc:{i:1,hov:false,act:false,n:3,labels:['12 dB/oct','24 dB/oct','48 dB/oct']},
+    cyc2:{i:0,hov:false,act:false,n:3,labels:['×1','×2','×4']},
+    ledrec:{on:true},ledarm:{on:true},ledmon:{on:false},
     xy:{x:0.5,y:0.6},env:{points:[[0,0.35],[0.24,0.82],[0.52,0.28],[0.78,0.62],[1,0.48]],hot:-1,active:-1},keys:{lit:-1}};
 
   var dpr=Math.max(1,window.devicePixelRatio||1);
@@ -579,6 +683,15 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       case 'nxd': knobNxd(g,W,H,s.v);break;
       case 'ringdis': knobRing(g,W,H,s.v,false,true);break;
       case 'custom': customKnob(g,W,H,s.v);break;
+      case 'modknob': knobRing(g,W,H,s.v,false,false);knobMod(g,W,H,s.v,s.depth,modPos(s));break;
+      case 'modknob2': knobDavies(g,W,H,s.v);knobMod(g,W,H,s.v,s.depth,modPos(s));break;
+      case 'modknob3': customKnob(g,W,H,s.v);knobMod(g,W,H,s.v,s.depth,modPos(s));break;
+      case 'seg': case 'segab': segmentedC(g,W,H,s.labels,s.sel,s.hov,s.act,false);break;
+      case 'segdis': segmentedC(g,W,H,s.labels,s.sel,-1,false,true);break;
+      case 'cyc': case 'cyc2': cycleBtn(g,W,H,s.labels[s.i],s.i,s.n,s.hov,s.act);break;
+      case 'ledrec': ledBtn(g,W,H,'',s.on?1:0,s.on,s.hov);break;
+      case 'ledarm': ledBtn(g,W,H,'',s.on?armLv():0,s.on,s.hov);break;
+      case 'ledmon': ledBtn(g,W,H,'',s.on?1:0,s.on,s.hov);break;
       case 'fader0': case 'fader1': case 'fader2': case 'fader3': fader(g,W,H,s.v,!!s.hot);break;
       case 'toggle': case 'toggleon': case 'toggleoff': toggle(g,W,H,s.anim);break;
       case 'ledblink': case 'ledon': case 'ledoff': led(g,W,H,s.on);break;
@@ -606,15 +719,31 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   // ── interaction ──
   function end(cv,fn){['pointerup','pointercancel'].forEach(function(ev){cv.addEventListener(ev,fn);});}
   function cap(cv,e){try{cv.setPointerCapture(e.pointerId);}catch(_){}}
-  function knobDrag(cv,s){cv.style.cursor='ns-resize';cv.style.touchAction='none';var y0,v0,d=false;
-    cv.addEventListener('pointerdown',function(e){d=true;y0=e.clientY;v0=s.v;cap(cv,e);e.preventDefault();});
-    cv.addEventListener('pointermove',function(e){if(!d)return;s.v=cl(v0+(y0-e.clientY)/160);drawOne(cv);});
+  function knobDrag(cv,s){cv.style.cursor='ns-resize';cv.style.touchAction='none';var ly,d=false;
+    cv.addEventListener('pointerdown',function(e){d=true;ly=e.clientY;cap(cv,e);e.preventDefault();});
+    cv.addEventListener('pointermove',function(e){if(!d)return;
+      s.v=cl(s.v+(ly-e.clientY)*(e.shiftKey?0.1:1)/160);ly=e.clientY;drawOne(cv);});
     end(cv,function(){d=false;});}
-  function faderDrag(cv,s){cv.style.cursor='ns-resize';cv.style.touchAction='none';var d=false;
+  function faderDrag(cv,s){cv.style.cursor='ns-resize';cv.style.touchAction='none';var d=false,ly;
     function set(e){var r=cv.getBoundingClientRect(),capH=14;s.v=cl(1-((e.clientY-r.top)-capH/2)/(cv._h-capH));s.hot=true;drawOne(cv);}
-    cv.addEventListener('pointerdown',function(e){d=true;cap(cv,e);set(e);e.preventDefault();});
-    cv.addEventListener('pointermove',function(e){if(d)set(e);});
+    cv.addEventListener('pointerdown',function(e){d=true;ly=e.clientY;cap(cv,e);
+      if(e.shiftKey){s.hot=true;drawOne(cv);}else set(e);e.preventDefault();});
+    cv.addEventListener('pointermove',function(e){if(!d)return;
+      if(e.shiftKey){var capH=14;s.v=cl(s.v+(ly-e.clientY)*0.1/(cv._h-capH));s.hot=true;drawOne(cv);}
+      else set(e);ly=e.clientY;});
     end(cv,function(){d=false;s.hot=false;drawOne(cv);});}
+  function segDrag(cv,s){cv.style.cursor='pointer';cv.style.touchAction='none';
+    function idx(e){var r=cv.getBoundingClientRect();return Math.max(0,Math.min(s.n-1,Math.floor((e.clientX-r.left)/(cv._w/s.n))));}
+    cv.addEventListener('pointerdown',function(e){s.sel=idx(e);s.hov=idx(e);s.act=true;drawOne(cv);e.preventDefault();});
+    cv.addEventListener('pointermove',function(e){s.hov=idx(e);drawOne(cv);});
+    cv.addEventListener('pointerleave',function(){s.hov=-1;s.act=false;drawOne(cv);});
+    end(cv,function(){s.act=false;drawOne(cv);});}
+  function cycClick(cv,s){cv.style.cursor='pointer';cv.style.touchAction='none';
+    cv.addEventListener('pointerdown',function(e){if(e.button!==0)return;s.act=true;drawOne(cv);e.preventDefault();});
+    cv.addEventListener('pointerup',function(){if(!s.act)return;s.act=false;s.i=(s.i+1)%s.n;drawOne(cv);});
+    cv.addEventListener('contextmenu',function(e){e.preventDefault();s.i=(s.i+s.n-1)%s.n;drawOne(cv);});
+    cv.addEventListener('pointerenter',function(){s.hov=true;drawOne(cv);});
+    cv.addEventListener('pointerleave',function(){s.hov=false;s.act=false;drawOne(cv);});}
   function xyDrag(cv,s){cv.style.cursor='crosshair';cv.style.touchAction='none';var d=false;
     function set(e){var r=cv.getBoundingClientRect();s.x=cl((e.clientX-r.left)/cv._w);s.y=cl(1-(e.clientY-r.top)/cv._h);drawOne(cv);}
     cv.addEventListener('pointerdown',function(e){d=true;cap(cv,e);set(e);e.preventDefault();});
@@ -640,8 +769,11 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 
   cvs.forEach(function(cv){var k=cv._k,s=S[k];
     if(k==='ring'||k==='ringbi'||k==='seq'||k==='synth'||k==='davies'||k==='nxd'||k==='custom') knobDrag(cv,s);
+    else if(/^modknob/.test(k)) knobDrag(cv,s);
     else if(/^fader/.test(k)) faderDrag(cv,s);
     else if(/^toggle/.test(k)) clickToggle(cv,function(){s.v=s.v>0.5?0:1;});
+    else if(k==='seg'||k==='segab') segDrag(cv,s);
+    else if(/^cyc/.test(k)) cycClick(cv,s);
     else if(/^led/.test(k)) clickToggle(cv,function(){s.on=!s.on;drawOne(cv);});
     else if(k==='xy') xyDrag(cv,s);
     else if(k==='env') envDrag(cv,s);
@@ -659,6 +791,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   var tw=['toggle','toggleon','toggleoff'];
   function loop(t){T=t/1000;
     drawOne(byK.meterL);drawOne(byK.meterR);drawOne(byK.meterH);
+    drawOne(byK.modknob);drawOne(byK.modknob2);drawOne(byK.modknob3);
+    if(S.ledarm.on)drawOne(byK.ledarm);
     tw.forEach(function(k){var s=S[k];if(Math.abs(s.anim-s.v)>0.001){s.anim+=(s.v-s.anim)*0.25;drawOne(byK[k]);}else if(s.anim!==s.v){s.anim=s.v;drawOne(byK[k]);}});
     requestAnimationFrame(loop);
   }

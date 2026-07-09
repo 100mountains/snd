@@ -90,6 +90,20 @@ bool outlineButton(const char* label, const ImVec2& size,
                    const paint::OutlineButtonStyle& style,
                    bool selected = false);
 
+// Segmented control: a pill group of mutually exclusive options (mono/stereo,
+// filter slope, A/B). Click a segment, or use Left/Right when focused.
+// size 0 = equal-width segments sized to the widest label. Returns true when
+// the selection changes.
+bool segmented(const char* id, const char* const* labels, int count,
+               int* selected, const ImVec2& size = ImVec2(0, 0));
+
+// Multi-state value button: shows the current option and cycles on click
+// (right-click steps back). Pips under the label mark the position in the
+// cycle. Sized to the widest option so it stays stable while cycling.
+// Returns true when the value changes.
+bool cycleButton(const char* id, const char* const* labels, int count,
+                 int* index, const ImVec2& size = ImVec2(0, 0));
+
 // Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
 // independent like SVG). `active` renders with the accent colour + border.
 enum class Icon {
@@ -123,6 +137,15 @@ ImFont* iconFontLucide();
 // default light grey, else a themed face colour. Returns true on click.
 bool iconButton(const char* id, const char* glyph, const ImVec2& size = ImVec2(0, 0),
                 ImFont* font = nullptr, bool toggled = false, ImU32 face = 0);
+
+// Tactile key with an integrated status LED ring (record-arm, monitor,
+// transport latches). Click toggles *on; the face holds the inset look and
+// the ring lights while latched. `blink` pulses the lit ring for armed/
+// pending states. ledColor 0 = palette accent; font/face as iconButton.
+// Returns true on click.
+bool ledButton(const char* id, const char* glyph, bool* on, bool blink = false,
+               const ImVec2& size = ImVec2(0, 0), ImFont* font = nullptr,
+               ImU32 ledColor = 0, ImU32 face = 0);
 
 // --- SVG assets -> bitmap / GPU texture -------------------------------------
 // Parse + rasterize an SVG document (nanosvg) so vector logos/icons stay crisp
@@ -165,6 +188,53 @@ struct Palette {
 void setPalette(const Palette& p);
 const Palette& palette();
 
+struct MenuItem {
+    std::string id;
+    std::string label;
+    std::string icon;
+    bool separator = false;
+    bool enabled = true;
+    bool checked = false;
+    std::string rightText;
+    bool danger = false;
+    // Optional nested submenu rows. State remains in PopupMenuState.
+    std::vector<MenuItem> children;
+};
+
+struct PopupMenuState {
+    bool open = false;
+    int highlightedIndex = -1;
+    bool closeOnOutsideClick = true;
+    bool anchorToPosition = false;
+    ImVec2 position = ImVec2(0.0f, 0.0f);
+    // Retained menus use this to keep nested submenu rows caller-owned.
+    std::vector<std::string> openSubmenuPath;
+    std::string typeahead;
+};
+
+struct MenuOptions {
+    float width = 0.0f;
+    float itemHeight = 0.0f;
+    ImFont* iconFont = nullptr;
+};
+
+struct MenuResult {
+    bool activated = false;
+    int index = -1;
+    std::string id;
+    std::string targetId;
+};
+
+void openPopupMenu(const char* popupId);
+MenuResult popupMenu(const char* popupId, const std::vector<MenuItem>& items,
+                     const MenuOptions& options = {});
+MenuResult dropdownMenu(const char* id, const char* currentLabel,
+                        const std::vector<MenuItem>& items, int* selectedIndex,
+                        const ImVec2& size = ImVec2(0, 0),
+                        const MenuOptions& options = {});
+MenuResult contextMenu(const char* popupId, const std::vector<MenuItem>& items,
+                       const MenuOptions& options = {});
+
 // Rotary knob, normalized 0..1. Returns true while the value is changing.
 // size 0 = a sensible default. The label is drawn under the knob.
 bool knob(const char* label, float* value, float size = 0.0f,
@@ -194,6 +264,23 @@ bool knob(const char* label, float* value, float minV, float maxV,
 bool knob(const char* label, float* value, float minV, float maxV,
           const paint::KnobPainter& painter, float size = 0.0f,
           const char* format = "%.2f", bool bipolar = false,
+          ImU32 accent = 0);
+
+// Modulation ring: a thin second arc at the knob rim sweeping `depth` of the
+// normalized range away from the value, plus a live dot at the modulated
+// position. SND draws it over any body -- built-in styles or custom painters
+// -- so modulated knobs keep one shared look. color 0 = a light accent tint.
+struct KnobMod {
+    float depth = 0.0f;   // signed sweep from the value, in normalized units
+    float value = -1.0f;  // live modulated position 0..1; < 0 hides the dot
+    ImU32 color = 0;
+};
+bool knob(const char* label, float* value, float minV, float maxV,
+          KnobStyle style, const KnobMod& mod, float size = 0.0f,
+          const char* format = "%.2f", bool bipolar = false, ImU32 accent = 0);
+bool knob(const char* label, float* value, float minV, float maxV,
+          const paint::KnobPainter& painter, const KnobMod& mod,
+          float size = 0.0f, const char* format = "%.2f", bool bipolar = false,
           ImU32 accent = 0);
 
 // Animated on/off switch. Returns true when toggled.

@@ -11,6 +11,16 @@ ImU32 withAlpha(ImU32 c, uint32_t a) { return (c & 0x00FFFFFF) | (a << 24); }
 
 namespace {
 bool visible(ImU32 c) { return (c & 0xFF000000u) != 0; }
+
+void drawMenuCheck(ImDrawList* dl, const ImVec2& center, ImU32 color)
+{
+    if (!dl)
+        return;
+    dl->AddLine(ImVec2(center.x - 5.0f, center.y),
+                ImVec2(center.x - 1.5f, center.y + 4.0f), color, 1.8f);
+    dl->AddLine(ImVec2(center.x - 1.5f, center.y + 4.0f),
+                ImVec2(center.x + 5.5f, center.y - 5.0f), color, 1.8f);
+}
 } // namespace
 
 ImU32 mix(ImU32 a, ImU32 b, float t)
@@ -269,6 +279,38 @@ void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
                       pal, size * 0.5f, 2.0f);
 }
 
+void drawKnobModRing(ImDrawList* dl, const ImVec2& topLeft, float size,
+                     float frac, const KnobMod& mod, const Palette& pal,
+                     ImU32 accent)
+{
+    if (!dl || (mod.depth == 0.0f && mod.value < 0.0f))
+        return;
+    if (accent == 0)
+        accent = pal.accent;
+    const ImU32 col = mod.color ? mod.color : mix(accent, pal.text, 0.55f);
+
+    const float radius = size * 0.5f;
+    const ImVec2 c(topLeft.x + radius, topLeft.y + radius);
+    const float rArc = radius - 1.0f; // rim overlay; focus ring stays outside
+    const float lineW = std::clamp(radius * 0.09f, 1.4f, 2.0f);
+
+    frac = std::clamp(frac, 0.0f, 1.0f);
+    if (mod.depth != 0.0f) {
+        const float end = std::clamp(frac + mod.depth, 0.0f, 1.0f);
+        const float a0 = knobAngle(std::min(frac, end));
+        const float a1 = knobAngle(std::max(frac, end));
+        if (a1 - a0 > 0.001f) {
+            dl->PathArcTo(c, rArc, a0, a1, 32);
+            dl->PathStroke(withAlpha(col, 0xB4), 0, lineW);
+        }
+    }
+    if (mod.value >= 0.0f) {
+        const ImVec2 d = dirAt(knobAngle(std::clamp(mod.value, 0.0f, 1.0f)));
+        dl->AddCircleFilled(ImVec2(c.x + d.x * rArc, c.y + d.y * rArc),
+                            lineW * 1.05f, col);
+    }
+}
+
 void drawDefaultKnob(const KnobPaintArgs& args)
 {
     if (!args.palette || !args.state)
@@ -288,6 +330,12 @@ void drawKnobWithPainter(const KnobPaintArgs& args, const KnobPainter& painter)
         painter(bodyArgs);
     else
         drawDefaultKnob(bodyArgs);
+
+    // SND-owned overlays after the body: modulation ring, then focus ring.
+    if (args.drawList && args.palette)
+        drawKnobModRing(args.drawList, args.topLeft, args.size,
+                        args.normalizedValue, args.mod, *args.palette,
+                        args.accent);
 
     if (args.drawList && args.palette && args.state &&
         args.state->focused && !args.state->disabled) {
@@ -501,6 +549,32 @@ void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     }
 }
 
+void drawLedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* glyph, float ledLevel,
+                   const Palette& pal, const ControlState& state, bool down,
+                   ImU32 ledColor, ImU32 face)
+{
+    if (!dl || !font)
+        return;
+    drawTactileIconButton(dl, font, topLeft, size, glyph, pal, state, down, face);
+
+    if (ledColor == 0)
+        ledColor = pal.accent;
+    ledLevel = std::clamp(ledLevel, 0.0f, 1.0f);
+    if (state.disabled)
+        ledLevel *= 0.35f;
+
+    const float r = 4.0f;
+    const ImVec2 mn(topLeft.x + 2.5f, topLeft.y + 2.5f);
+    const ImVec2 mx(topLeft.x + size.x - 2.5f, topLeft.y + size.y - 2.5f);
+    if (ledLevel > 0.0f) // soft bloom outside the lit ring
+        dl->AddRect(ImVec2(mn.x - 1.5f, mn.y - 1.5f),
+                    ImVec2(mx.x + 1.5f, mx.y + 1.5f),
+                    withAlpha(ledColor, (uint32_t)(0x52 * ledLevel)),
+                    r + 1.0f, 0, 3.0f);
+    dl->AddRect(mn, mx, mix(pal.ledOff, ledColor, ledLevel), r - 1.0f, 0, 1.8f);
+}
+
 void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
                           const ImVec2& size, Icon icon, ImU32 accent,
                           const Palette& pal, const ControlState& state,
@@ -636,6 +710,113 @@ void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
         drawFocusRing(dl, topLeft, mx, pal, r);
 }
 
+void drawSegmented(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* const* labels, int count,
+                   int selected, int hovered, const Palette& pal,
+                   const ControlState& state, float fontScale)
+{
+    if (!dl || !font || !labels || count <= 0)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = size.y * 0.5f; // pill
+    ImU32 body = pal.frame;
+    if (state.disabled)
+        body = mix(body, IM_COL32(0, 0, 0, 255), 0.30f);
+    dl->AddRectFilled(topLeft, mx, body, r);
+
+    const float segW = size.x / (float)count;
+    for (int i = 0; i < count; ++i) {
+        const float x0 = topLeft.x + segW * (float)i;
+        const bool isSel = i == selected;
+        const bool isHot = !state.disabled && i == hovered;
+
+        if (isSel) {
+            ImU32 fill = mix(pal.frame, pal.accent, state.disabled ? 0.18f : 0.40f);
+            if (isHot && state.active)
+                fill = mix(pal.frame, pal.accent, 0.50f);
+            dl->AddRectFilled(ImVec2(x0 + 2.0f, topLeft.y + 2.0f),
+                              ImVec2(x0 + segW - 2.0f, mx.y - 2.0f), fill,
+                              r - 2.0f);
+        } else if (isHot) {
+            dl->AddRectFilled(ImVec2(x0 + 2.0f, topLeft.y + 2.0f),
+                              ImVec2(x0 + segW - 2.0f, mx.y - 2.0f),
+                              state.active ? mix(pal.frameBright, pal.accent, 0.20f)
+                                           : pal.frameBright,
+                              r - 2.0f);
+        }
+        if (i > 0 && !isSel && selected != i - 1) { // resting divider
+            dl->AddLine(ImVec2(x0, topLeft.y + size.y * 0.26f),
+                        ImVec2(x0, mx.y - size.y * 0.26f),
+                        withAlpha(pal.frameBright, 0xB4), 1.0f);
+        }
+
+        const char* text = labels[i] ? labels[i] : "";
+        const float fs = ImGui::GetFontSize() * fontScale;
+        const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
+        const ImU32 txt = state.disabled ? pal.textDim
+                          : isSel        ? pal.text
+                          : isHot        ? mix(pal.textDim, pal.text, 0.55f)
+                                         : pal.textDim;
+        dl->AddText(font, fs,
+                    ImVec2(x0 + (segW - ts.x) * 0.5f,
+                           topLeft.y + (size.y - ts.y) * 0.5f),
+                    txt, text);
+    }
+
+    dl->AddRect(topLeft, mx, pal.frameBright, r);
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
+void drawCycleButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                     const ImVec2& size, const char* text, int index, int count,
+                     const Palette& pal, const ControlState& state,
+                     float fontScale)
+{
+    if (!dl || !font)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = 4.0f;
+    ImU32 fill = state.active ? mix(pal.frame, pal.accent, 0.40f) : pal.frame;
+    if (state.hovered && !state.active && !state.disabled)
+        fill = pal.frameBright;
+    if (state.disabled)
+        fill = mix(fill, IM_COL32(0, 0, 0, 255), 0.30f);
+    dl->AddRectFilled(topLeft, mx, fill, r);
+    dl->AddRect(topLeft, mx, pal.frameBright, r);
+
+    const float pipGap = 6.0f;
+    const bool pips = count > 1 && count <= 8 && size.y >= 22.0f &&
+                      pipGap * (float)(count - 1) <= size.x - 12.0f;
+    if (text && text[0]) {
+        const float fs = ImGui::GetFontSize() * fontScale;
+        const ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
+        const ImVec2 p(topLeft.x + std::max(0.0f, size.x - ts.x) * 0.5f,
+                       topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f -
+                           (pips ? 1.5f : 0.0f));
+        dl->AddText(font, fs, p, state.disabled ? pal.textDim : pal.text, text);
+    }
+
+    if (pips) { // position within the cycle
+        const float y = mx.y - 4.5f;
+        const float x0 = topLeft.x + size.x * 0.5f -
+                         pipGap * (float)(count - 1) * 0.5f;
+        for (int i = 0; i < count; ++i) {
+            const bool onPip = i == index;
+            dl->AddCircleFilled(ImVec2(x0 + pipGap * (float)i, y),
+                                onPip ? 1.8f : 1.3f,
+                                onPip && !state.disabled
+                                    ? pal.accent
+                                    : withAlpha(pal.frameBright, 0xE6));
+        }
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
 void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const ImVec2& size, const char* text,
                        const Palette& pal, const ControlState& state,
@@ -715,6 +896,115 @@ void drawButtonWithPainter(const ButtonPaintArgs& args,
                              args.topLeft.y + args.size.y),
                       *args.palette, 4.0f, 2.0f);
     }
+}
+
+void drawMenuPanel(ImDrawList* dl, const ImVec2& topLeft,
+                   const ImVec2& size, const Palette& pal)
+{
+    if (!dl)
+        return;
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    dl->AddRectFilled(ImVec2(topLeft.x + 2.0f, topLeft.y + 3.0f),
+                      ImVec2(mx.x + 2.0f, mx.y + 3.0f),
+                      IM_COL32(0, 0, 0, 110), 4.0f);
+    dl->AddRectFilled(topLeft, mx, mix(pal.frame, IM_COL32(0, 0, 0, 255), 0.18f), 4.0f);
+    dl->AddRect(topLeft, mx, pal.frameBright, 4.0f);
+}
+
+void drawMenuItem(ImDrawList* dl, ImFont* font, ImFont* iconFont,
+                  const ImVec2& topLeft, const ImVec2& size,
+                  const MenuItem& item, const Palette& pal,
+                  const ControlState& state, float fontScale)
+{
+    if (!dl || !font)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    if (item.separator) {
+        const float y = topLeft.y + size.y * 0.5f;
+        dl->AddLine(ImVec2(topLeft.x + 8.0f, y), ImVec2(mx.x - 8.0f, y),
+                    withAlpha(pal.frameBright, 0xA8), 1.0f);
+        return;
+    }
+
+    ImU32 fill = 0;
+    if (state.selected)
+        fill = withAlpha(pal.accent, state.disabled ? 0x18 : 0x34);
+    if (state.hovered && !state.disabled)
+        fill = mix(visible(fill) ? fill : pal.frame, pal.frameBright, 0.72f);
+    if (state.active && !state.disabled)
+        fill = mix(visible(fill) ? fill : pal.frameBright, pal.accent, 0.32f);
+    if (visible(fill))
+        dl->AddRectFilled(topLeft, mx, fill, 3.0f);
+
+    if ((state.hovered || state.focused) && !state.disabled)
+        dl->AddRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright, 3.0f);
+
+    const float fs = ImGui::GetFontSize() * fontScale;
+    const float centerY = topLeft.y + size.y * 0.5f;
+    const ImU32 hotCol = item.danger ? pal.meterHot : pal.accent;
+    const ImU32 textCol = state.disabled ? pal.textDim
+                                         : item.danger ? mix(pal.text, pal.meterHot, 0.36f)
+                                                       : pal.text;
+    const ImU32 accent = state.disabled ? mix(hotCol, pal.frameBright, 0.60f)
+                                        : hotCol;
+
+    if (item.checked)
+        drawMenuCheck(dl, ImVec2(topLeft.x + 14.0f, centerY), accent);
+    else if (item.danger) {
+        const ImVec2 a(topLeft.x + 13.0f, centerY - 6.0f);
+        const ImVec2 b(topLeft.x + 18.0f, centerY + 5.0f);
+        const ImVec2 c(topLeft.x + 8.0f, centerY + 5.0f);
+        dl->AddTriangleFilled(a, b, c, accent);
+    }
+
+    if (!item.icon.empty()) {
+        ImFont* glyphFont = iconFont ? iconFont : font;
+        const float iconSize = ImGui::GetFontSize();
+        ImVec2 glyphSize = glyphFont->CalcTextSizeA(iconSize, FLT_MAX, 0.0f,
+                                                    item.icon.c_str());
+        dl->AddText(glyphFont, iconSize,
+                    ImVec2(topLeft.x + 26.0f,
+                           topLeft.y + std::max(0.0f, size.y - glyphSize.y) * 0.5f),
+                    state.disabled ? pal.textDim : accent, item.icon.c_str());
+    }
+
+    const float textX = topLeft.x + (item.icon.empty() ? 30.0f : 50.0f);
+    const char* label = item.label.c_str();
+    ImVec2 labelSize = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, label);
+    const bool hasSubmenu = !item.children.empty();
+    const float arrowPad = hasSubmenu ? 18.0f : 0.0f;
+    const float rightPad = item.rightText.empty()
+                               ? 8.0f + arrowPad
+                               : font->CalcTextSizeA(fs, FLT_MAX, 0.0f,
+                                                     item.rightText.c_str()).x + 24.0f +
+                                     arrowPad;
+    dl->PushClipRect(ImVec2(textX, topLeft.y), ImVec2(mx.x - rightPad, mx.y), true);
+    dl->AddText(font, fs, ImVec2(textX, topLeft.y + std::max(0.0f, size.y - labelSize.y) * 0.5f),
+                textCol, label);
+    dl->PopClipRect();
+
+    if (!item.rightText.empty()) {
+        const ImU32 rightCol = state.disabled ? pal.textDim
+                                             : item.danger ? accent : pal.textDim;
+        ImVec2 rightSize = font->CalcTextSizeA(fs, FLT_MAX, 0.0f,
+                                               item.rightText.c_str());
+        dl->AddText(font, fs,
+                    ImVec2(mx.x - 10.0f - arrowPad - rightSize.x,
+                           topLeft.y + std::max(0.0f, size.y - rightSize.y) * 0.5f),
+                    rightCol, item.rightText.c_str());
+    }
+
+    if (hasSubmenu) {
+        const ImU32 arrowCol = state.disabled ? pal.textDim : pal.text;
+        const float x = mx.x - 12.0f;
+        dl->AddTriangleFilled(ImVec2(x - 3.0f, centerY - 5.0f),
+                              ImVec2(x - 3.0f, centerY + 5.0f),
+                              ImVec2(x + 3.0f, centerY), arrowCol);
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, 3.0f);
 }
 
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
@@ -1021,6 +1311,138 @@ void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
     dl->AddRect(topLeft, mx, pal.frameBright, 3.0f);
     if (state.focused && !state.disabled)
         drawFocusRing(dl, topLeft, mx, pal, 3.0f);
+}
+
+void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                   const ImVec2& pan, float zoom, const Palette& pal,
+                   const ControlState& state)
+{
+    if (!dl)
+        return;
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    dl->AddRectFilled(topLeft, mx,
+                      mix(IM_COL32(0, 0, 0, 255), pal.frame, 0.72f), 3.0f);
+    if (size.x <= 0.0f || size.y <= 0.0f)
+        return;
+
+    float minor = 24.0f * std::max(0.05f, zoom);
+    while (minor < 12.0f)
+        minor *= 2.0f;
+    while (minor > 48.0f)
+        minor *= 0.5f;
+    const float major = minor * 4.0f;
+    const ImU32 minorCol = withAlpha(pal.frameBright, state.disabled ? 0x24 : 0x38);
+    const ImU32 majorCol = withAlpha(pal.frameBright, state.disabled ? 0x38 : 0x62);
+
+    const float ox = std::fmod(pan.x * zoom, minor);
+    const float oy = std::fmod(pan.y * zoom, minor);
+    for (float x = topLeft.x + ox; x < mx.x; x += minor)
+        if (x >= topLeft.x)
+            dl->AddLine(ImVec2(x, topLeft.y), ImVec2(x, mx.y), minorCol, 1.0f);
+    for (float y = topLeft.y + oy; y < mx.y; y += minor)
+        if (y >= topLeft.y)
+            dl->AddLine(ImVec2(topLeft.x, y), ImVec2(mx.x, y), minorCol, 1.0f);
+
+    const float mox = std::fmod(pan.x * zoom, major);
+    const float moy = std::fmod(pan.y * zoom, major);
+    for (float x = topLeft.x + mox; x < mx.x; x += major)
+        if (x >= topLeft.x)
+            dl->AddLine(ImVec2(x, topLeft.y), ImVec2(x, mx.y), majorCol, 1.0f);
+    for (float y = topLeft.y + moy; y < mx.y; y += major)
+        if (y >= topLeft.y)
+            dl->AddLine(ImVec2(topLeft.x, y), ImVec2(mx.x, y), majorCol, 1.0f);
+
+    dl->AddRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright, 3.0f);
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, 3.0f);
+}
+
+void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
+               const Palette& pal, const ControlState& state,
+               ImU32 color, float thickness)
+{
+    if (!dl)
+        return;
+    if (color == 0)
+        color = pal.accent;
+    color = state.disabled ? mix(color, pal.frameBright, 0.70f) : color;
+    if (state.hovered)
+        color = mix(color, IM_COL32(255, 255, 255, 255), 0.18f);
+
+    const float dx = std::max(38.0f, std::abs(to.x - from.x) * 0.52f);
+    const ImVec2 c1(from.x + dx, from.y);
+    const ImVec2 c2(to.x - dx, to.y);
+    const float lineW = std::max(1.0f, thickness + (state.selected ? 1.4f : 0.0f));
+
+    if (state.selected || state.focused)
+        dl->AddBezierCubic(from, c1, c2, to, withAlpha(pal.text, 0x80),
+                           lineW + 3.0f, 24);
+    dl->AddBezierCubic(from, c1, c2, to, color, lineW, 24);
+
+    const float r = state.selected || state.hovered ? 4.0f : 3.0f;
+    dl->AddCircleFilled(from, r, color, 16);
+    dl->AddCircleFilled(to, r, color, 16);
+}
+
+void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                   const ImVec2& size, const char* title, const Palette& pal,
+                   const ControlState& state, bool bypassed, bool error)
+{
+    if (!dl || !font)
+        return;
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = 5.0f;
+    ImU32 body = state.selected ? mix(pal.frame, pal.accent, 0.18f) : pal.frame;
+    if (state.hovered && !state.disabled)
+        body = mix(body, pal.frameBright, 0.35f);
+    if (state.disabled || bypassed)
+        body = mix(body, IM_COL32(0, 0, 0, 255), 0.35f);
+
+    dl->AddRectFilled(topLeft, mx, body, r);
+    const ImVec2 titleMax(mx.x, std::min(mx.y, topLeft.y + 26.0f));
+    ImU32 titleFill = mix(pal.frame, pal.frameBright, 0.35f);
+    if (error)
+        titleFill = mix(titleFill, pal.meterHot, 0.35f);
+    if (bypassed)
+        titleFill = mix(titleFill, pal.textDim, 0.20f);
+    dl->AddRectFilled(topLeft, titleMax, titleFill, r, ImDrawFlags_RoundCornersTop);
+
+    const ImU32 border = state.selected ? pal.accent
+                        : error          ? pal.meterHot
+                                         : pal.frameBright;
+    dl->AddRect(topLeft, mx, border, r, 0, state.selected ? 2.0f : 1.0f);
+    if (state.selected) {
+        dl->AddRectFilled(ImVec2(topLeft.x + 3.0f, topLeft.y + 30.0f),
+                          ImVec2(topLeft.x + 6.0f, mx.y - 6.0f),
+                          pal.accent, 2.0f);
+    }
+
+    const char* label = title ? title : "";
+    if (label[0]) {
+        const float fs = ImGui::GetFontSize() * 0.90f;
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, label);
+        const ImVec2 p(topLeft.x + 10.0f,
+                       topLeft.y + std::max(0.0f, titleMax.y - topLeft.y - ts.y) * 0.5f);
+        dl->PushClipRect(ImVec2(topLeft.x + 8.0f, topLeft.y),
+                         ImVec2(mx.x - 8.0f, titleMax.y), true);
+        dl->AddText(font, fs, p, state.disabled ? pal.textDim : pal.text, label);
+        dl->PopClipRect();
+    }
+
+    if (bypassed) {
+        const ImU32 slash = withAlpha(pal.textDim, 0x92);
+        dl->AddLine(ImVec2(topLeft.x + 9.0f, mx.y - 9.0f),
+                    ImVec2(mx.x - 9.0f, topLeft.y + 9.0f), slash, 1.5f);
+    }
+    if (error) {
+        const ImVec2 c(mx.x - 13.0f, topLeft.y + 13.0f);
+        dl->AddTriangleFilled(ImVec2(c.x, c.y - 6.0f),
+                              ImVec2(c.x - 6.0f, c.y + 5.0f),
+                              ImVec2(c.x + 6.0f, c.y + 5.0f),
+                              pal.meterHot);
+    }
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
 }
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

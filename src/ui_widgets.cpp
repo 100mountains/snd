@@ -35,7 +35,8 @@ const char* visibleLabelEnd(const char* label)
 
 bool knobPainted(const char* label, float* value, float minV, float maxV,
                  KnobStyle style, const paint::KnobPainter& painter,
-                 float size, const char* format, bool bipolar, ImU32 accent)
+                 const KnobMod& mod, float size, const char* format,
+                 bool bipolar, ImU32 accent)
 {
     const float fs = ImGui::GetFontSize();
     if (size <= 0.0f)
@@ -58,7 +59,7 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
         if (dy != 0.0f) {
             float speed = (maxV - minV) / 220.0f;
             if (ImGui::GetIO().KeyShift)
-                speed *= 0.15f; // fine adjust
+                speed *= 0.1f; // fine adjust: 10x slower
             float lo = std::min(minV, maxV), hi = std::max(minV, maxV);
             float nv = std::clamp(*value - dy * speed, lo, hi);
             if (nv != *value) {
@@ -89,6 +90,7 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
     args.accent = accent;
     args.palette = &gPalette;
     args.state = &state;
+    args.mod = mod;
     paint::drawKnobWithPainter(args, painter);
 
     ImFont* font = ImGui::GetFont();
@@ -117,10 +119,13 @@ bool knob(const char* label, float* value, float size, const char* format)
 {
     if (size <= 0.0f)
         size = ImGui::GetFontSize() * 3.4f;
+    // vendored imgui-knobs: speed 0 means range/250, so scale that for the
+    // shared Shift fine-adjust behaviour (10x slower drag).
+    const float speed = (1.0f / 250.0f) * (ImGui::GetIO().KeyShift ? 0.1f : 1.0f);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, paint::toVec4(gPalette.accent));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, paint::toVec4(gPalette.accentDim));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
-    bool changed = ImGuiKnobs::Knob(label, value, 0.0f, 1.0f, 0.0f, format,
+    bool changed = ImGuiKnobs::Knob(label, value, 0.0f, 1.0f, speed, format,
                                     ImGuiKnobVariant_Wiper, size);
     ImGui::PopStyleColor(3);
     return changed;
@@ -130,10 +135,12 @@ bool knobDb(const char* label, float* db, float minDb, float maxDb, float size)
 {
     if (size <= 0.0f)
         size = ImGui::GetFontSize() * 3.4f;
+    const float speed = ((maxDb - minDb) / 250.0f) *
+                        (ImGui::GetIO().KeyShift ? 0.1f : 1.0f);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, paint::toVec4(gPalette.accent));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, paint::toVec4(gPalette.accentDim));
     ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
-    bool changed = ImGuiKnobs::Knob(label, db, minDb, maxDb, 0.0f, "%.1f dB",
+    bool changed = ImGuiKnobs::Knob(label, db, minDb, maxDb, speed, "%.1f dB",
                                     ImGuiKnobVariant_Tick, size);
     ImGui::PopStyleColor(3);
     return changed;
@@ -143,16 +150,32 @@ bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, float size, const char* format, bool bipolar,
           ImU32 accent)
 {
-    return knobPainted(label, value, minV, maxV, style, {}, size, format,
-                       bipolar, accent);
+    return knobPainted(label, value, minV, maxV, style, {}, KnobMod{}, size,
+                       format, bipolar, accent);
 }
 
 bool knob(const char* label, float* value, float minV, float maxV,
           const paint::KnobPainter& painter, float size, const char* format,
           bool bipolar, ImU32 accent)
 {
-    return knobPainted(label, value, minV, maxV, KnobStyle::Ring, painter, size,
-                       format, bipolar, accent);
+    return knobPainted(label, value, minV, maxV, KnobStyle::Ring, painter,
+                       KnobMod{}, size, format, bipolar, accent);
+}
+
+bool knob(const char* label, float* value, float minV, float maxV,
+          KnobStyle style, const KnobMod& mod, float size, const char* format,
+          bool bipolar, ImU32 accent)
+{
+    return knobPainted(label, value, minV, maxV, style, {}, mod, size, format,
+                       bipolar, accent);
+}
+
+bool knob(const char* label, float* value, float minV, float maxV,
+          const paint::KnobPainter& painter, const KnobMod& mod, float size,
+          const char* format, bool bipolar, ImU32 accent)
+{
+    return knobPainted(label, value, minV, maxV, KnobStyle::Ring, painter, mod,
+                       size, format, bipolar, accent);
 }
 
 bool toggle(const char* label, bool* on)
@@ -242,9 +265,15 @@ bool fader(const char* id, float* value, const ImVec2& size)
     bool changed = false;
     if (ImGui::IsItemActive()) {
         const float capH = 14.0f;
-        float rel = 1.0f - (ImGui::GetIO().MousePos.y - p.y - capH * 0.5f) /
-                              std::max(1.0f, size.y - capH);
-        float nv = std::clamp(rel, 0.0f, 1.0f);
+        const float travel = std::max(1.0f, size.y - capH);
+        float nv;
+        if (ImGui::GetIO().KeyShift) {
+            // fine adjust: relative drag at 10% rate instead of jump-to-position
+            nv = *value - ImGui::GetIO().MouseDelta.y * (0.1f / travel);
+        } else {
+            nv = 1.0f - (ImGui::GetIO().MousePos.y - p.y - capH * 0.5f) / travel;
+        }
+        nv = std::clamp(nv, 0.0f, 1.0f);
         changed = nv != *value;
         *value = nv;
     }
@@ -292,6 +321,138 @@ bool iconButton(const char* id, const char* glyph, const ImVec2& size, ImFont* f
     paint::drawTactileIconButton(ImGui::GetWindowDrawList(), f, p, sz, glyph,
                                  gPalette, state, down, face);
     return clicked;
+}
+
+bool ledButton(const char* id, const char* glyph, bool* on, bool blink,
+               const ImVec2& size, ImFont* font, ImU32 ledColor, ImU32 face)
+{
+    if (!on)
+        return false;
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f)
+        sz.x = sz.y = ImGui::GetFrameHeight() * 1.35f;
+    else if (sz.y <= 0.0f)
+        sz.y = sz.x;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton(id, sz);
+    if (clicked)
+        *on = !*on;
+
+    float level = *on ? 1.0f : 0.0f;
+    if (*on && blink) // arm-blink for pending states
+        level = 0.35f + 0.65f * (0.5f + 0.5f * std::sin((float)ImGui::GetTime() * 6.0f));
+
+    ImFont* f = font ? font : ImGui::GetFont();
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    state.selected = *on;
+    paint::drawLedButton(ImGui::GetWindowDrawList(), f, p, sz, glyph, level,
+                         gPalette, state, ImGui::IsItemActive() || *on,
+                         ledColor, face);
+    return clicked;
+}
+
+bool segmented(const char* id, const char* const* labels, int count,
+               int* selected, const ImVec2& size)
+{
+    if (!labels || count <= 0 || !selected)
+        return false;
+
+    ImFont* font = ImGui::GetFont();
+    const float fs = ImGui::GetFontSize() * 0.90f;
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f) {
+        float maxW = 0.0f; // equal-width segments sized to the widest label
+        for (int i = 0; i < count; ++i)
+            if (labels[i])
+                maxW = std::max(maxW,
+                                font->CalcTextSizeA(fs, FLT_MAX, 0.0f, labels[i]).x);
+        sz.x = (maxW + 22.0f) * (float)count;
+    }
+    if (sz.y <= 0.0f)
+        sz.y = ImGui::GetFrameHeight();
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, sz);
+
+    const float segW = sz.x / (float)count;
+    int hovered = -1;
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+        const float lx = ImGui::GetIO().MousePos.x - p.x;
+        hovered = std::clamp((int)(lx / segW), 0, count - 1);
+    }
+
+    bool changed = false;
+    if (ImGui::IsItemActivated() && hovered >= 0 && *selected != hovered) {
+        *selected = hovered;
+        changed = true;
+    }
+    if (ImGui::IsItemFocused()) { // Left/Right move the selection
+        int next = *selected;
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+            next = std::max(0, *selected - 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+            next = std::min(count - 1, *selected + 1);
+        if (next != *selected) {
+            *selected = next;
+            changed = true;
+        }
+    }
+
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawSegmented(ImGui::GetWindowDrawList(), font, p, sz, labels, count,
+                         std::clamp(*selected, 0, count - 1), hovered, gPalette,
+                         state);
+    return changed;
+}
+
+bool cycleButton(const char* id, const char* const* labels, int count,
+                 int* index, const ImVec2& size)
+{
+    if (!labels || count <= 0 || !index)
+        return false;
+
+    ImFont* font = ImGui::GetFont();
+    const float fs = ImGui::GetFontSize() * 0.90f;
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f) {
+        float maxW = 0.0f; // widest option keeps the button stable while cycling
+        for (int i = 0; i < count; ++i)
+            if (labels[i])
+                maxW = std::max(maxW,
+                                font->CalcTextSizeA(fs, FLT_MAX, 0.0f, labels[i]).x);
+        sz.x = maxW + 26.0f;
+    }
+    if (sz.y <= 0.0f)
+        sz.y = ImGui::GetFrameHeight();
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool clicked = ImGui::InvisibleButton(id, sz);
+    bool changed = false;
+    const int cur = std::clamp(*index, 0, count - 1);
+    if (clicked) {
+        *index = (cur + 1) % count;
+        changed = true;
+    } else if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+        *index = (cur + count - 1) % count; // step back
+        changed = true;
+    }
+
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    const int shown = std::clamp(*index, 0, count - 1);
+    paint::drawCycleButton(ImGui::GetWindowDrawList(), font, p, sz,
+                           labels[shown] ? labels[shown] : "", shown, count,
+                           gPalette, state);
+    return changed;
 }
 
 bool keyboard(const char* id, KeyboardState& st, const ImVec2& size, int firstNote,

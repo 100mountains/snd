@@ -946,13 +946,371 @@ static bool selftestRetainedUi()
          outlineTree.performAction("outline.square", r::Action::Activate) &&
          outlineActivated == 1;
 
+    std::vector<snd::ui::MenuItem> menuItems = {
+        {"add", "Add module", "*", false, true, false},
+        {"sep", {}, {}, true, false, false},
+        {"disabled", "Unavailable", {}, false, false, false},
+        {"duplicate", "Duplicate", {}, false, true, true},
+        {"delete", "Delete", {}, false, true, false, "Del", true},
+        {"more", "More", {}, false, true, false, {}, false,
+         std::vector<snd::ui::MenuItem>{
+             {"freeze", "Freeze", {}, false, true, false},
+             {"flatten", "Flatten", {}, false, true, false},
+         }},
+    };
+
+    int menuActivated = 0;
+    int menuIndex = -1;
+    snd::ui::PopupMenuState menuState;
+    menuState.open = true;
+    r::PaintRenderer menuRenderer;
+    auto menuRoot = w::popupMenu(
+        "menu.popup", &menuState, menuItems,
+        [&](r::Node&, const snd::ui::MenuItem&, int index) {
+            ++menuActivated;
+            menuIndex = index;
+        },
+        &menuRenderer, 180.0f);
+    r::Tree menuTree(std::move(menuRoot));
+    menuTree.layout({220.0f, 120.0f});
+    r::SemanticNode menuAddSem;
+    r::SemanticNode menuDisabledSem;
+    r::SemanticNode menuDupSem;
+    r::SemanticNode menuPopupSem;
+    r::SemanticNode menuMoreSem;
+    const auto* menuAddStyle = menuRenderer.styleFor("menu.popup.add");
+    const auto* menuDeleteStyle = menuRenderer.styleFor("menu.popup.delete");
+    ok = ok && menuTree.validate().empty() &&
+         menuTree.semanticNode("menu.popup", menuPopupSem) &&
+         menuPopupSem.role == r::Role::Menu &&
+         menuTree.semanticNode("menu.popup.add", menuAddSem) &&
+         menuAddSem.role == r::Role::MenuItem &&
+         hasAction(&menuAddSem, r::Action::Activate) &&
+         !menuTree.semanticNode("menu.popup.sep", menuAddSem) &&
+         menuTree.semanticNode("menu.popup.disabled", menuDisabledSem) &&
+         r::hasState(menuDisabledSem.states, r::SemanticState::Disabled) &&
+         !hasAction(&menuDisabledSem, r::Action::Activate) &&
+         menuTree.semanticNode("menu.popup.duplicate", menuDupSem) &&
+         r::hasState(menuDupSem.states, r::SemanticState::Checked) &&
+         menuAddStyle && menuAddStyle->kind == r::VisualKind::MenuItem &&
+         menuAddStyle->menuItem.icon == "*" &&
+         menuDeleteStyle && menuDeleteStyle->menuItem.danger &&
+         menuDeleteStyle->menuItem.rightText == "Del";
+    ok = ok && menuTree.semanticNode("menu.popup.more", menuMoreSem) &&
+         hasAction(&menuMoreSem, r::Action::OpenMenu) &&
+         menuTree.performSemanticAction("menu.popup.more", r::Action::OpenMenu);
+    ok = ok && menuState.openSubmenuPath.size() == 1;
+    ok = ok && menuTree.refreshBoundValues();
+    menuTree.layout({220.0f, 180.0f});
+    ok = ok && menuTree.semanticNode("menu.popup.more.freeze", menuMoreSem) &&
+         menuMoreSem.role == r::Role::MenuItem;
+
+    ok = ok && menuTree.focus("menu.popup.add");
+    key = {};
+    key.type = r::EventType::KeyDown;
+    key.text = "d";
+    ok = ok && menuTree.dispatch(key);
+    menuRenderer.prepareOpenPopups(menuTree);
+    ok = ok && menuTree.focused() &&
+         menuTree.focused()->id() == "menu.popup.duplicate";
+    key = {};
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Down;
+    ok = ok && menuTree.dispatch(key) && menuTree.focused() &&
+         menuTree.focused()->id() == "menu.popup.delete";
+    key.key = r::Key::Escape;
+    ok = ok && menuTree.dispatch(key) && !menuState.open &&
+         menuTree.find("menu.popup") && !menuTree.find("menu.popup")->visible();
+
+    menuState.open = true;
+    if (auto* menuNode = menuTree.find("menu.popup"))
+        menuNode->setVisible(true);
+    ok = ok && menuRenderer.dismissOpenPopupsOutside(
+                     menuTree, ImVec2(0.0f, 0.0f), ImVec2(500.0f, 500.0f)) &&
+         !menuState.open && menuTree.find("menu.popup") &&
+         !menuTree.find("menu.popup")->visible();
+
+    menuState.open = true;
+    if (auto* menuNode = menuTree.find("menu.popup"))
+        menuNode->setVisible(true);
+    ok = ok && menuTree.performAction("menu.popup.duplicate", r::Action::Activate) &&
+         menuActivated == 1 && menuIndex == 3 && !menuState.open;
+
+    int selectedMenu = 3;
+    int dropdownActivated = 0;
+    snd::ui::PopupMenuState dropdownState;
+    r::PaintRenderer dropdownRenderer;
+    snd::ui::paint::OutlineButtonStyle dropdownButtonStyle;
+    dropdownButtonStyle.hoverBorder = IM_COL32(30, 200, 180, 255);
+    dropdownButtonStyle.activeFill = IM_COL32(30, 200, 180, 48);
+    dropdownButtonStyle.rounding = 3.0f;
+    auto dropdownRoot = w::dropdownMenu(
+        "menu.select", "Module type", dropdownState, menuItems, &selectedMenu,
+        [&](r::Node&, const snd::ui::MenuItem&, int) { ++dropdownActivated; },
+        &dropdownRenderer, {150.0f, 28.0f}, 180.0f, dropdownButtonStyle);
+    r::Tree dropdownTree(std::move(dropdownRoot));
+    dropdownTree.layout({220.0f, 160.0f});
+    r::SemanticNode dropdownButtonSem;
+    const auto* dropdownButtonVisual = dropdownRenderer.styleFor("menu.select.button");
+    ok = ok && dropdownTree.validate().empty() &&
+         dropdownTree.semanticNode("menu.select.button", dropdownButtonSem) &&
+         dropdownButtonSem.role == r::Role::ComboBox &&
+         dropdownButtonSem.name == "Duplicate" &&
+         hasAction(&dropdownButtonSem, r::Action::OpenMenu) &&
+         dropdownButtonVisual &&
+         dropdownButtonVisual->outlineButtonStyle.hoverBorder ==
+             dropdownButtonStyle.hoverBorder &&
+         dropdownButtonVisual->outlineButtonStyle.activeFill ==
+             dropdownButtonStyle.activeFill &&
+         dropdownButtonVisual->outlineButtonStyle.rounding ==
+             dropdownButtonStyle.rounding &&
+         !r::hasState(dropdownButtonSem.states, r::SemanticState::Expanded) &&
+         !dropdownTree.semanticNode("menu.select.menu.add", menuAddSem);
+    ok = ok && dropdownTree.performAction("menu.select.button", r::Action::Activate) &&
+         dropdownState.open &&
+         dropdownTree.semanticNode("menu.select.menu.add", menuAddSem) &&
+         dropdownTree.semanticNode("menu.select.button", dropdownButtonSem) &&
+         r::hasState(dropdownButtonSem.states, r::SemanticState::Expanded);
+    dropdownTree.layout({220.0f, 160.0f});
+    dropdownRenderer.prepareOpenPopups(dropdownTree);
+    ok = ok && dropdownTree.focused() &&
+         dropdownTree.focused()->id() == "menu.select.menu.duplicate" &&
+         dropdownState.highlightedIndex == 3;
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Down;
+    ok = ok && dropdownTree.dispatch(key);
+    dropdownRenderer.prepareOpenPopups(dropdownTree);
+    ok = ok && dropdownTree.focused() &&
+         dropdownTree.focused()->id() == "menu.select.menu.delete" &&
+         dropdownState.highlightedIndex == 4;
+    ok = ok && dropdownTree.performAction("menu.select.menu.add", r::Action::Activate) &&
+         selectedMenu == 0 && dropdownActivated == 1 && !dropdownState.open;
+
+    int contextOpens = 0;
+    int contextActivated = 0;
+    snd::ui::PopupMenuState contextState;
+    r::PaintRenderer contextRenderer;
+    auto contextRoot = r::Node::make("context.root");
+    r::Layout contextLayout;
+    contextLayout.kind = r::LayoutKind::Stack;
+    contextRoot->setLayout(contextLayout);
+    contextRoot->addChild(w::contextMenuRegion(
+        "context.region", "Canvas menu target", {120.0f, 40.0f}, contextState,
+        [&](r::Node&, r::Vec2) { ++contextOpens; }, &contextRenderer));
+    contextRoot->addChild(w::popupMenu(
+        "context.menu", &contextState, menuItems,
+        [&](r::Node&, const snd::ui::MenuItem&, int) { ++contextActivated; },
+        &contextRenderer, 120.0f));
+    r::Tree contextTree(std::move(contextRoot));
+    contextTree.layout({260.0f, 180.0f});
+    r::Event contextEvent;
+    contextEvent.position = {10.0f, 10.0f};
+    contextEvent.button = r::MouseButton::Right;
+    contextEvent.type = r::EventType::MouseDown;
+    ok = ok && !contextTree.dispatch(contextEvent) && !contextState.open &&
+         contextOpens == 0;
+    contextEvent.type = r::EventType::MouseUp;
+    ok = ok && !contextTree.dispatch(contextEvent) && !contextState.open &&
+         contextOpens == 0;
+    contextEvent.type = r::EventType::ContextMenu;
+    ok = ok && contextTree.dispatch(contextEvent) && contextState.open &&
+         contextOpens == 1 &&
+         std::abs(contextState.position.x - 10.0f) < 0.0001f &&
+         contextState.anchorToPosition;
+    ok = ok && contextTree.refreshBoundValues();
+    contextTree.layout({260.0f, 180.0f});
+    contextRenderer.prepareOpenPopups(contextTree);
+    const r::Node* contextMenu = contextTree.find("context.menu");
+    ok = ok && contextMenu &&
+         std::abs(contextMenu->bounds().x - 10.0f) < 0.0001f &&
+         std::abs(contextMenu->bounds().y - 10.0f) < 0.0001f &&
+         contextTree.focused() &&
+         contextTree.focused()->id() == "context.menu.add";
+    r::Event contextClick;
+    contextClick.position = {20.0f, 20.0f};
+    contextClick.button = r::MouseButton::Left;
+    contextClick.type = r::EventType::MouseDown;
+    ok = ok && contextTree.dispatch(contextClick);
+    contextClick.type = r::EventType::MouseUp;
+    ok = ok && contextTree.dispatch(contextClick) && contextActivated == 1 &&
+         !contextState.open;
+    contextState.open = false;
+    ok = ok && contextTree.performSemanticAction("context.region",
+                                                 r::Action::OpenMenu) &&
+         contextState.open && contextOpens == 2;
+
+    r::GraphSurfaceState graphState;
+    graphState.viewport.pan = {10.0f, 5.0f};
+    graphState.viewport.zoom = 1.0f;
+    std::vector<r::GraphNode> graphNodes = {
+        {
+            "osc",
+            "Oscillator",
+            {20.0f, 20.0f, 120.0f, 82.0f},
+            {},
+            {{"out", "Audio out", r::GraphPortDirection::Output,
+              r::GraphPortKind::Audio, {112.0f, 34.0f, 12.0f, 12.0f},
+              true}},
+            {
+                {"title", "Oscillator", r::GraphNodePartKind::Title,
+                 {0.0f, 0.0f, 120.0f, 26.0f}},
+                {"cpu", "CPU", r::GraphNodePartKind::Readout,
+                 {10.0f, 52.0f, 64.0f, 20.0f}, "2%"},
+                {"bypass", "Bypass", r::GraphNodePartKind::Toggle,
+                 {82.0f, 30.0f, 28.0f, 16.0f}, {}, 0.0, false, true, true},
+            },
+            true,
+        },
+        {
+            "filter",
+            "Filter",
+            {220.0f, 30.0f, 136.0f, 88.0f},
+            {{"in", "Audio in", r::GraphPortDirection::Input,
+              r::GraphPortKind::Audio, {-4.0f, 38.0f, 12.0f, 12.0f},
+              true}},
+            {},
+            {
+                {"title", "Filter", r::GraphNodePartKind::Title,
+                 {0.0f, 0.0f, 136.0f, 26.0f}},
+                {"level", "Level", r::GraphNodePartKind::Meter,
+                 {18.0f, 54.0f, 88.0f, 10.0f}, {}, 0.7, true},
+            },
+        },
+    };
+    std::vector<r::GraphCable> graphCables = {
+        {"osc-to-filter", "osc", "out", "filter", "in", true},
+    };
+    const r::Vec2 oscOut = r::graphToScreen(graphState.viewport,
+                                            r::Vec2{138.0f, 60.0f});
+    r::GraphHit graphHit = r::hitTestGraph(graphState.viewport, graphNodes,
+                                           graphCables, oscOut);
+    ok = ok && graphHit.kind == r::GraphHitKind::Port &&
+         graphHit.nodeId == "osc" && graphHit.portId == "out" && graphHit.output;
+    const r::Vec2 bypassPoint = r::graphToScreen(graphState.viewport,
+                                                 r::Vec2{116.0f, 58.0f});
+    graphHit = r::hitTestGraph(graphState.viewport, graphNodes, graphCables,
+                               bypassPoint);
+    ok = ok && graphHit.kind == r::GraphHitKind::NodePart &&
+         graphHit.nodeId == "osc" && graphHit.partId == "bypass";
+    const r::Vec2 cablePoint = r::graphToScreen(graphState.viewport,
+                                                r::Vec2{178.0f, 66.0f});
+    graphHit = r::hitTestGraph(graphState.viewport, graphNodes, graphCables,
+                               cablePoint);
+    ok = ok && (graphHit.kind == r::GraphHitKind::Cable ||
+                graphHit.kind == r::GraphHitKind::CableEndpoint) &&
+         graphHit.cableId == "osc-to-filter";
+
+    int graphSelects = 0;
+    int graphActivates = 0;
+    int graphContexts = 0;
+    int graphViewportChanges = 0;
+    r::GraphHit selectedGraphHit;
+    r::GraphHit activatedGraphHit;
+    snd::ui::PopupMenuState graphMenuState;
+    r::PaintRenderer graphRenderer;
+    r::GraphSurfaceCallbacks graphCallbacks;
+    graphCallbacks.onSelect = [&](const r::GraphHit& hit) {
+        ++graphSelects;
+        selectedGraphHit = hit;
+    };
+    graphCallbacks.onActivate = [&](const r::GraphHit& hit) {
+        ++graphActivates;
+        activatedGraphHit = hit;
+    };
+    graphCallbacks.onContextMenu = [&](const r::GraphHit&, r::Vec2) {
+        ++graphContexts;
+    };
+    graphCallbacks.onViewportChanged = [&](const r::GraphViewport&) {
+        ++graphViewportChanges;
+    };
+    auto graphRoot = r::Node::make("graph.root");
+    graphRoot->addChild(w::graphSurface("graph.surface", "Patch graph",
+                                        graphState, graphNodes, graphCables,
+                                        graphCallbacks, &graphRenderer,
+                                        {420.0f, 220.0f}, &graphMenuState));
+    r::Tree graphTree(std::move(graphRoot));
+    graphTree.layout({440.0f, 240.0f});
+    r::SemanticNode graphSem;
+    r::SemanticNode graphModuleSem;
+    r::SemanticNode graphPortSem;
+    r::SemanticNode graphBypassSem;
+    r::SemanticNode graphCableSem;
+    ok = ok && graphTree.validate().empty() &&
+         graphTree.semanticNode("graph.surface", graphSem) &&
+         graphSem.role == r::Role::Canvas &&
+         graphSem.name == "Patch graph" &&
+         hasAction(&graphSem, r::Action::OpenMenu);
+    ok = ok && graphTree.semanticNode("graph.surface.module.osc", graphModuleSem) &&
+         graphModuleSem.role == r::Role::Group &&
+         graphModuleSem.name == "Oscillator" &&
+         hasAction(&graphModuleSem, r::Action::OpenMenu) &&
+         graphTree.semanticNode("graph.surface.module.osc.port.out", graphPortSem) &&
+         graphPortSem.role == r::Role::Button &&
+         graphPortSem.name == "Output Audio out" &&
+         r::hasState(graphPortSem.states, r::SemanticState::Selected) &&
+         graphTree.semanticNode("graph.surface.module.osc.part.bypass",
+                                graphBypassSem) &&
+         graphBypassSem.role == r::Role::Toggle &&
+         graphBypassSem.value.text == "On" &&
+         hasAction(&graphBypassSem, r::Action::Activate) &&
+         graphTree.semanticNode("graph.surface.cable.osc-to-filter",
+                                graphCableSem) &&
+         graphCableSem.role == r::Role::Custom &&
+         graphCableSem.value.text == "Connected";
+    const int graphActivatesBeforeSemantic = graphActivates;
+    ok = ok && graphTree.performSemanticAction(
+                     "graph.surface.module.osc.part.bypass",
+                     r::Action::Activate) &&
+         graphActivates == graphActivatesBeforeSemantic + 1;
+    int graphContextsBeforeSemantic = graphContexts;
+    ok = ok && graphTree.performSemanticAction(
+                     "graph.surface.module.osc.port.out",
+                     r::Action::OpenMenu) &&
+         graphMenuState.open && graphContexts == graphContextsBeforeSemantic + 1 &&
+         graphState.hovered.kind == r::GraphHitKind::Port;
+    graphMenuState.open = false;
+    graphContextsBeforeSemantic = graphContexts;
+    ok = ok && graphTree.performSemanticAction(
+                     "graph.surface.cable.osc-to-filter",
+                     r::Action::Focus) &&
+         graphTree.focused() && graphTree.focused()->id() == "graph.surface" &&
+         graphState.active.kind == r::GraphHitKind::Cable;
+    r::Event graphEvent;
+    graphEvent.position = bypassPoint;
+    graphEvent.button = r::MouseButton::Left;
+    graphEvent.type = r::EventType::MouseDown;
+    ok = ok && graphTree.dispatch(graphEvent) && graphSelects == 1 &&
+         selectedGraphHit.kind == r::GraphHitKind::NodePart &&
+         selectedGraphHit.partId == "bypass";
+    graphEvent.type = r::EventType::MouseUp;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         graphActivates == graphActivatesBeforeSemantic + 2 &&
+         activatedGraphHit.partId == "bypass";
+    graphEvent.position = oscOut;
+    graphEvent.button = r::MouseButton::Right;
+    graphEvent.type = r::EventType::ContextMenu;
+    ok = ok && graphTree.dispatch(graphEvent) && graphMenuState.open &&
+         graphMenuState.anchorToPosition &&
+         graphContexts == graphContextsBeforeSemantic + 1 &&
+         graphState.hovered.kind == r::GraphHitKind::Port;
+    graphEvent.type = r::EventType::MouseWheel;
+    graphEvent.button = r::MouseButton::None;
+    graphEvent.wheelDelta = {0.0f, 1.0f};
+    const float previousZoom = graphState.viewport.zoom;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         graphState.viewport.zoom > previousZoom &&
+         graphViewportChanges == 1;
+
     if (ok)
         printf("PASS (layout/focus/events/semantics/dirty state/widgets)\n");
     else
         printf("FAIL (activated=%d gain=%.3f custom=%d right=%d dbl=%d "
-               "wheel=%d ctx=%d outline=%d semantics=%zu)\n",
+               "wheel=%d ctx=%d outline=%d menu=%d dropdown=%d context=%d "
+               "graphSel=%d graphAct=%d graphCtx=%d graphView=%d semantics=%zu)\n",
                activated, gain, customEvents, rightClickEvents,
                doubleClickEvents, wheelEvents, contextEvents, outlineActivated,
+               menuActivated, dropdownActivated, contextOpens,
+               graphSelects, graphActivates, graphContexts, graphViewportChanges,
                semantics.size());
     return ok;
 }

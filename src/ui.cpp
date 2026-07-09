@@ -21,7 +21,9 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 
 namespace snd::ui {
@@ -29,6 +31,371 @@ namespace snd::ui {
 namespace {
 int gWindowCount = 0;             // glfwTerminate when the last one dies
 GLFWwindow* gShareWindow = nullptr; // GL object sharing (textures cross windows)
+
+float menuItemHeight(const MenuOptions& options)
+{
+    return options.itemHeight > 0.0f ? options.itemHeight
+                                     : std::max(22.0f, ImGui::GetFontSize() * 1.65f);
+}
+
+float menuSeparatorHeight()
+{
+    return 7.0f;
+}
+
+bool menuSelectable(const MenuItem& item)
+{
+    return !item.separator && item.enabled;
+}
+
+std::string menuItemKey(const MenuItem& item, int index)
+{
+    if (!item.id.empty())
+        return item.id;
+    if (!item.label.empty())
+        return item.label;
+    return std::to_string(index);
+}
+
+int firstMenuIndex(const std::vector<MenuItem>& items)
+{
+    for (int i = 0; i < (int)items.size(); ++i)
+        if (menuSelectable(items[(std::size_t)i]))
+            return i;
+    return -1;
+}
+
+int checkedMenuIndex(const std::vector<MenuItem>& items)
+{
+    for (int i = 0; i < (int)items.size(); ++i)
+        if (menuSelectable(items[(std::size_t)i]) && items[(std::size_t)i].checked)
+            return i;
+    return -1;
+}
+
+int nextMenuIndex(const std::vector<MenuItem>& items, int current, int direction)
+{
+    if (items.empty())
+        return -1;
+    if (current < 0 || current >= (int)items.size())
+        current = direction < 0 ? 0 : -1;
+    for (int step = 0; step < (int)items.size(); ++step) {
+        current += direction;
+        if (current < 0)
+            current = (int)items.size() - 1;
+        else if (current >= (int)items.size())
+            current = 0;
+        if (menuSelectable(items[(std::size_t)current]))
+            return current;
+    }
+    return -1;
+}
+
+struct FlatMenuItem {
+    const MenuItem* item = nullptr;
+    int sourceIndex = -1;
+    int depth = 0;
+    std::string path;
+};
+
+bool pathOpen(const std::vector<std::string>& openPaths, const std::string& path)
+{
+    return std::find(openPaths.begin(), openPaths.end(), path) != openPaths.end();
+}
+
+void setPathOpen(std::vector<std::string>& openPaths, const std::string& path,
+                 bool open)
+{
+    auto it = std::find(openPaths.begin(), openPaths.end(), path);
+    if (open) {
+        if (it == openPaths.end())
+            openPaths.push_back(path);
+        return;
+    }
+    if (it != openPaths.end())
+        openPaths.erase(it);
+    openPaths.erase(std::remove_if(openPaths.begin(), openPaths.end(),
+                                   [&](const std::string& openPath) {
+                                       return openPath.size() > path.size() &&
+                                              openPath.compare(0, path.size(), path) == 0 &&
+                                              openPath[path.size()] == '/';
+                                   }),
+                    openPaths.end());
+}
+
+void flattenMenuItems(const std::vector<MenuItem>& items,
+                      const std::vector<std::string>& openPaths,
+                      std::vector<FlatMenuItem>& out, int depth = 0,
+                      const std::string& parentPath = {})
+{
+    for (int i = 0; i < (int)items.size(); ++i) {
+        const MenuItem& item = items[(std::size_t)i];
+        const std::string path = parentPath.empty()
+                                     ? menuItemKey(item, i)
+                                     : parentPath + "/" + menuItemKey(item, i);
+        out.push_back({&item, i, depth, path});
+        if (!item.children.empty() && pathOpen(openPaths, path))
+            flattenMenuItems(item.children, openPaths, out, depth + 1, path);
+    }
+}
+
+int firstFlatMenuIndex(const std::vector<FlatMenuItem>& rows)
+{
+    for (int i = 0; i < (int)rows.size(); ++i)
+        if (rows[(std::size_t)i].item && menuSelectable(*rows[(std::size_t)i].item))
+            return i;
+    return -1;
+}
+
+int checkedFlatMenuIndex(const std::vector<FlatMenuItem>& rows)
+{
+    for (int i = 0; i < (int)rows.size(); ++i)
+        if (rows[(std::size_t)i].item &&
+            menuSelectable(*rows[(std::size_t)i].item) &&
+            rows[(std::size_t)i].item->checked)
+            return i;
+    return -1;
+}
+
+int nextFlatMenuIndex(const std::vector<FlatMenuItem>& rows, int current,
+                      int direction)
+{
+    if (rows.empty())
+        return -1;
+    if (current < 0 || current >= (int)rows.size())
+        current = direction < 0 ? 0 : -1;
+    for (std::size_t step = 0; step < rows.size(); ++step) {
+        current += direction;
+        if (current < 0)
+            current = (int)rows.size() - 1;
+        else if (current >= (int)rows.size())
+            current = 0;
+        const FlatMenuItem& row = rows[(std::size_t)current];
+        if (row.item && menuSelectable(*row.item))
+            return current;
+    }
+    return -1;
+}
+
+std::string lowercaseAscii(std::string text)
+{
+    for (char& ch : text)
+        ch = (char)std::tolower((unsigned char)ch);
+    return text;
+}
+
+int typeaheadFlatMenuIndex(const std::vector<FlatMenuItem>& rows, int current,
+                           const std::string& query)
+{
+    if (rows.empty() || query.empty())
+        return -1;
+    const std::string lowerQuery = lowercaseAscii(query);
+    for (int step = 1; step <= (int)rows.size(); ++step) {
+        const int idx = (std::max(0, current) + step) % (int)rows.size();
+        const FlatMenuItem& row = rows[(std::size_t)idx];
+        if (!row.item || !menuSelectable(*row.item))
+            continue;
+        const std::string label = lowercaseAscii(row.item->label);
+        if (label.size() >= lowerQuery.size() &&
+            std::equal(lowerQuery.begin(), lowerQuery.end(), label.begin()))
+            return idx;
+    }
+    return -1;
+}
+
+void collectMenuMetrics(const std::vector<MenuItem>& items, const MenuOptions& options,
+                        int depth, float& width, float& height)
+{
+    for (const MenuItem& item : items) {
+        if (item.separator) {
+            height += menuSeparatorHeight();
+        } else {
+            height += menuItemHeight(options);
+            const float labelW = ImGui::CalcTextSize(item.label.c_str()).x;
+            const float rightW = item.rightText.empty()
+                                     ? 0.0f
+                                     : ImGui::CalcTextSize(item.rightText.c_str()).x + 20.0f;
+            const float iconW = item.icon.empty() ? 0.0f : ImGui::GetFontSize() + 12.0f;
+            const float submenuW = item.children.empty() ? 0.0f : 18.0f;
+            width = std::max(width, 46.0f + iconW + labelW + rightW + submenuW +
+                                        (float)depth * 16.0f);
+        }
+        collectMenuMetrics(item.children, options, depth + 1, width, height);
+    }
+}
+
+ImVec2 menuPopupSize(const std::vector<MenuItem>& items, const MenuOptions& options)
+{
+    float width = options.width > 0.0f ? options.width : 0.0f;
+    float height = 0.0f;
+    collectMenuMetrics(items, options, 0, width, height);
+    return ImVec2(std::max(width, 144.0f) + 8.0f, height + 8.0f);
+}
+
+bool beginMenuPopup(const char* popupId, const std::vector<MenuItem>& items,
+                    const MenuOptions& options)
+{
+    const ImVec2 popupSize = menuPopupSize(items, options);
+    ImGui::SetNextWindowSize(ImVec2(popupSize.x, 0.0f), ImGuiCond_Always);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0, 0, 0, 0));
+    const bool open = ImGui::BeginPopup(
+        popupId, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    if (!open) {
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+    }
+    return open;
+}
+
+void endMenuPopup()
+{
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+MenuResult drawMenuContents(const char* popupId, const std::vector<MenuItem>& items,
+                            const MenuOptions& options)
+{
+    MenuResult result;
+    if (items.empty())
+        return result;
+
+    struct TypeaheadState {
+        std::string text;
+        double time = 0.0;
+    };
+    static std::unordered_map<ImGuiID, std::vector<std::string>> openPathsByPopup;
+    static std::unordered_map<ImGuiID, TypeaheadState> typeaheadByPopup;
+
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    const ImGuiID activeKey = ImGui::GetID("##snd-menu-active");
+    const ImGuiID popupKey = ImGui::GetID(popupId ? popupId : "##snd-menu");
+    std::vector<std::string>& openPaths = openPathsByPopup[popupKey];
+    std::vector<FlatMenuItem> rows;
+    flattenMenuItems(items, openPaths, rows);
+
+    int active = store->GetInt(activeKey, -2);
+    if (ImGui::IsWindowAppearing() || active == -2) {
+        active = checkedFlatMenuIndex(rows);
+        if (active < 0)
+            active = firstFlatMenuIndex(rows);
+        store->SetInt(activeKey, active);
+    }
+    if (active >= (int)rows.size()) {
+        active = firstFlatMenuIndex(rows);
+        store->SetInt(activeKey, active);
+    }
+
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true)) {
+            active = nextFlatMenuIndex(rows, active, 1);
+            store->SetInt(activeKey, active);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true)) {
+            active = nextFlatMenuIndex(rows, active, -1);
+            store->SetInt(activeKey, active);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false) &&
+            active >= 0 && active < (int)rows.size()) {
+            const FlatMenuItem& row = rows[(std::size_t)active];
+            if (row.item && !row.item->children.empty())
+                setPathOpen(openPaths, row.path, true);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false) && !openPaths.empty()) {
+            openPaths.pop_back();
+            active = firstFlatMenuIndex(rows);
+            store->SetInt(activeKey, active);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            ImGui::CloseCurrentPopup();
+            openPaths.clear();
+            active = -1;
+            store->SetInt(activeKey, active);
+        }
+        ImGuiIO& io = ImGui::GetIO();
+        TypeaheadState& typeahead = typeaheadByPopup[popupKey];
+        if (ImGui::GetTime() - typeahead.time > 0.80)
+            typeahead.text.clear();
+        for (ImWchar ch : io.InputQueueCharacters) {
+            if (ch < 32 || ch > 126 || io.KeyCtrl || io.KeyAlt || io.KeySuper)
+                continue;
+            typeahead.text.push_back((char)ch);
+            typeahead.time = ImGui::GetTime();
+            const int match = typeaheadFlatMenuIndex(rows, active, typeahead.text);
+            if (match >= 0) {
+                active = match;
+                store->SetInt(activeKey, active);
+            }
+        }
+    }
+
+    paint::drawMenuPanel(ImGui::GetWindowDrawList(), ImGui::GetWindowPos(),
+                         ImGui::GetWindowSize(), palette());
+
+    const float rowH = menuItemHeight(options);
+    const float sepH = menuSeparatorHeight();
+    const float rowW = std::max(0.0f, ImGui::GetContentRegionAvail().x);
+    ImFont* iconFont = options.iconFont ? options.iconFont : iconFontMaterial();
+
+    for (int i = 0; i < (int)rows.size(); ++i) {
+        const FlatMenuItem& row = rows[(std::size_t)i];
+        const MenuItem& item = *row.item;
+        const float h = item.separator ? sepH : rowH;
+        const ImVec2 p = ImGui::GetCursorScreenPos();
+
+        ImGui::PushID(i);
+        bool clicked = false;
+        if (item.separator) {
+            ImGui::Dummy(ImVec2(rowW, h));
+        } else {
+            ImGui::InvisibleButton("##menu-item", ImVec2(rowW, h));
+            if (ImGui::IsItemHovered() && item.enabled) {
+                active = i;
+                store->SetInt(activeKey, active);
+            }
+            clicked = item.enabled && ImGui::IsItemClicked(ImGuiMouseButton_Left);
+        }
+        ImGui::PopID();
+
+        paint::ControlState state;
+        state.hovered = !item.separator && active == i;
+        state.focused = state.hovered;
+        state.active = !item.separator && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+                       ImGui::IsMouseHoveringRect(p, ImVec2(p.x + rowW, p.y + h));
+        state.disabled = !item.enabled;
+        state.selected = item.checked || active == i ||
+                         (!item.children.empty() && pathOpen(openPaths, row.path));
+        MenuItem paintItem = item;
+        if (row.depth > 0)
+            paintItem.label = std::string((std::size_t)row.depth * 2, ' ') +
+                              paintItem.label;
+        paint::drawMenuItem(ImGui::GetWindowDrawList(), ImGui::GetFont(), iconFont,
+                            p, ImVec2(rowW, h), paintItem, palette(), state);
+
+        const bool keyActivated = active == i && menuSelectable(item) &&
+                                  (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
+                                   ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false) ||
+                                   ImGui::IsKeyPressed(ImGuiKey_Space, false));
+        if (clicked || keyActivated) {
+            if (!item.children.empty()) {
+                setPathOpen(openPaths, row.path, !pathOpen(openPaths, row.path));
+            } else {
+                result.activated = true;
+                result.index = row.sourceIndex;
+                result.id = item.id.empty() ? item.label : item.id;
+                result.targetId = row.path;
+                openPaths.clear();
+                ImGui::CloseCurrentPopup();
+            }
+        }
+    }
+
+    (void)popupId;
+    return result;
+}
 } // namespace
 
 struct Window::Impl {
@@ -320,6 +687,76 @@ bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, boo
     paint::drawVectorIconButton(ImGui::GetWindowDrawList(), p, size, icon, accent,
                                 palette(), state, active);
     return pressed;
+}
+
+void openPopupMenu(const char* popupId)
+{
+    if (popupId && popupId[0])
+        ImGui::OpenPopup(popupId);
+}
+
+MenuResult popupMenu(const char* popupId, const std::vector<MenuItem>& items,
+                     const MenuOptions& options)
+{
+    if (!popupId || !popupId[0] || !beginMenuPopup(popupId, items, options))
+        return {};
+    MenuResult result = drawMenuContents(popupId, items, options);
+    endMenuPopup();
+    return result;
+}
+
+MenuResult dropdownMenu(const char* id, const char* currentLabel,
+                        const std::vector<MenuItem>& items, int* selectedIndex,
+                        const ImVec2& size, const MenuOptions& options)
+{
+    MenuResult result;
+    if (!id || !id[0])
+        return result;
+    const char* label = currentLabel ? currentLabel : "";
+    ImVec2 buttonSize = size;
+    if (buttonSize.x <= 0.0f)
+        buttonSize.x = options.width > 0.0f ? options.width : 160.0f;
+    if (buttonSize.y <= 0.0f)
+        buttonSize.y = std::max(24.0f, ImGui::GetFrameHeight());
+
+    std::string buttonLabel = std::string(label) + "##" + (id ? id : "dropdown");
+    paint::OutlineButtonStyle style;
+    style.hoverBorder = palette().accent;
+    style.activeFill = paint::withAlpha(palette().accent, 0x28);
+    const bool pressed = outlineButton(buttonLabel.c_str(), buttonSize, style);
+    if (pressed)
+        ImGui::OpenPopup(id);
+
+    MenuOptions popupOptions = options;
+    popupOptions.width = popupOptions.width > 0.0f ? popupOptions.width : buttonSize.x;
+    if (beginMenuPopup(id, items, popupOptions)) {
+        result = drawMenuContents(id, items, popupOptions);
+        endMenuPopup();
+    }
+
+    if (result.activated && selectedIndex)
+        *selectedIndex = result.index;
+    return result;
+}
+
+MenuResult contextMenu(const char* popupId, const std::vector<MenuItem>& items,
+                       const MenuOptions& options)
+{
+    if (!popupId || !popupId[0])
+        return {};
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup) &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+        ImGui::SetNextWindowPos(ImGui::GetMousePos(), ImGuiCond_Appearing);
+        ImGui::OpenPopup(popupId);
+    }
+
+    if (!beginMenuPopup(popupId, items, options))
+        return {};
+
+    MenuResult result = drawMenuContents(popupId, items, options);
+    endMenuPopup();
+    return result;
 }
 
 } // namespace snd::ui

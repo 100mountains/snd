@@ -528,6 +528,20 @@ void Node::setOnRefresh(std::function<bool(Node&)> callback)
     markDirty();
 }
 
+void Node::setSemanticChildren(
+    std::function<void(const Node&, std::vector<SemanticNode>&)> provider)
+{
+    semanticChildren_ = std::move(provider);
+    markDirty();
+}
+
+void Node::setOnSemanticAction(
+    std::function<bool(Node&, const NodeId&, Action, double)> callback)
+{
+    onSemanticAction_ = std::move(callback);
+    markDirty();
+}
+
 bool Node::activate()
 {
     if (!isInteractive(*this))
@@ -735,6 +749,25 @@ bool Node::refreshExternalState()
         return false;
     markDirty();
     return true;
+}
+
+bool Node::provideSemanticChildren(std::vector<SemanticNode>& out) const
+{
+    if (!semanticChildren_)
+        return false;
+    const std::size_t before = out.size();
+    semanticChildren_(*this, out);
+    return out.size() != before;
+}
+
+bool Node::performSemanticChildAction(const NodeId& id, Action action, double value)
+{
+    if (onSemanticAction_ && onSemanticAction_(*this, id, action, value))
+        return true;
+    for (const auto& child : children_)
+        if (child->performSemanticChildAction(id, action, value))
+            return true;
+    return false;
 }
 
 Tree::Tree(Node::Ptr root) : root_(std::move(root))
@@ -950,11 +983,19 @@ bool Tree::dispatch(const Event& event)
     case Key::Enter:
     case Key::Space:
         return current->perform(Action::Activate);
-    case Key::Right:
+    case Key::Down:
+        if (effectiveRole(*current) == Role::ListItem ||
+            effectiveRole(*current) == Role::MenuItem)
+            return focusNext(false);
+        return current->perform(Action::Decrement);
     case Key::Up:
+        if (effectiveRole(*current) == Role::ListItem ||
+            effectiveRole(*current) == Role::MenuItem)
+            return focusNext(true);
+        return current->perform(Action::Increment);
+    case Key::Right:
         return current->perform(Action::Increment);
     case Key::Left:
-    case Key::Down:
         return current->perform(Action::Decrement);
     default:
         return false;
@@ -967,7 +1008,9 @@ bool Tree::performAction(const NodeId& id, Action action, double value)
         return focus(id);
 
     Node* node = find(id);
-    return node ? node->perform(action, value) : false;
+    if (node)
+        return node->perform(action, value);
+    return root_ && root_->performSemanticChildAction(id, action, value);
 }
 
 bool Tree::performSemanticAction(const NodeId& id, Action action, double value)
@@ -975,6 +1018,18 @@ bool Tree::performSemanticAction(const NodeId& id, Action action, double value)
     SemanticNode node;
     if (!semanticNode(id, node) || !hasAction(node.actions, action))
         return false;
+    if (action == Action::Focus && !find(id) && !node.parent.empty()) {
+        NodeId focusId = node.parent;
+        while (!focusId.empty() && !find(focusId)) {
+            SemanticNode parentNode;
+            if (!semanticNode(focusId, parentNode) || parentNode.parent == focusId)
+                break;
+            focusId = parentNode.parent;
+        }
+        if (!focusId.empty())
+            focus(focusId);
+        return root_ && root_->performSemanticChildAction(id, action, value);
+    }
     return performAction(id, action, value);
 }
 
@@ -1046,6 +1101,12 @@ void Tree::collectSemantics(const Node& node, const NodeId& parent,
 
     out.push_back(current);
     const NodeId currentParent = out.back().id;
+    const std::size_t virtualStart = out.size();
+    node.provideSemanticChildren(out);
+    for (std::size_t i = virtualStart; i < out.size(); ++i) {
+        if (out[i].parent.empty())
+            out[i].parent = currentParent;
+    }
     for (const auto& child : node.children_)
         collectSemantics(*child, currentParent, out);
 }
@@ -1114,6 +1175,18 @@ std::vector<ValidationIssue> Tree::validate() const
             visit(*child);
     };
     visit(*root_);
+    std::set<NodeId> semanticSeen;
+    for (const SemanticNode& node : semanticSnapshot()) {
+        if (node.id.empty()) {
+            issues.push_back({ValidationIssueKind::EmptyId, {}});
+        } else if (!semanticSeen.insert(node.id).second) {
+            issues.push_back({ValidationIssueKind::DuplicateId, node.id});
+        }
+        if (!seen.count(node.id) && node.role != Role::None &&
+            node.role != Role::Group && node.name.empty()) {
+            issues.push_back({ValidationIssueKind::MissingAccessibleName, node.id});
+        }
+    }
     return issues;
 }
 

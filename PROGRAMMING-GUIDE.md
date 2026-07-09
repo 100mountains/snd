@@ -105,6 +105,13 @@ and supported actions. Decorative nodes should be renderable but hidden from
 `semanticSnapshot()`.
 Custom widgets that advertise semantic actions beyond the built-in binding and
 activation paths must handle them with `setOnAction(...)`.
+Canvas-backed widgets that draw structured internal parts must not expose only
+one opaque semantic node. Use `setSemanticChildren(...)` to publish virtual
+semantic children with stable IDs, bounds, roles, states, values, and actions,
+and use `setOnSemanticAction(...)` to route those virtual child actions back to
+the owning retained node. This is the preferred pattern for zoomable/spatial
+surfaces such as graphs where real child layout nodes would fight the viewport
+transform.
 
 Use `Role::Canvas` for custom-drawn or live animated regions that still need
 retained layout, focus, hit testing, dirty state, and semantics. Canvas drawing

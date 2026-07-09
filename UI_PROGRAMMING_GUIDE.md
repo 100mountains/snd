@@ -158,23 +158,50 @@ auto gain = w::knob("gain", "Gain", binding, &renderer,
                     });
 ```
 
+### The knob modulation ring
+
+`KnobMod` adds a modulation overlay to any knob: a thin arc sweeping `depth`
+of the normalized range away from the current value, plus a live dot at the
+modulated position (`value`; pass `< 0` to hide it). SND draws the overlay
+after the body — built-in styles or custom painters — and before the focus
+ring, so modulated knobs keep one shared look that a painter cannot remove.
+`color = 0` uses a light accent tint.
+
+```cpp
+snd::ui::KnobMod mod;
+mod.depth = lfoDepth;          // signed; the arc grows from the value angle
+mod.value = modulatedPosition; // live 0..1, recomputed per frame
+snd::ui::knob("Cutoff", &cutoff, 0.0f, 1.0f, snd::ui::KnobStyle::Ring, mod);
+```
+
+Retained knobs take a poll function so a stable tree can show live modulation:
+
+```cpp
+auto cutoff = w::knob("cutoff", "Cutoff", binding,
+                      [&]() { return snd::ui::KnobMod{lfoDepth(), lfoPos()}; },
+                      &renderer);
+```
+
 ## Retained widgets
 
 Include `snd/ui_retained_widgets.h` to build retained panels with the shared
 SND look. The helper namespace is `snd::ui::retained::widgets`; the renderer is
 `snd::ui::retained::PaintRenderer`.
 
-Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`, `sectionHeader`,
-`badge`, `listItem`, `button`, `outlineButton`, `animatedButton`, `iconButton`, `toggle`,
-`knob`, `fader`, `meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
-`envelopeEditor`, and `canvas`. Value controls use `ValueBinding`; the caller
+Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
+`sectionHeader`, `badge`, `listItem`, `menuItem`, `popupMenu`,
+`dropdownMenu`, `contextMenuRegion`, `button`, `outlineButton`,
+`segmented`, `cycleButton`, `ledButton`,
+`animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
+`patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
+`envelopeEditor`, `canvas`, and `graphSurface`. Value controls use `ValueBinding`; the caller
 still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
-faders, drag numbers, XY pads, pattern grids, keyboards, and envelope editors
-support retained pointer editing through the ImGui input bridge. Meters and
-LEDs can also use `ValueBinding` so a stable retained tree can display
-changing audio/UI state without recreating nodes. `xyPad` takes separate X/Y
-bindings, while `patternGrid` edits a caller-owned row-major bool array and
-can read a dynamic playhead callback.
+faders, drag numbers, XY pads, pattern grids, keyboards, menus, and envelope
+editors support retained pointer editing through the ImGui input bridge.
+Meters and LEDs can also use `ValueBinding` so a stable retained tree can
+display changing audio/UI state without recreating nodes. `xyPad` takes
+separate X/Y bindings, while `patternGrid` edits a caller-owned row-major bool
+array and can read a dynamic playhead callback.
 
 The normal retained frame call is:
 
@@ -219,6 +246,22 @@ selected)` for a border-first text action. The default style has no fill or
 resting border, shows an accent border on hover, and fills immediately while
 pressed. `paint::OutlineButtonStyle` can set fill, border, text, and selected
 colours.
+Use `widgets::segmented(id, name, labels, binding, &renderer, size)` for a
+pill group of mutually exclusive options. The binding holds the selected
+index (min/max/step are forced to `0..count-1` step 1, and a default format
+reports the selected label); clicking picks a segment and Left/Right arrows
+move the selection through the retained Increment/Decrement actions.
+Use `widgets::cycleButton(id, name, labels, binding, &renderer, size)` for a
+multi-state value button: Enter/Space/click advance through the options with
+wrap-around, arrows step without wrapping, and the binding is the option
+index as in `segmented`.
+Use `widgets::ledButton(id, name, glyph, binding, blink, &renderer, size,
+ledColor, font)` for tactile keys with an integrated status LED ring
+(record-arm, monitor, latches). The binding is the on/off state as in
+`toggle`; `blink` pulses the lit ring for armed/pending states.
+Retained faders share the immediate fine-adjust behaviour: Shift switches the
+drag from jump-to-position to a relative drag at 10% rate, and Shift on knob
+drags is 10× slower.
 Use `widgets::animatedButton(id, name, onActivate, &renderer, size)` for
 generation/action buttons that need a subtle live sweep. It is Canvas-backed
 for pixels, but remains a retained `Role::Button` with normal focus,
@@ -229,6 +272,76 @@ use the string-glyph overload for Material/Lucide tactile icon buttons.
 Retained `widgets::button(...)` and `widgets::knob(...)` accept optional custom
 painters using the same `paint::ButtonPaintArgs` and `paint::KnobPaintArgs`
 contract as immediate mode.
+
+## Menus
+
+Use SND menu primitives for action lists, dropdown/select controls, and
+right-click/context actions. Menu rows share one `MenuItem` model: `id`,
+`label`, optional icon glyph, `separator`, `enabled`, `checked`,
+`rightText`, `danger`, and optional nested `children`.
+
+Immediate simple popup:
+
+```cpp
+std::vector<snd::ui::MenuItem> items = {
+    {"add", "Add module", ICON_MD_ADD},
+    {"sep", {}, {}, true},
+    {"duplicate", "Duplicate", {}, false, true, true},
+    {"delete", "Delete", ICON_MD_DELETE, false, true, false, "Del", true},
+};
+
+if (snd::ui::outlineButton("Actions", {92.0f, 28.0f}))
+    snd::ui::openPopupMenu("actions.menu");
+
+auto chosen = snd::ui::popupMenu("actions.menu", items);
+if (chosen.activated) {
+    // chosen.id / chosen.index identify the action.
+}
+```
+
+Immediate dropdown/select:
+
+```cpp
+int selected = 0;
+auto picked = snd::ui::dropdownMenu("scale", items[selected].label.c_str(),
+                                    items, &selected, {160.0f, 28.0f});
+```
+
+Immediate context menus attach to the previous item and open on right-click:
+
+```cpp
+snd::ui::patternGrid("steps", cells, rows, steps, {280.0f, 96.0f});
+auto action = snd::ui::contextMenu("steps.context", items);
+```
+
+Retained helpers mirror the same model. `widgets::popupMenu(...)` builds a
+retained menu list with separators, disabled rows, checked rows, icon labels,
+optional nested submenu rows, typeahead by visible label prefix, keyboard
+Up/Down, Enter/Space activation, Right/Left submenu open/close, and Escape
+close. `widgets::dropdownMenu(...)` adds a retained combo-box face and popup
+list using caller-owned `PopupMenuState` and selected index. Pass a
+`paint::OutlineButtonStyle` to `widgets::dropdownMenu(...)` when the combo-box
+face needs custom square/hover/selected treatment; do not restyle the generated
+`<id>.button` child by ID from consumer code.
+`widgets::contextMenuRegion(...)` opens a menu state from a retained
+`ContextMenu` event or semantic `OpenMenu`, not from raw right-button down/up,
+so right-clicks do not double-trigger normal retained activation. It also sets
+`PopupMenuState::anchorToPosition` and records `PopupMenuState::position`; the
+normal retained frame bridge moves the popup subtree to that tree-local anchor
+before hit testing and render.
+
+## Graph Surfaces
+
+Graph UI starts from retained `widgets::graphSurface(...)`: the caller owns
+modules, ports, cables, selection, and DSP/plugin graph state; SND owns shared
+paint, viewport transforms, hit-region conventions, focus treatment, and
+context-menu routing. Use `GraphSurfaceState`, `GraphNode`, `GraphNodePart`,
+`GraphPort`, and `GraphCable` as the structured model. Cables are draw-only;
+module boxes are first-class graph items with stable child parts for readouts,
+meters, bypass/options/delete controls, status chips, and ports. Those parts
+have stable IDs, hit regions, and virtual semantic children even though the
+first renderer draws them in one canvas pass. See
+`docs/graph-surface-ui-brief.md`.
 
 Envelope and curve drawing is shared in `paint::drawEnvelope(...)`.
 The immediate and retained envelope editors use the same curve, point, segment,
@@ -309,6 +422,13 @@ members).
   default style has no fill, shows the accent border on hover, and fills
   immediately while pressed. The overload accepts `paint::OutlineButtonStyle`
   and a selected flag.
+- `segmented(id, labels, count, int* selected, size={})` → changed. Pill group
+  of mutually exclusive options (mono/stereo, filter slope, A/B). Click a
+  segment or use Left/Right when focused; `size=0` gives equal-width segments
+  sized to the widest label.
+- `cycleButton(id, labels, count, int* index, size={})` → changed. Multi-state
+  value button: click cycles the options in place, right-click steps back;
+  pips mark the position. Sized to the widest option so it stays stable.
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
@@ -316,15 +436,36 @@ members).
   accent.
 - `sectionHeader(text)` — dim uppercase caption with a rule to the right.
 
+### Menus
+
+- `openPopupMenu(id)` + `popupMenu(id, items, options={})` -> `MenuResult`.
+  Simple popup action list with separators, disabled rows, checked rows,
+  icon+label rows, nested `MenuItem::children`, typeahead, Up/Down,
+  Enter/Space, Escape, and click-outside close.
+- `dropdownMenu(id, currentLabel, items, &selected, size={}, options={})` ->
+  `MenuResult`. Combo-box face plus popup list; updates `selected` when
+  activated.
+- `contextMenu(id, items, options={})` -> `MenuResult`. Right-click menu for the
+  previously submitted item; opens at the pointer and returns the selected row.
+  `MenuItem::rightText` draws shortcut/value text on the right; `danger` adds a
+  destructive-action cue. Retained menus expose `Role::Menu`,
+  `Role::MenuItem`, and `Role::ComboBox` semantics.
+
 ### Continuous controls
+
+All knob and fader drags support the shared fine-adjust modifier: holding
+Shift drags 10× slower.
 
 - `knob(label, float* v, size=0, format="%.2f")` → changing. Rotary 0..1;
   label drawn under it.
 - `knob(label, float* v, min, max, painter, size=0, format="%.2f")` →
   changing. Custom-painted knob body with SND-owned drag/focus/value handling.
+- `knob(label, float* v, min, max, style|painter, KnobMod, ...)` → changing.
+  Same knobs with the modulation-ring overlay (depth arc + live position dot).
 - `knobDb(label, float* db, minDb, maxDb, size=0)` → changing. Rotary over a dB
   range; a tick marks 0 dB when in range.
-- `fader(id, float* v, size)` → dragging. Vertical fader 0..1.
+- `fader(id, float* v, size)` → dragging. Vertical fader 0..1; Shift switches
+  from jump-to-position to relative fine drag.
 - `dragNumber(label, float* v, speed, min, max, format="%.2f")` → changing.
   Horizontal-drag number field using the shared value-row paint.
 
@@ -333,6 +474,11 @@ members).
 - `toggle(label, bool* on)` → toggled. Animated on/off switch.
 - `led(id, bool on, radius=5, clickable=false, onColor=0)` → clicked (only when
   `clickable`). Glows when on; `onColor=0` uses the accent.
+- `ledButton(id, glyph, bool* on, blink=false, size={}, font=nullptr,
+  ledColor=0, face=0)` → clicked. Tactile key with an integrated status LED
+  ring (record-arm, monitor, transport latches). Latched buttons hold the
+  inset face with the ring lit; `blink` pulses the lit ring for armed/pending
+  states.
 
 ### Meters
 
@@ -357,6 +503,15 @@ members).
   Optional `std::vector<float>* tensions` (same length as points): per-segment
   bend -1..1; drag a segment's middle to curve it.
 - `xyPad(id, float* x, float* y, size)` → dragging. 2D pad over two 0..1 values.
+
+### Graphs
+
+- `widgets::graphSurface(id, name, state, nodes, cables, callbacks, &renderer,
+  size, &menuState)` — retained graph surface with pan/zoom, grid, typed
+  hit-testing, cable drawing, module chrome, module child-part regions, marquee,
+  anchored context-menu support, and virtual semantic children for modules,
+  ports, child parts, and cables. `GraphSurfaceState`, nodes, cables, and graph
+  mutations stay caller-owned.
 
 ### Lists and files
 

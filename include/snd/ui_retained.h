@@ -46,6 +46,9 @@ enum class Role {
     Slider,
     Meter,
     ListItem,
+    Menu,
+    MenuItem,
+    ComboBox,
     Canvas,
     Custom,
 };
@@ -89,6 +92,7 @@ bool hasState(SemanticStates states, SemanticState state);
 enum class Action {
     Focus,
     Activate,
+    OpenMenu,
     Increment,
     Decrement,
     SetValue,
@@ -227,12 +231,14 @@ enum class Key {
 
 struct Event {
     // Pointer coordinates are tree-local. Use clickCount >= 2 for
-    // double-click style gestures; delta and wheelDelta are adapter-provided.
+    // double-click style gestures; delta, wheelDelta, and text are
+    // adapter-provided.
     EventType type = EventType::MouseMove;
     Vec2 position;
     Vec2 delta;
     MouseButton button = MouseButton::Left;
     Key key = Key::Unknown;
+    std::string text;
     Vec2 wheelDelta;
     int clickCount = 0;
     bool shift = false;
@@ -313,6 +319,12 @@ public:
     void setOnAction(std::function<bool(Node&, Action, double)> callback);
     void setOnEvent(std::function<bool(Node&, const Event&)> callback);
     void setOnRefresh(std::function<bool(Node&)> callback);
+    // Virtual semantic children are for Canvas/spatial controls whose internal
+    // parts are not normal retained layout children.
+    void setSemanticChildren(
+        std::function<void(const Node&, std::vector<SemanticNode>&)> provider);
+    void setOnSemanticAction(
+        std::function<bool(Node&, const NodeId&, Action, double)> callback);
 
     void setValueBinding(ValueBinding binding);
     void clearValueBinding();
@@ -337,6 +349,8 @@ private:
     bool handleEvent(const Event& event);
     bool refreshBindingState();
     bool refreshExternalState();
+    bool provideSemanticChildren(std::vector<SemanticNode>& out) const;
+    bool performSemanticChildAction(const NodeId& id, Action action, double value);
 
     NodeId id_;
     Role role_ = Role::Group;
@@ -359,6 +373,8 @@ private:
     std::function<bool(Node&, Action, double)> onAction_;
     std::function<bool(Node&, const Event&)> onEvent_;
     std::function<bool(Node&)> onRefresh_;
+    std::function<void(const Node&, std::vector<SemanticNode>&)> semanticChildren_;
+    std::function<bool(Node&, const NodeId&, Action, double)> onSemanticAction_;
     std::unique_ptr<ValueBinding> valueBinding_;
     bool hasObservedBinding_ = false;
     ValueRange observedBindingValue_;

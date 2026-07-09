@@ -3,10 +3,12 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -163,6 +165,193 @@ ImFont* iconFont(IconFont font)
     case IconFont::Material:
     default:
         return iconFontMaterial();
+    }
+}
+
+bool focusableMenuChild(const Node* node)
+{
+    return node && node->visible() && node->enabled() && node->focusable() &&
+           (node->role() == Role::ListItem || node->role() == Role::MenuItem);
+}
+
+int firstFocusableMenuChild(const Node& menu)
+{
+    for (std::size_t i = 0; i < menu.childCount(); ++i)
+        if (focusableMenuChild(menu.child(i)))
+            return (int)i;
+    return -1;
+}
+
+int checkedMenuChild(const Node& menu)
+{
+    for (std::size_t i = 0; i < menu.childCount(); ++i) {
+        const Node* child = menu.child(i);
+        if (focusableMenuChild(child) &&
+            hasState(child->semantics().states, SemanticState::Checked))
+            return (int)i;
+    }
+    return -1;
+}
+
+int nextFocusableMenuChild(const Node& menu, int current, int direction)
+{
+    if (menu.childCount() == 0)
+        return -1;
+    if (current < 0 || current >= (int)menu.childCount())
+        current = direction < 0 ? 0 : -1;
+    for (std::size_t step = 0; step < menu.childCount(); ++step) {
+        current += direction;
+        if (current < 0)
+            current = (int)menu.childCount() - 1;
+        else if (current >= (int)menu.childCount())
+            current = 0;
+        if (focusableMenuChild(menu.child((std::size_t)current)))
+            return current;
+    }
+    return -1;
+}
+
+int focusedMenuChild(const Node& menu, const Node* focused)
+{
+    if (!focused)
+        return -1;
+    for (std::size_t i = 0; i < menu.childCount(); ++i) {
+        const Node* child = menu.child(i);
+        if (child && child->id() == focused->id() && focusableMenuChild(child))
+            return (int)i;
+    }
+    return -1;
+}
+
+std::string lowercaseAscii(std::string text)
+{
+    for (char& ch : text)
+        ch = (char)std::tolower((unsigned char)ch);
+    return text;
+}
+
+bool startsWithAscii(const std::string& text, const std::string& prefix)
+{
+    return text.size() >= prefix.size() &&
+           std::equal(prefix.begin(), prefix.end(), text.begin());
+}
+
+int typeaheadMenuChild(const Node& menu, int current, const std::string& query)
+{
+    if (query.empty() || menu.childCount() == 0)
+        return -1;
+    const std::string q = lowercaseAscii(query);
+    if (current < 0 || current >= (int)menu.childCount())
+        current = -1;
+    for (std::size_t step = 0; step < menu.childCount(); ++step) {
+        current += 1;
+        if (current >= (int)menu.childCount())
+            current = 0;
+        const Node* child = menu.child((std::size_t)current);
+        if (!focusableMenuChild(child))
+            continue;
+        if (startsWithAscii(lowercaseAscii(child->semantics().name), q))
+            return current;
+    }
+    return -1;
+}
+
+std::string menuPathKey(const MenuItem& item, int index)
+{
+    if (!item.id.empty())
+        return item.id;
+    if (!item.label.empty())
+        return item.label;
+    char suffix[32];
+    std::snprintf(suffix, sizeof suffix, "item%d", index);
+    return suffix;
+}
+
+std::string menuPath(const std::string& parentPath, const MenuItem& item, int index)
+{
+    const std::string key = menuPathKey(item, index);
+    return parentPath.empty() ? key : parentPath + "/" + key;
+}
+
+bool submenuOpen(const PopupMenuState* state, const std::string& path)
+{
+    if (!state)
+        return false;
+    return std::find(state->openSubmenuPath.begin(), state->openSubmenuPath.end(),
+                     path) != state->openSubmenuPath.end();
+}
+
+void setSubmenuOpen(PopupMenuState* state, const std::string& path, bool open)
+{
+    if (!state)
+        return;
+    auto& paths = state->openSubmenuPath;
+    auto it = std::find(paths.begin(), paths.end(), path);
+    if (open) {
+        if (it == paths.end())
+            paths.push_back(path);
+        return;
+    }
+    if (it != paths.end())
+        paths.erase(it);
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [&](const std::string& openPath) {
+                                   return openPath.size() > path.size() &&
+                                          openPath.compare(0, path.size(), path) == 0 &&
+                                          openPath[path.size()] == '/';
+                               }),
+                paths.end());
+}
+
+bool parentSubmenuVisible(const PopupMenuState* state, const std::string& parentPath)
+{
+    return parentPath.empty() || submenuOpen(state, parentPath);
+}
+
+void translateSubtree(Node& node, Vec2 delta)
+{
+    Rect b = node.bounds();
+    b.x += delta.x;
+    b.y += delta.y;
+    node.setBounds(b);
+    for (std::size_t i = 0; i < node.childCount(); ++i)
+        if (Node* child = node.child(i))
+            translateSubtree(*child, delta);
+}
+
+void anchorPopupSubtree(Tree& tree, Node& popup, PopupMenuState& state)
+{
+    Rect b = popup.bounds();
+    float x = state.position.x;
+    float y = state.position.y;
+    const Vec2 viewport = tree.viewport();
+    if (viewport.x > 0.0f && b.w > 0.0f)
+        x = std::clamp(x, 0.0f, std::max(0.0f, viewport.x - b.w));
+    if (viewport.y > 0.0f && b.h > 0.0f)
+        y = std::clamp(y, 0.0f, std::max(0.0f, viewport.y - b.h));
+    translateSubtree(popup, {x - b.x, y - b.y});
+}
+
+void syncPopupFocus(Tree& tree, Node& popup, PopupMenuState& state)
+{
+    const Node* focused = tree.focused();
+    const int focusedIndex = focusedMenuChild(popup, focused);
+    if (focusedIndex >= 0) {
+        state.highlightedIndex = focusedIndex;
+        return;
+    }
+
+    if (state.highlightedIndex < 0 ||
+        state.highlightedIndex >= (int)popup.childCount() ||
+        !focusableMenuChild(popup.child((std::size_t)state.highlightedIndex))) {
+        state.highlightedIndex = checkedMenuChild(popup);
+        if (state.highlightedIndex < 0)
+            state.highlightedIndex = firstFocusableMenuChild(popup);
+    }
+
+    if (state.highlightedIndex >= 0) {
+        if (Node* child = popup.child((std::size_t)state.highlightedIndex))
+            tree.focus(child->id());
     }
 }
 
@@ -326,6 +515,19 @@ void installFaderPointerBehavior(Node& node)
         if (bounds.h <= 0.0f)
             return false;
 
+        if (event.shift) {
+            // fine adjust: relative drag at 10% rate instead of jump-to-position
+            if (event.type == EventType::MouseDown)
+                return true; // claim the press without jumping the cap
+            const ValueBinding* binding = n.valueBinding();
+            if (!binding || !binding->get)
+                return false;
+            const double range = binding->max - binding->min;
+            return setBindingValue(n, binding->get() -
+                                          (double)event.delta.y * range * 0.1 /
+                                              bounds.h);
+        }
+
         const double frac = 1.0 - (event.position.y - bounds.y) / bounds.h;
         return setBindingNormalized(n, frac);
     });
@@ -360,7 +562,7 @@ void installKnobPointerBehavior(Node& node)
         if (event.delta.x == 0.0f && event.delta.y == 0.0f)
             return false;
 
-        const double fine = event.shift ? 0.25 : 1.0;
+        const double fine = event.shift ? 0.1 : 1.0; // Shift = 10x slower
         const double next = (event.delta.x - event.delta.y) * range *
                             (fine / 180.0);
         return setBindingValue(n, binding->get() + next);
@@ -927,6 +1129,59 @@ const VisualStyle* PaintRenderer::styleFor(const NodeId& id) const
     return it == styles_.end() ? nullptr : &it->second;
 }
 
+void PaintRenderer::prepareOpenPopups(Tree& tree) const
+{
+    for (const auto& entry : styles_) {
+        PopupMenuState* state = entry.second.popupState;
+        if (!state || !state->open)
+            continue;
+        Node* node = tree.find(entry.first);
+        if (!node || !node->visible())
+            continue;
+        if (state->anchorToPosition)
+            anchorPopupSubtree(tree, *node, *state);
+        syncPopupFocus(tree, *node, *state);
+    }
+}
+
+bool PaintRenderer::dismissOpenPopupsOutside(Tree& tree, const ImVec2& origin,
+                                             const ImVec2& screenPoint) const
+{
+    bool hasOpenPopup = false;
+    bool insideOpenPopup = false;
+    for (const auto& entry : styles_) {
+        PopupMenuState* state = entry.second.popupState;
+        if (!state || !state->open || !state->closeOnOutsideClick)
+            continue;
+        const Node* node = tree.find(entry.first);
+        if (!node || !node->visible())
+            continue;
+        hasOpenPopup = true;
+        const Rect b = offset(node->bounds(), origin);
+        if (screenPoint.x >= b.x && screenPoint.y >= b.y &&
+            screenPoint.x <= b.x + b.w && screenPoint.y <= b.y + b.h) {
+            insideOpenPopup = true;
+            break;
+        }
+    }
+
+    if (!hasOpenPopup || insideOpenPopup)
+        return false;
+
+    bool dismissed = false;
+    for (const auto& entry : styles_) {
+        PopupMenuState* state = entry.second.popupState;
+        if (!state || !state->open || !state->closeOnOutsideClick)
+            continue;
+        state->open = false;
+        state->highlightedIndex = -1;
+        if (Node* node = tree.find(entry.first))
+            node->setVisible(false);
+        dismissed = true;
+    }
+    return dismissed;
+}
+
 VisualStyle PaintRenderer::resolvedStyle(const Node& node) const
 {
     if (const VisualStyle* explicitStyle = styleFor(node.id()))
@@ -950,7 +1205,16 @@ VisualStyle PaintRenderer::resolvedStyle(const Node& node) const
         style.kind = VisualKind::Meter;
         break;
     case Role::ListItem:
+    case Role::MenuItem:
         style.kind = VisualKind::ListItem;
+        break;
+    case Role::ComboBox:
+        style.kind = VisualKind::OutlineButton;
+        break;
+    case Role::Menu:
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        style.panelBorder = true;
         break;
     case Role::Group:
     default:
@@ -998,6 +1262,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     const Palette& pal = palette();
     const Rect bounds = offset(node.bounds(), origin);
     paint::ControlState state = controlState(node, sem, origin);
+    if (style.popupState && !style.popupState->open)
+        return;
 
     switch (style.kind) {
     case VisualKind::Panel:
@@ -1029,6 +1295,19 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                             nodeName(node, sem).c_str(), pal, state,
                             style.fontScale > 0.0f ? style.fontScale : 0.90f);
         break;
+    case VisualKind::MenuItem: {
+        MenuItem item = style.menuItem;
+        if (item.label.empty())
+            item.label = nodeName(node, sem);
+        if (hasState(sem ? sem->states : node.semantics().states,
+                     SemanticState::Checked))
+            item.checked = true;
+        item.enabled = !state.disabled;
+        paint::drawMenuItem(drawList, ImGui::GetFont(), iconFont(style.iconFont),
+                            topLeft(bounds), sizeOf(bounds), item, pal, state,
+                            style.fontScale > 0.0f ? style.fontScale : 0.90f);
+        break;
+    }
     case VisualKind::ValueRow: {
         const std::string name = nodeName(node, sem);
         const std::string valueText = nodeValueText(node, sem);
@@ -1083,6 +1362,54 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                     style.vectorIcon, style.accent, pal, state,
                                     style.lit);
         break;
+    case VisualKind::Segmented: {
+        const int count = (int)style.segments.size();
+        std::vector<const char*> labels;
+        labels.reserve(style.segments.size());
+        for (const std::string& s : style.segments)
+            labels.push_back(s.c_str());
+        const int selected = std::clamp((int)std::lround(valueOf(node, sem)),
+                                        0, std::max(0, count - 1));
+        int hoverIdx = -1;
+        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f) {
+            const float lx = ImGui::GetIO().MousePos.x - bounds.x;
+            if (lx >= 0.0f && lx <= bounds.w)
+                hoverIdx = std::clamp((int)(lx / (bounds.w / (float)count)),
+                                      0, count - 1);
+        }
+        paint::drawSegmented(drawList, ImGui::GetFont(), topLeft(bounds),
+                             sizeOf(bounds), labels.data(), count, selected,
+                             hoverIdx, pal, state,
+                             style.fontScale > 0.0f ? style.fontScale * 0.90f
+                                                    : 0.90f);
+        break;
+    }
+    case VisualKind::CycleButton: {
+        const int count = (int)style.segments.size();
+        const int index = std::clamp((int)std::lround(valueOf(node, sem)),
+                                     0, std::max(0, count - 1));
+        std::string text = nodeValueText(node, sem);
+        if (text.empty() && index < count)
+            text = style.segments[(size_t)index];
+        paint::drawCycleButton(drawList, ImGui::GetFont(), topLeft(bounds),
+                               sizeOf(bounds), text.c_str(), index, count, pal,
+                               state,
+                               style.fontScale > 0.0f ? style.fontScale * 0.90f
+                                                      : 0.90f);
+        break;
+    }
+    case VisualKind::LedButton: {
+        const bool on = checked(node, sem);
+        float level = on ? 1.0f : 0.0f;
+        if (on && style.ledBlink) // arm-blink for pending states
+            level = 0.35f + 0.65f * (0.5f + 0.5f *
+                                     std::sin((float)ImGui::GetTime() * 6.0f));
+        const bool down = state.active || on;
+        paint::drawLedButton(drawList, iconFont(style.iconFont), topLeft(bounds),
+                             sizeOf(bounds), style.glyph.c_str(), level, pal,
+                             state, down, style.accent, style.face);
+        break;
+    }
     case VisualKind::Toggle:
         paint::drawToggle(drawList, topLeft(bounds), bounds.w, bounds.h,
                           checked(node, sem) ? 1.0f : 0.0f, pal, state);
@@ -1108,6 +1435,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         args.accent = style.accent;
         args.palette = &pal;
         args.state = &state;
+        if (style.knobMod)
+            args.mod = style.knobMod();
         paint::drawKnobWithPainter(args, style.knobPainter);
         const std::string name = nodeName(node, sem);
         if (!name.empty()) {
@@ -1232,6 +1561,15 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
                 consumed = tree.dispatch(event) || consumed;
         }
     }
+    for (ImWchar ch : io.InputQueueCharacters) {
+        if (ch < 32 || ch > 126 || io.KeyCtrl || io.KeyAlt || io.KeySuper)
+            continue;
+        Event event;
+        event.type = EventType::KeyDown;
+        fillModifiers(event, io);
+        event.text.push_back((char)ch);
+        consumed = tree.dispatch(event) || consumed;
+    }
 
     return consumed;
 }
@@ -1244,6 +1582,7 @@ ImGuiFrameResult drawImGui(Tree& tree, PaintRenderer& renderer, Vec2 size,
     size.y = std::max(0.0f, size.y);
     result.valuesRefreshed = tree.refreshBoundValues();
     tree.layout(size);
+    renderer.prepareOpenPopups(tree);
 
     result.origin = ImGui::GetCursorScreenPos();
     result.size = ImVec2(size.x, size.y);
@@ -1253,9 +1592,871 @@ ImGuiFrameResult drawImGui(Tree& tree, PaintRenderer& renderer, Vec2 size,
     const bool mouseCaptured = ImGui::IsItemActive();
     ImGui::PopID();
 
-    result.inputConsumed = dispatchImGuiInput(tree, result.origin, mouseCaptured);
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool popupDismissed =
+        (ImGui::IsMouseClicked(ImGuiMouseButton_Left) ||
+         ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+         ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) &&
+        renderer.dismissOpenPopupsOutside(tree, result.origin, io.MousePos);
+    result.inputConsumed = popupDismissed ||
+                           dispatchImGuiInput(tree, result.origin, mouseCaptured);
+    if (result.inputConsumed) {
+        result.valuesRefreshed = tree.refreshBoundValues() || result.valuesRefreshed;
+        tree.layout(size);
+        renderer.prepareOpenPopups(tree);
+    }
     renderer.render(tree, result.origin, drawList);
     return result;
+}
+
+namespace {
+
+float retainedMenuItemHeight(const MenuItem& item)
+{
+    return item.separator ? 7.0f : 24.0f;
+}
+
+float retainedVisibleMenuHeight(const std::vector<MenuItem>& items,
+                                const PopupMenuState* state,
+                                const std::string& parentPath = {})
+{
+    float total = 8.0f;
+    for (int i = 0; i < (int)items.size(); ++i) {
+        const MenuItem& item = items[(std::size_t)i];
+        total += retainedMenuItemHeight(item);
+        const std::string path = menuPath(parentPath, item, i);
+        if (!item.children.empty() && submenuOpen(state, path))
+            total += retainedVisibleMenuHeight(item.children, state, path) - 8.0f;
+    }
+    return total;
+}
+
+std::string menuChildId(const NodeId& parentId, const MenuItem& item, int index)
+{
+    if (!item.id.empty())
+        return parentId + "." + item.id;
+    char suffix[32];
+    std::snprintf(suffix, sizeof suffix, ".item%d", index);
+    return parentId + suffix;
+}
+
+Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
+                           std::function<void(Node&, const MenuItem&, int)> onSelect,
+                           PaintRenderer* renderer, int index, float width,
+                           PopupMenuState* state,
+                           std::string path, std::string parentPath,
+                           int depth, int focusIndex);
+
+void addMenuItemNodes(Node& menu, const NodeId& sid,
+                      const std::vector<MenuItem>& items,
+                      std::function<void(Node&, const MenuItem&, int)> onSelect,
+                      PaintRenderer* renderer, float width, PopupMenuState* state,
+                      const std::string& parentPath = {}, int depth = 0)
+{
+    for (int i = 0; i < (int)items.size(); ++i) {
+        const MenuItem& item = items[(std::size_t)i];
+        const std::string path = menuPath(parentPath, item, i);
+        const int focusIndex = (int)menu.childCount();
+        menu.addChild(makeMenuItemNode(menuChildId(sid, item, focusIndex), item,
+                                       onSelect, renderer, i, width, state,
+                                       path, parentPath, depth, focusIndex));
+        if (!item.children.empty())
+            addMenuItemNodes(menu, sid + "." + menuPathKey(item, i), item.children,
+                             onSelect, renderer, width, state, path, depth + 1);
+    }
+}
+
+std::string selectedMenuLabel(const std::string& fallback,
+                              const std::vector<MenuItem>& items,
+                              const int* selectedIndex)
+{
+    if (selectedIndex && *selectedIndex >= 0 &&
+        *selectedIndex < (int)items.size()) {
+        const MenuItem& item = items[(std::size_t)*selectedIndex];
+        if (!item.separator && !item.label.empty())
+            return item.label;
+    }
+    return fallback;
+}
+
+void setDropdownButtonSemantics(Node& node, const std::string& name, bool open)
+{
+    Semantics sem = named(Role::ComboBox, name);
+    if (open)
+        sem.states |= SemanticState::Expanded;
+    sem.value.text = name;
+    sem.actions.push_back(Action::OpenMenu);
+    node.setSemantics(sem);
+}
+
+void setMenuVisibleFromState(Node& node, PopupMenuState* state)
+{
+    if (state) {
+        node.setVisible(state->open);
+        if (!state->open) {
+            state->highlightedIndex = -1;
+            state->openSubmenuPath.clear();
+            state->typeahead.clear();
+        }
+    }
+}
+
+void closeMenuFromNode(Node& node, PopupMenuState* state)
+{
+    if (state) {
+        state->open = false;
+        state->highlightedIndex = -1;
+        state->openSubmenuPath.clear();
+        state->typeahead.clear();
+    }
+    if (Node* menu = node.parent())
+        menu->setVisible(false);
+}
+
+Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
+                           std::function<void(Node&, const MenuItem&, int)> onSelect,
+                           PaintRenderer* renderer, int index, float width,
+                           PopupMenuState* state,
+                           std::string path = {}, std::string parentPath = {},
+                           int depth = 0, int focusIndex = -1)
+{
+    if (focusIndex < 0)
+        focusIndex = index;
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), item.separator ? Role::Text : Role::MenuItem);
+    node->setIntrinsicSize({width, retainedMenuItemHeight(item)});
+    node->setSize(Length::fixed(width), Length::intrinsic());
+    node->setFocusable(!item.separator && item.enabled);
+    node->setEnabled(!item.separator && item.enabled);
+
+    Semantics sem = named(item.separator ? Role::Text : Role::MenuItem, item.label);
+    if (item.separator) {
+        sem.hidden = true;
+        sem.states |= SemanticState::Hidden;
+    }
+    if (!item.enabled)
+        sem.states |= SemanticState::Disabled;
+    if (item.checked)
+        sem.states |= SemanticState::Checked;
+    if (!item.children.empty()) {
+        sem.actions.push_back(Action::OpenMenu);
+        if (submenuOpen(state, path))
+            sem.states |= SemanticState::Expanded;
+    }
+    node->setSemantics(sem);
+    node->setVisible(!state || (state->open && parentSubmenuVisible(state, parentPath)));
+    node->setOnRefresh([state, path, parentPath, item](Node& n) {
+        const bool wasVisible = n.visible();
+        const bool visible = !state || (state->open && parentSubmenuVisible(state, parentPath));
+        n.setVisible(visible);
+        Semantics next = n.semantics();
+        const bool expanded = submenuOpen(state, path);
+        const bool wasExpanded = hasState(next.states, SemanticState::Expanded);
+        if (item.children.empty()) {
+            if (wasVisible == visible)
+                return false;
+            return true;
+        }
+        if (expanded)
+            next.states |= SemanticState::Expanded;
+        else
+            next.states &= ~stateMask(SemanticState::Expanded);
+        if (wasExpanded != expanded)
+            n.setSemantics(next);
+        return wasVisible != visible || wasExpanded != expanded;
+    });
+
+    if (!item.separator && item.enabled) {
+        node->setOnActivate([item, index, onSelect, state, path](Node& n) {
+            if (!item.children.empty()) {
+                setSubmenuOpen(state, path, !submenuOpen(state, path));
+                n.markDirty();
+                return;
+            }
+            if (onSelect)
+                onSelect(n, item, index);
+            closeMenuFromNode(n, state);
+        });
+        node->setOnAction([state, path, item](Node& n, Action action, double) {
+            if (action != Action::OpenMenu || item.children.empty())
+                return false;
+            setSubmenuOpen(state, path, true);
+            n.markDirty();
+            return true;
+        });
+        node->setOnEvent([state, index, focusIndex, path, item](Node& n, const Event& event) {
+            if (event.type != EventType::KeyDown)
+                return false;
+            if (!event.text.empty() && state) {
+                Node* menu = n.parent();
+                if (!menu)
+                    return false;
+                state->typeahead = event.text;
+                const int next = typeaheadMenuChild(*menu, focusIndex, state->typeahead);
+                if (next >= 0) {
+                    state->highlightedIndex = next;
+                    return true;
+                }
+            }
+            if (event.key == Key::Escape) {
+                closeMenuFromNode(n, state);
+                return true;
+            }
+            if (event.key == Key::Right && !item.children.empty() && state) {
+                setSubmenuOpen(state, path, true);
+                n.markDirty();
+                return true;
+            }
+            if (event.key == Key::Left && state && !state->openSubmenuPath.empty()) {
+                state->openSubmenuPath.pop_back();
+                n.markDirty();
+                return true;
+            }
+            if ((event.key == Key::Down || event.key == Key::Up) && state) {
+                const Node* menu = n.parent();
+                if (!menu)
+                    return false;
+                const int next = nextFocusableMenuChild(
+                    *menu, focusIndex, event.key == Key::Down ? 1 : -1);
+                if (next >= 0) {
+                    state->highlightedIndex = next;
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::MenuItem;
+        style.menuItem = item;
+        if (depth > 0)
+            style.menuItem.label = std::string((std::size_t)depth * 2, ' ') +
+                                   style.menuItem.label;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Vec2 add(Vec2 a, Vec2 b) { return {a.x + b.x, a.y + b.y}; }
+Vec2 sub(Vec2 a, Vec2 b) { return {a.x - b.x, a.y - b.y}; }
+Vec2 mul(Vec2 v, float s) { return {v.x * s, v.y * s}; }
+
+Vec2 rectCenter(Rect r)
+{
+    return {r.x + r.w * 0.5f, r.y + r.h * 0.5f};
+}
+
+Rect nodeLocalRect(const GraphNode& node, Rect local)
+{
+    local.x += node.bounds.x;
+    local.y += node.bounds.y;
+    return local;
+}
+
+const GraphNode* findGraphNode(const std::vector<GraphNode>& nodes,
+                               const NodeId& id)
+{
+    auto it = std::find_if(nodes.begin(), nodes.end(),
+                           [&](const GraphNode& node) { return node.id == id; });
+    return it == nodes.end() ? nullptr : &*it;
+}
+
+const GraphPort* findGraphPort(const GraphNode& node, const NodeId& id,
+                               bool* output = nullptr)
+{
+    auto outIt = std::find_if(node.outputs.begin(), node.outputs.end(),
+                              [&](const GraphPort& port) { return port.id == id; });
+    if (outIt != node.outputs.end()) {
+        if (output)
+            *output = true;
+        return &*outIt;
+    }
+    auto inIt = std::find_if(node.inputs.begin(), node.inputs.end(),
+                             [&](const GraphPort& port) { return port.id == id; });
+    if (inIt != node.inputs.end()) {
+        if (output)
+            *output = false;
+        return &*inIt;
+    }
+    return nullptr;
+}
+
+bool portCenterGraph(const std::vector<GraphNode>& nodes, const NodeId& nodeId,
+                     const NodeId& portId, Vec2& out)
+{
+    const GraphNode* node = findGraphNode(nodes, nodeId);
+    if (!node)
+        return false;
+    const GraphPort* port = findGraphPort(*node, portId);
+    if (!port)
+        return false;
+    out = add({node->bounds.x, node->bounds.y}, rectCenter(port->bounds));
+    return true;
+}
+
+float distance(Vec2 a, Vec2 b)
+{
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+float distanceToSegment(Vec2 p, Vec2 a, Vec2 b)
+{
+    const Vec2 ab = sub(b, a);
+    const float len2 = ab.x * ab.x + ab.y * ab.y;
+    if (len2 <= 0.0001f)
+        return distance(p, a);
+    const Vec2 ap = sub(p, a);
+    const float t = std::clamp((ap.x * ab.x + ap.y * ab.y) / len2, 0.0f, 1.0f);
+    return distance(p, {a.x + ab.x * t, a.y + ab.y * t});
+}
+
+Vec2 cubic(Vec2 a, Vec2 b, Vec2 c, Vec2 d, float t)
+{
+    const float u = 1.0f - t;
+    const float uu = u * u;
+    const float tt = t * t;
+    return {
+        a.x * uu * u + 3.0f * b.x * uu * t + 3.0f * c.x * u * tt + d.x * tt * t,
+        a.y * uu * u + 3.0f * b.y * uu * t + 3.0f * c.y * u * tt + d.y * tt * t,
+    };
+}
+
+float distanceToCable(Vec2 p, Vec2 from, Vec2 to)
+{
+    const float dx = std::max(38.0f, std::abs(to.x - from.x) * 0.52f);
+    const Vec2 c1{from.x + dx, from.y};
+    const Vec2 c2{to.x - dx, to.y};
+    float best = std::numeric_limits<float>::max();
+    Vec2 prev = from;
+    for (int i = 1; i <= 24; ++i) {
+        const Vec2 cur = cubic(from, c1, c2, to, (float)i / 24.0f);
+        best = std::min(best, distanceToSegment(p, prev, cur));
+        prev = cur;
+    }
+    return best;
+}
+
+GraphHit makeGraphHit(GraphHitKind kind, Vec2 graphPosition)
+{
+    GraphHit hit;
+    hit.kind = kind;
+    hit.graphPosition = graphPosition;
+    return hit;
+}
+
+bool partKindInPass(GraphNodePartKind kind, int pass)
+{
+    if (pass == 0)
+        return kind == GraphNodePartKind::Toggle ||
+               kind == GraphNodePartKind::Action;
+    if (pass == 1)
+        return kind == GraphNodePartKind::Readout ||
+               kind == GraphNodePartKind::Meter ||
+               kind == GraphNodePartKind::Status;
+    return kind == GraphNodePartKind::Title;
+}
+
+std::string graphHitLabel(const GraphHit& hit)
+{
+    switch (hit.kind) {
+    case GraphHitKind::NodeBody: return "Module " + hit.nodeId;
+    case GraphHitKind::NodeTitle: return "Module title " + hit.nodeId;
+    case GraphHitKind::NodePart: return "Module control " + hit.nodeId + "." + hit.partId;
+    case GraphHitKind::Port: return "Port " + hit.nodeId + "." + hit.portId;
+    case GraphHitKind::CableEndpoint: return "Cable endpoint " + hit.cableId;
+    case GraphHitKind::Cable: return "Cable " + hit.cableId;
+    case GraphHitKind::Surface: return "Graph surface";
+    case GraphHitKind::None:
+    default: return "Nothing";
+    }
+}
+
+Semantics graphSurfaceSemantics(const std::string& name,
+                                const GraphSurfaceState& state,
+                                const std::vector<GraphNode>& nodes,
+                                const std::vector<GraphCable>& cables)
+{
+    Semantics sem = named(Role::Canvas, name.empty() ? "Graph" : name);
+    sem.description = "Module graph surface";
+    sem.actions.push_back(Action::OpenMenu);
+    sem.value.text = std::to_string(nodes.size()) + " modules, " +
+                     std::to_string(cables.size()) + " cables, hover " +
+                     graphHitLabel(state.hovered);
+    return sem;
+}
+
+bool refreshGraphSurfaceSemantics(Node& node, const std::string& name,
+                                  const GraphSurfaceState& state,
+                                  const std::vector<GraphNode>& nodes,
+                                  const std::vector<GraphCable>& cables)
+{
+    const Semantics next = graphSurfaceSemantics(name, state, nodes, cables);
+    const Semantics& current = static_cast<const Node&>(node).semantics();
+    if (current.name == next.name &&
+        current.description == next.description &&
+        current.value.text == next.value.text &&
+        current.actions.size() == next.actions.size())
+        return false;
+    node.setSemantics(next);
+    return true;
+}
+
+void pushAction(std::vector<Action>& actions, Action action)
+{
+    if (std::find(actions.begin(), actions.end(), action) == actions.end())
+        actions.push_back(action);
+}
+
+std::string graphModuleSemanticId(const NodeId& surfaceId, const NodeId& nodeId)
+{
+    return surfaceId + ".module." + nodeId;
+}
+
+std::string graphPartSemanticId(const NodeId& surfaceId, const NodeId& nodeId,
+                                const NodeId& partId)
+{
+    return graphModuleSemanticId(surfaceId, nodeId) + ".part." + partId;
+}
+
+std::string graphPortSemanticId(const NodeId& surfaceId, const NodeId& nodeId,
+                                const NodeId& portId)
+{
+    return graphModuleSemanticId(surfaceId, nodeId) + ".port." + portId;
+}
+
+std::string graphCableSemanticId(const NodeId& surfaceId, const NodeId& cableId)
+{
+    return surfaceId + ".cable." + cableId;
+}
+
+Rect graphRectToTree(const Rect& surfaceBounds, const GraphViewport& viewport,
+                     Rect graphRect)
+{
+    Rect out = graphToScreen(viewport, graphRect);
+    out.x += surfaceBounds.x;
+    out.y += surfaceBounds.y;
+    return out;
+}
+
+Rect cableSemanticBounds(const Rect& surfaceBounds, const GraphViewport& viewport,
+                         Vec2 fromGraph, Vec2 toGraph)
+{
+    const Vec2 a = graphToScreen(viewport, fromGraph);
+    const Vec2 b = graphToScreen(viewport, toGraph);
+    const float minX = std::min(a.x, b.x);
+    const float minY = std::min(a.y, b.y);
+    const float maxX = std::max(a.x, b.x);
+    const float maxY = std::max(a.y, b.y);
+    const float pad = 8.0f;
+    return {surfaceBounds.x + minX - pad, surfaceBounds.y + minY - pad,
+            std::max(16.0f, maxX - minX + pad * 2.0f),
+            std::max(16.0f, maxY - minY + pad * 2.0f)};
+}
+
+std::string graphPortKindText(GraphPortKind kind)
+{
+    switch (kind) {
+    case GraphPortKind::Audio: return "audio";
+    case GraphPortKind::Midi: return "MIDI";
+    case GraphPortKind::Control: return "control";
+    case GraphPortKind::Event: return "event";
+    case GraphPortKind::Parameter: return "parameter";
+    case GraphPortKind::Unknown:
+    default: return "unknown";
+    }
+}
+
+Role graphPartRole(GraphNodePartKind kind)
+{
+    switch (kind) {
+    case GraphNodePartKind::Toggle: return Role::Toggle;
+    case GraphNodePartKind::Action: return Role::Button;
+    case GraphNodePartKind::Meter: return Role::Meter;
+    case GraphNodePartKind::Readout:
+    case GraphNodePartKind::Status:
+    case GraphNodePartKind::Title:
+    default: return Role::Text;
+    }
+}
+
+std::string graphPartName(const GraphNode& node, const GraphNodePart& part)
+{
+    if (!part.label.empty())
+        return node.title.empty() ? part.label : node.title + " " + part.label;
+    if (!part.valueText.empty())
+        return node.title.empty() ? part.valueText : node.title + " " + part.valueText;
+    return node.title.empty() ? part.id : node.title + " " + part.id;
+}
+
+void appendGraphSemanticChildren(const Node& surface,
+                                 const GraphSurfaceState& state,
+                                 const std::vector<GraphNode>& nodes,
+                                 const std::vector<GraphCable>& cables,
+                                 std::vector<SemanticNode>& out)
+{
+    const Rect surfaceBounds = surface.bounds();
+    for (const GraphNode& graphNode : nodes) {
+        const NodeId moduleId = graphModuleSemanticId(surface.id(), graphNode.id);
+        SemanticNode module;
+        module.id = moduleId;
+        module.parent = surface.id();
+        module.bounds = graphRectToTree(surfaceBounds, state.viewport, graphNode.bounds);
+        module.role = Role::Group;
+        module.name = graphNode.title.empty() ? graphNode.id : graphNode.title;
+        module.description = "Graph module";
+        module.states |= SemanticState::Focusable;
+        if (graphNode.selected)
+            module.states |= SemanticState::Selected;
+        if (graphNode.disabled)
+            module.states |= SemanticState::Disabled;
+        std::vector<std::string> flags;
+        if (graphNode.bypassed)
+            flags.push_back("bypassed");
+        if (graphNode.error)
+            flags.push_back("error");
+        if (!flags.empty()) {
+            module.value.text = flags.front();
+            for (std::size_t i = 1; i < flags.size(); ++i)
+                module.value.text += ", " + flags[i];
+        }
+        pushAction(module.actions, Action::Focus);
+        pushAction(module.actions, Action::Activate);
+        pushAction(module.actions, Action::OpenMenu);
+        out.push_back(module);
+
+        auto appendPort = [&](const GraphPort& port) {
+            SemanticNode sem;
+            sem.id = graphPortSemanticId(surface.id(), graphNode.id, port.id);
+            sem.parent = moduleId;
+            sem.bounds = graphRectToTree(surfaceBounds, state.viewport,
+                                         nodeLocalRect(graphNode, port.bounds));
+            sem.role = Role::Button;
+            const bool output = port.direction == GraphPortDirection::Output;
+            sem.name = (output ? "Output " : "Input ") +
+                       (port.label.empty() ? port.id : port.label);
+            sem.description = graphPortKindText(port.kind) + " port";
+            sem.states |= SemanticState::Focusable;
+            if (!port.enabled)
+                sem.states |= SemanticState::Disabled;
+            if (port.connected)
+                sem.states |= SemanticState::Selected;
+            sem.value.text = port.connected ? "Connected" : "Not connected";
+            pushAction(sem.actions, Action::Focus);
+            pushAction(sem.actions, Action::Activate);
+            pushAction(sem.actions, Action::OpenMenu);
+            out.push_back(sem);
+        };
+        for (const GraphPort& port : graphNode.inputs)
+            appendPort(port);
+        for (const GraphPort& port : graphNode.outputs)
+            appendPort(port);
+
+        for (const GraphNodePart& part : graphNode.parts) {
+            SemanticNode sem;
+            sem.id = graphPartSemanticId(surface.id(), graphNode.id, part.id);
+            sem.parent = moduleId;
+            sem.bounds = graphRectToTree(surfaceBounds, state.viewport,
+                                         nodeLocalRect(graphNode, part.bounds));
+            sem.role = graphPartRole(part.kind);
+            sem.name = graphPartName(graphNode, part);
+            sem.description = "Graph module part";
+            if (!part.enabled)
+                sem.states |= SemanticState::Disabled;
+            if (part.checked)
+                sem.states |= SemanticState::Checked;
+            if (part.selected)
+                sem.states |= SemanticState::Selected;
+            if (part.hasValue) {
+                sem.value.hasNumeric = true;
+                sem.value.min = 0.0;
+                sem.value.max = 1.0;
+                sem.value.step = 0.01;
+                sem.value.value = std::clamp(part.value, 0.0, 1.0);
+            }
+            sem.value.text = !part.valueText.empty()
+                                 ? part.valueText
+                                 : (part.checked ? "On" : "");
+            if (part.kind == GraphNodePartKind::Toggle ||
+                part.kind == GraphNodePartKind::Action) {
+                sem.states |= SemanticState::Focusable;
+                pushAction(sem.actions, Action::Focus);
+                pushAction(sem.actions, Action::Activate);
+                pushAction(sem.actions, Action::OpenMenu);
+            }
+            out.push_back(sem);
+        }
+    }
+
+    for (const GraphCable& cable : cables) {
+        Vec2 from;
+        Vec2 to;
+        if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, from) ||
+            !portCenterGraph(nodes, cable.toNode, cable.toPort, to))
+            continue;
+        SemanticNode sem;
+        sem.id = graphCableSemanticId(surface.id(), cable.id);
+        sem.parent = surface.id();
+        sem.bounds = cableSemanticBounds(surfaceBounds, state.viewport, from, to);
+        sem.role = Role::Custom;
+        sem.name = cable.id.empty() ? "Cable" : "Cable " + cable.id;
+        sem.description = "Graph cable from " + cable.fromNode + "." +
+                          cable.fromPort + " to " + cable.toNode + "." +
+                          cable.toPort;
+        sem.states |= SemanticState::Focusable;
+        if (cable.selected)
+            sem.states |= SemanticState::Selected;
+        if (cable.muted || cable.invalid)
+            sem.states |= SemanticState::Disabled;
+        sem.value.text = cable.invalid ? "Invalid" : cable.muted ? "Muted" : "Connected";
+        pushAction(sem.actions, Action::Focus);
+        pushAction(sem.actions, Action::Activate);
+        pushAction(sem.actions, Action::OpenMenu);
+        out.push_back(sem);
+    }
+}
+
+GraphHit graphHitForSemanticId(const NodeId& surfaceId, const NodeId& semanticId,
+                               const std::vector<GraphNode>& nodes,
+                               const std::vector<GraphCable>& cables)
+{
+    for (const GraphNode& node : nodes) {
+        if (semanticId == graphModuleSemanticId(surfaceId, node.id)) {
+            GraphHit hit = makeGraphHit(GraphHitKind::NodeBody, rectCenter(node.bounds));
+            hit.nodeId = node.id;
+            return hit;
+        }
+        for (const GraphPort& port : node.inputs) {
+            if (semanticId == graphPortSemanticId(surfaceId, node.id, port.id)) {
+                GraphHit hit = makeGraphHit(GraphHitKind::Port,
+                                            add({node.bounds.x, node.bounds.y},
+                                                rectCenter(port.bounds)));
+                hit.nodeId = node.id;
+                hit.portId = port.id;
+                hit.output = false;
+                return hit;
+            }
+        }
+        for (const GraphPort& port : node.outputs) {
+            if (semanticId == graphPortSemanticId(surfaceId, node.id, port.id)) {
+                GraphHit hit = makeGraphHit(GraphHitKind::Port,
+                                            add({node.bounds.x, node.bounds.y},
+                                                rectCenter(port.bounds)));
+                hit.nodeId = node.id;
+                hit.portId = port.id;
+                hit.output = true;
+                return hit;
+            }
+        }
+        for (const GraphNodePart& part : node.parts) {
+            if (semanticId == graphPartSemanticId(surfaceId, node.id, part.id)) {
+                GraphHit hit = makeGraphHit(part.kind == GraphNodePartKind::Title
+                                                ? GraphHitKind::NodeTitle
+                                                : GraphHitKind::NodePart,
+                                            add({node.bounds.x, node.bounds.y},
+                                                rectCenter(part.bounds)));
+                hit.nodeId = node.id;
+                hit.partId = part.id;
+                return hit;
+            }
+        }
+    }
+    for (const GraphCable& cable : cables) {
+        if (semanticId == graphCableSemanticId(surfaceId, cable.id)) {
+            Vec2 from;
+            Vec2 to;
+            if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, from) ||
+                !portCenterGraph(nodes, cable.toNode, cable.toPort, to))
+                return {};
+            GraphHit hit = makeGraphHit(GraphHitKind::Cable,
+                                        {(from.x + to.x) * 0.5f,
+                                         (from.y + to.y) * 0.5f});
+            hit.cableId = cable.id;
+            return hit;
+        }
+    }
+    return {};
+}
+
+Vec2 graphHitTreeAnchor(const Node& surface, const GraphSurfaceState& state,
+                        const GraphHit& hit)
+{
+    const Vec2 local = graphToScreen(state.viewport, hit.graphPosition);
+    const Rect b = surface.bounds();
+    return {b.x + local.x, b.y + local.y};
+}
+
+void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
+                   const paint::ControlState& state)
+{
+    const Palette& pal = palette();
+    const ImVec2 c(bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f);
+    ImU32 col = port.invalidDrop ? pal.meterHot
+                : port.connected ? pal.accent
+                                 : pal.frameBright;
+    if (!port.enabled)
+        col = paint::mix(col, pal.textDim, 0.65f);
+    if (state.hovered || state.selected)
+        dl.AddCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
+                     state.selected ? pal.text : pal.accent, 0, 1.4f);
+    dl.AddCircleFilled(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
+                       col, 16);
+    if (port.direction == GraphPortDirection::Output) {
+        dl.AddLine(ImVec2(c.x - 2.5f, c.y), ImVec2(c.x + 2.5f, c.y),
+                   paint::withAlpha(pal.text, 0xB0), 1.0f);
+    }
+}
+
+void drawGraphPart(ImDrawList& dl, ImFont* font, Rect bounds,
+                   const GraphNodePart& part, const paint::ControlState& state)
+{
+    const Palette& pal = palette();
+    paint::ControlState inner = state;
+    inner.disabled = inner.disabled || !part.enabled;
+    inner.selected = inner.selected || part.selected || part.checked;
+    const ImVec2 p = topLeft(bounds);
+    const ImVec2 s = sizeOf(bounds);
+    if (part.kind == GraphNodePartKind::Meter) {
+        paint::drawMeter(&dl, p, s, (float)std::clamp(part.value, 0.0, 1.0),
+                         (float)std::clamp(part.value, 0.0, 1.0), -48.0f, pal);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Toggle) {
+        paint::drawToggle(&dl, p, s.x, s.y, part.checked ? 1.0f : 0.0f, pal, inner);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Action) {
+        paint::OutlineButtonStyle style;
+        style.hoverBorder = pal.accent;
+        style.activeFill = paint::withAlpha(pal.accent, 0x28);
+        paint::drawOutlineButton(&dl, font, p, s,
+                                 part.label.empty() ? "..." : part.label.c_str(),
+                                 pal, inner, style);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Status) {
+        paint::drawBadge(&dl, font, p,
+                         part.label.empty() ? part.valueText.c_str() : part.label.c_str(),
+                         ImGui::GetFontSize() * 0.72f,
+                         part.checked ? pal.accent : 0, pal);
+        return;
+    }
+    paint::drawValueRow(&dl, font, p, s, part.label.c_str(), part.valueText.c_str(),
+                        pal, inner, 0.78f, false);
+}
+
+} // namespace
+
+Vec2 graphToScreen(const GraphViewport& viewport, Vec2 graphPoint)
+{
+    const float z = std::max(0.05f, viewport.zoom);
+    return {viewport.pan.x + graphPoint.x * z,
+            viewport.pan.y + graphPoint.y * z};
+}
+
+Rect graphToScreen(const GraphViewport& viewport, Rect graphRect)
+{
+    const Vec2 p = graphToScreen(viewport, Vec2{graphRect.x, graphRect.y});
+    const float z = std::max(0.05f, viewport.zoom);
+    return {p.x, p.y, graphRect.w * z, graphRect.h * z};
+}
+
+Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint)
+{
+    const float z = std::max(0.05f, viewport.zoom);
+    return {(screenPoint.x - viewport.pan.x) / z,
+            (screenPoint.y - viewport.pan.y) / z};
+}
+
+GraphHit hitTestGraph(const GraphViewport& viewport,
+                      const std::vector<GraphNode>& nodes,
+                      const std::vector<GraphCable>& cables,
+                      Vec2 screenPoint)
+{
+    const Vec2 graphPoint = screenToGraph(viewport, screenPoint);
+
+    for (auto nodeIt = nodes.rbegin(); nodeIt != nodes.rend(); ++nodeIt) {
+        const GraphNode& node = *nodeIt;
+        auto testPort = [&](const GraphPort& port, bool output) -> GraphHit {
+            const Rect screen = graphToScreen(viewport, nodeLocalRect(node, port.bounds));
+            if (!screen.contains(screenPoint))
+                return {};
+            GraphHit hit = makeGraphHit(GraphHitKind::Port, graphPoint);
+            hit.nodeId = node.id;
+            hit.portId = port.id;
+            hit.output = output;
+            return hit;
+        };
+        for (auto it = node.outputs.rbegin(); it != node.outputs.rend(); ++it) {
+            GraphHit hit = testPort(*it, true);
+            if (hit.valid())
+                return hit;
+        }
+        for (auto it = node.inputs.rbegin(); it != node.inputs.rend(); ++it) {
+            GraphHit hit = testPort(*it, false);
+            if (hit.valid())
+                return hit;
+        }
+    }
+
+    for (int pass = 0; pass < 3; ++pass) {
+        for (auto nodeIt = nodes.rbegin(); nodeIt != nodes.rend(); ++nodeIt) {
+            const GraphNode& node = *nodeIt;
+            for (auto partIt = node.parts.rbegin(); partIt != node.parts.rend(); ++partIt) {
+                const GraphNodePart& part = *partIt;
+                if (!partKindInPass(part.kind, pass))
+                    continue;
+                const Rect screen = graphToScreen(viewport, nodeLocalRect(node, part.bounds));
+                if (!screen.contains(screenPoint))
+                    continue;
+                GraphHit hit = makeGraphHit(part.kind == GraphNodePartKind::Title
+                                                ? GraphHitKind::NodeTitle
+                                                : GraphHitKind::NodePart,
+                                            graphPoint);
+                hit.nodeId = node.id;
+                hit.partId = part.id;
+                return hit;
+            }
+        }
+    }
+
+    for (auto nodeIt = nodes.rbegin(); nodeIt != nodes.rend(); ++nodeIt) {
+        const GraphNode& node = *nodeIt;
+        const Rect screen = graphToScreen(viewport, node.bounds);
+        if (!screen.contains(screenPoint))
+            continue;
+        GraphHit hit = makeGraphHit(GraphHitKind::NodeBody, graphPoint);
+        hit.nodeId = node.id;
+        return hit;
+    }
+
+    for (auto cableIt = cables.rbegin(); cableIt != cables.rend(); ++cableIt) {
+        const GraphCable& cable = *cableIt;
+        Vec2 from;
+        Vec2 to;
+        if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, from) ||
+            !portCenterGraph(nodes, cable.toNode, cable.toPort, to))
+            continue;
+        const Vec2 fromScreen = graphToScreen(viewport, from);
+        const Vec2 toScreen = graphToScreen(viewport, to);
+        if (distance(screenPoint, fromScreen) <= 7.0f ||
+            distance(screenPoint, toScreen) <= 7.0f) {
+            GraphHit hit = makeGraphHit(GraphHitKind::CableEndpoint, graphPoint);
+            hit.cableId = cable.id;
+            hit.output = distance(screenPoint, fromScreen) <= 7.0f;
+            return hit;
+        }
+        if (distanceToCable(screenPoint, fromScreen, toScreen) <= 6.0f) {
+            GraphHit hit = makeGraphHit(GraphHitKind::Cable, graphPoint);
+            hit.cableId = cable.id;
+            return hit;
+        }
+    }
+
+    return makeGraphHit(GraphHitKind::Surface, graphPoint);
 }
 
 namespace widgets {
@@ -1373,6 +2574,166 @@ Node::Ptr listItem(NodeId id, std::string text, bool selected,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::ListItem;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr menuItem(NodeId id, MenuItem item,
+                   std::function<void(Node&, const MenuItem&, int)> onSelect,
+                   PaintRenderer* renderer, int index, float width)
+{
+    return makeMenuItemNode(std::move(id), std::move(item), std::move(onSelect),
+                            renderer, index, width, nullptr);
+}
+
+Node::Ptr popupMenu(NodeId id, PopupMenuState* state,
+                    const std::vector<MenuItem>& items,
+                    std::function<void(Node&, const MenuItem&, int)> onSelect,
+                    PaintRenderer* renderer, float width)
+{
+    NodeId sid = id;
+    auto node = column(std::move(id), 0.0f, Insets::all(4.0f));
+    node->setSize(Length::fixed(width + 8.0f), Length::intrinsic());
+    Semantics sem = named(Role::Menu, "Menu");
+    node->setSemantics(sem);
+    setMenuVisibleFromState(*node, state);
+    node->setIntrinsicSize({width + 8.0f, retainedVisibleMenuHeight(items, state)});
+    node->setOnRefresh([state, items, width](Node& n) {
+        const bool wasVisible = n.visible();
+        setMenuVisibleFromState(n, state);
+        const Vec2 before = n.intrinsicSize();
+        const Vec2 next{width + 8.0f, retainedVisibleMenuHeight(items, state)};
+        n.setIntrinsicSize(next);
+        return wasVisible != n.visible() ||
+               before.x != next.x || before.y != next.y;
+    });
+
+    addMenuItemNodes(*node, sid, items, onSelect, renderer, width, state);
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        style.panelBorder = true;
+        style.popupState = state;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
+                       const std::vector<MenuItem>& items, int* selectedIndex,
+                       std::function<void(Node&, const MenuItem&, int)> onSelect,
+                       PaintRenderer* renderer, Vec2 buttonSize, float menuWidth,
+                       paint::OutlineButtonStyle buttonStyle)
+{
+    NodeId sid = id;
+    const NodeId buttonId = sid + ".button";
+    const NodeId menuId = sid + ".menu";
+    auto root = column(std::move(id), 2.0f);
+    root->setSize(Length::intrinsic(), Length::intrinsic());
+    Semantics rootSem = named(Role::Group, name);
+    root->setSemantics(rootSem);
+
+    auto button = outlineButton(buttonId, selectedMenuLabel(name, items, selectedIndex),
+                                {}, renderer, buttonSize, buttonStyle);
+    setDropdownButtonSemantics(*button, selectedMenuLabel(name, items, selectedIndex),
+                               state.open);
+    button->setOnActivate([&state, menuId, selectedIndex](Node& n) {
+        state.open = !state.open;
+        state.anchorToPosition = false;
+        state.highlightedIndex = state.open && selectedIndex ? *selectedIndex : -1;
+        setDropdownButtonSemantics(n, n.semantics().name, state.open);
+        if (Node* parent = n.parent())
+            if (Node* menu = parent->find(menuId))
+                menu->setVisible(state.open);
+    });
+    button->setOnAction([&state, menuId, selectedIndex](Node& n, Action action, double) {
+        if (action != Action::OpenMenu)
+            return false;
+        state.open = true;
+        state.anchorToPosition = false;
+        state.highlightedIndex = selectedIndex ? *selectedIndex : -1;
+        setDropdownButtonSemantics(n, n.semantics().name, state.open);
+        if (Node* parent = n.parent())
+            if (Node* menu = parent->find(menuId))
+                menu->setVisible(state.open);
+        return true;
+    });
+    button->setOnRefresh([&state, selectedIndex, items, name](Node& n) {
+        const std::string label = selectedMenuLabel(name, items, selectedIndex);
+        const bool changed = n.semantics().name != label ||
+                             hasState(n.semantics().states,
+                                      SemanticState::Expanded) != state.open;
+        if (changed)
+            setDropdownButtonSemantics(n, label, state.open);
+        return changed;
+    });
+
+    std::vector<MenuItem> resolved = items;
+    if (selectedIndex && *selectedIndex >= 0 &&
+        *selectedIndex < (int)resolved.size())
+        resolved[(std::size_t)*selectedIndex].checked = true;
+
+    auto menu = popupMenu(menuId, &state, resolved,
+                          [selectedIndex, onSelect](Node& n, const MenuItem& item, int index) {
+                              if (selectedIndex)
+                                  *selectedIndex = index;
+                              if (onSelect)
+                                  onSelect(n, item, index);
+                          },
+                          renderer, menuWidth);
+    root->addChild(std::move(button));
+    root->addChild(std::move(menu));
+    return root;
+}
+
+Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
+                            PopupMenuState& state,
+                            std::function<void(Node&, Vec2)> onOpen,
+                            PaintRenderer* renderer,
+                            VisualStyle::CanvasDraw draw,
+                            bool focusable, Role semanticRole)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), semanticRole);
+    node->setIntrinsicSize(intrinsicSize);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(focusable);
+    Semantics sem = named(semanticRole, name);
+    sem.actions.push_back(Action::OpenMenu);
+    node->setSemantics(sem);
+    node->setOnEvent([&state, onOpen](Node& n, const Event& event) {
+        if (event.type != EventType::ContextMenu)
+            return false;
+        state.open = true;
+        state.anchorToPosition = true;
+        state.highlightedIndex = -1;
+        state.position = ImVec2(event.position.x, event.position.y);
+        if (onOpen)
+            onOpen(n, event.position);
+        return true;
+    });
+    node->setOnAction([&state, onOpen](Node& n, Action action, double) {
+        if (action != Action::OpenMenu)
+            return false;
+        state.open = true;
+        state.anchorToPosition = true;
+        state.highlightedIndex = -1;
+        const Rect b = n.bounds();
+        Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
+        state.position = ImVec2(pos.x, pos.y);
+        if (onOpen)
+            onOpen(n, pos);
+        return true;
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.panelBorder = !draw;
+        style.canvasDraw = std::move(draw);
         renderer->setStyle(sid, style);
     }
     return node;
@@ -1654,6 +3015,292 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
     return node;
 }
 
+Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
+                       const std::vector<GraphNode>& nodes,
+                       const std::vector<GraphCable>& cables,
+                       GraphSurfaceCallbacks callbacks,
+                       PaintRenderer* renderer, Vec2 size,
+                       PopupMenuState* contextMenu)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Canvas);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    node->setSemantics(graphSurfaceSemantics(name, state, nodes, cables));
+    node->setOnRefresh([&state, &nodes, &cables, name](Node& n) {
+        return refreshGraphSurfaceSemantics(n, name, state, nodes, cables);
+    });
+    node->setSemanticChildren([&state, &nodes, &cables](
+                                  const Node& n, std::vector<SemanticNode>& out) {
+        appendGraphSemanticChildren(n, state, nodes, cables, out);
+    });
+    node->setOnSemanticAction([sid, &state, &nodes, &cables, contextMenu, callbacks](
+                                  Node& n, const NodeId& semanticId,
+                                  Action action, double) mutable {
+        GraphHit hit = graphHitForSemanticId(sid, semanticId, nodes, cables);
+        if (!hit.valid())
+            return false;
+        state.hovered = hit;
+        if (action == Action::Focus) {
+            state.active = hit;
+            return true;
+        }
+        if (action == Action::OpenMenu) {
+            const Vec2 anchor = graphHitTreeAnchor(n, state, hit);
+            if (contextMenu) {
+                contextMenu->open = true;
+                contextMenu->anchorToPosition = true;
+                contextMenu->highlightedIndex = -1;
+                contextMenu->position = ImVec2(anchor.x, anchor.y);
+            }
+            if (callbacks.onContextMenu)
+                callbacks.onContextMenu(hit, hit.graphPosition);
+            return true;
+        }
+        if (action == Action::Activate) {
+            if (callbacks.onActivate)
+                callbacks.onActivate(hit);
+            return true;
+        }
+        return false;
+    });
+    node->setOnAction([&state, &nodes, &cables, contextMenu, callbacks](
+                          Node& n, Action action, double) mutable {
+        if (action != Action::OpenMenu)
+            return false;
+        const Rect b = n.bounds();
+        const Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
+        const Vec2 local{pos.x - b.x, pos.y - b.y};
+        state.hovered = hitTestGraph(state.viewport, nodes, cables, local);
+        if (contextMenu) {
+            contextMenu->open = true;
+            contextMenu->anchorToPosition = true;
+            contextMenu->highlightedIndex = -1;
+            contextMenu->position = ImVec2(pos.x, pos.y);
+        }
+        if (callbacks.onContextMenu)
+            callbacks.onContextMenu(state.hovered, state.hovered.graphPosition);
+        return true;
+    });
+    node->setOnEvent([&state, &nodes, &cables, contextMenu, callbacks](
+                         Node& n, const Event& event) mutable {
+        const Rect b = n.bounds();
+        const Vec2 local{event.position.x - b.x, event.position.y - b.y};
+        auto updateHover = [&] {
+            state.hovered = hitTestGraph(state.viewport, nodes, cables, local);
+            return state.hovered;
+        };
+
+        if (event.type == EventType::MouseMove) {
+            if (state.panning) {
+                state.viewport.pan.x += event.delta.x;
+                state.viewport.pan.y += event.delta.y;
+                if (callbacks.onViewportChanged)
+                    callbacks.onViewportChanged(state.viewport);
+                return true;
+            }
+            if (state.marqueeActive) {
+                const Vec2 g = screenToGraph(state.viewport, local);
+                state.marquee.w = g.x - state.marquee.x;
+                state.marquee.h = g.y - state.marquee.y;
+                return true;
+            }
+            updateHover();
+            if (n.pressed() && state.active.valid() &&
+                state.active.kind != GraphHitKind::Surface &&
+                (event.delta.x != 0.0f || event.delta.y != 0.0f)) {
+                if (callbacks.onDrag) {
+                    const float z = std::max(0.05f, state.viewport.zoom);
+                    callbacks.onDrag(state.active,
+                                     {event.delta.x / z, event.delta.y / z});
+                }
+                return true;
+            }
+            return state.hovered.valid();
+        }
+
+        if (event.type == EventType::MouseWheel && event.wheelDelta.y != 0.0f) {
+            const Vec2 before = screenToGraph(state.viewport, local);
+            const float prevZoom = std::max(0.05f, state.viewport.zoom);
+            const float factor = std::pow(1.12f, event.wheelDelta.y);
+            state.viewport.zoom = std::clamp(prevZoom * factor, 0.20f, 4.0f);
+            state.viewport.pan.x = local.x - before.x * state.viewport.zoom;
+            state.viewport.pan.y = local.y - before.y * state.viewport.zoom;
+            if (callbacks.onViewportChanged)
+                callbacks.onViewportChanged(state.viewport);
+            return true;
+        }
+
+        if (event.type == EventType::MouseDown &&
+            (event.button == MouseButton::Middle ||
+             (event.button == MouseButton::Left && event.alt))) {
+            state.panning = true;
+            state.active = makeGraphHit(GraphHitKind::Surface,
+                                        screenToGraph(state.viewport, local));
+            return true;
+        }
+
+        if (event.type == EventType::MouseDown && event.button == MouseButton::Left) {
+            state.active = updateHover();
+            if (state.active.kind == GraphHitKind::Surface ||
+                state.active.kind == GraphHitKind::None) {
+                state.marqueeActive = true;
+                const Vec2 g = screenToGraph(state.viewport, local);
+                state.marquee = {g.x, g.y, 0.0f, 0.0f};
+            }
+            if (callbacks.onSelect)
+                callbacks.onSelect(state.active);
+            return true;
+        }
+
+        if (event.type == EventType::MouseUp) {
+            if (event.button == MouseButton::Middle) {
+                state.panning = false;
+                return true;
+            }
+            if (event.button == MouseButton::Left) {
+                const bool wasPanning = state.panning;
+                const bool wasMarquee = state.marqueeActive;
+                state.panning = false;
+                state.marqueeActive = false;
+                if (!wasPanning && !wasMarquee && state.active.valid() &&
+                    callbacks.onActivate)
+                    callbacks.onActivate(state.active);
+                return true;
+            }
+        }
+
+        if (event.type == EventType::ContextMenu) {
+            state.hovered = updateHover();
+            if (contextMenu) {
+                contextMenu->open = true;
+                contextMenu->anchorToPosition = true;
+                contextMenu->highlightedIndex = -1;
+                contextMenu->position = ImVec2(event.position.x, event.position.y);
+            }
+            if (callbacks.onContextMenu)
+                callbacks.onContextMenu(state.hovered, state.hovered.graphPosition);
+            return true;
+        }
+
+        if (event.type == EventType::KeyDown && event.key == Key::Escape) {
+            const bool changed = state.panning || state.marqueeActive || state.active.valid();
+            state.panning = false;
+            state.marqueeActive = false;
+            state.active = {};
+            return changed;
+        }
+
+        return false;
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.panelBorder = true;
+        style.canvasDraw = [&state, &nodes, &cables](ImDrawList& dl, const Node&,
+                                                     Rect bounds,
+                                                     const paint::ControlState& cs) {
+            paint::drawGraphGrid(&dl, topLeft(bounds), sizeOf(bounds),
+                                 ImVec2(state.viewport.pan.x, state.viewport.pan.y),
+                                 state.viewport.zoom, palette(), cs);
+
+            for (const GraphCable& cable : cables) {
+                Vec2 fromGraph;
+                Vec2 toGraph;
+                if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, fromGraph) ||
+                    !portCenterGraph(nodes, cable.toNode, cable.toPort, toGraph))
+                    continue;
+                const Vec2 fromLocal = graphToScreen(state.viewport, fromGraph);
+                const Vec2 toLocal = graphToScreen(state.viewport, toGraph);
+                paint::ControlState cableState;
+                cableState.selected = cable.selected ||
+                                      (state.hovered.kind == GraphHitKind::Cable &&
+                                       state.hovered.cableId == cable.id) ||
+                                      (state.hovered.kind == GraphHitKind::CableEndpoint &&
+                                       state.hovered.cableId == cable.id);
+                cableState.hovered = cableState.selected;
+                cableState.disabled = cable.muted || cable.invalid;
+                paint::drawCable(&dl, ImVec2(bounds.x + fromLocal.x,
+                                             bounds.y + fromLocal.y),
+                                 ImVec2(bounds.x + toLocal.x,
+                                        bounds.y + toLocal.y), palette(),
+                                 cableState, cable.invalid ? palette().meterHot : cable.color);
+            }
+
+            for (const GraphNode& graphNode : nodes) {
+                const Rect localRect = graphToScreen(state.viewport, graphNode.bounds);
+                const Rect nodeRect{bounds.x + localRect.x, bounds.y + localRect.y,
+                                    localRect.w, localRect.h};
+                paint::ControlState nodeState;
+                nodeState.selected = graphNode.selected ||
+                                     state.hovered.nodeId == graphNode.id;
+                nodeState.hovered = state.hovered.nodeId == graphNode.id;
+                nodeState.disabled = graphNode.disabled;
+                paint::drawModuleBox(&dl, ImGui::GetFont(), topLeft(nodeRect),
+                                     sizeOf(nodeRect), graphNode.title.c_str(),
+                                     palette(), nodeState, graphNode.bypassed,
+                                     graphNode.error);
+
+                auto drawPortList = [&](const std::vector<GraphPort>& ports) {
+                    for (const GraphPort& port : ports) {
+                        Rect pr = graphToScreen(state.viewport,
+                                                nodeLocalRect(graphNode, port.bounds));
+                        pr.x += bounds.x;
+                        pr.y += bounds.y;
+                        paint::ControlState portState;
+                        portState.hovered = state.hovered.kind == GraphHitKind::Port &&
+                                            state.hovered.nodeId == graphNode.id &&
+                                            state.hovered.portId == port.id;
+                        portState.selected = portState.hovered;
+                        drawGraphPort(dl, pr, port, portState);
+                    }
+                };
+                drawPortList(graphNode.inputs);
+                drawPortList(graphNode.outputs);
+
+                for (const GraphNodePart& part : graphNode.parts) {
+                    if (part.kind == GraphNodePartKind::Title)
+                        continue;
+                    Rect partRect = graphToScreen(state.viewport,
+                                                  nodeLocalRect(graphNode, part.bounds));
+                    partRect.x += bounds.x;
+                    partRect.y += bounds.y;
+                    paint::ControlState partState;
+                    partState.hovered = state.hovered.kind == GraphHitKind::NodePart &&
+                                        state.hovered.nodeId == graphNode.id &&
+                                        state.hovered.partId == part.id;
+                    partState.active = state.active.kind == GraphHitKind::NodePart &&
+                                       state.active.nodeId == graphNode.id &&
+                                       state.active.partId == part.id;
+                    drawGraphPart(dl, ImGui::GetFont(), partRect, part, partState);
+                }
+            }
+
+            if (state.marqueeActive) {
+                Rect r = graphToScreen(state.viewport, state.marquee);
+                if (r.w < 0.0f) {
+                    r.x += r.w;
+                    r.w = -r.w;
+                }
+                if (r.h < 0.0f) {
+                    r.y += r.h;
+                    r.h = -r.h;
+                }
+                r.x += bounds.x;
+                r.y += bounds.y;
+                dl.AddRectFilled(topLeft(r), bottomRight(r),
+                                 paint::withAlpha(palette().accent, 0x22), 2.0f);
+                dl.AddRect(topLeft(r), bottomRight(r),
+                           paint::withAlpha(palette().accent, 0xB0), 2.0f);
+            }
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate,
                  PaintRenderer* renderer, paint::ButtonPainter painter)
 {
@@ -1758,6 +3405,160 @@ Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
     return node;
 }
 
+namespace {
+
+// Shared setup for the option-index widgets (segmented, cycleButton): the
+// binding becomes a 0..count-1 integer index and, unless the caller provided
+// one, formats as the selected label so semantics read naturally.
+ValueBinding optionIndexBinding(ValueBinding binding,
+                                const std::vector<std::string>& labels)
+{
+    binding.min = 0.0;
+    binding.max = (double)std::max<size_t>(1, labels.size()) - 1.0;
+    if (binding.step <= 0.0)
+        binding.step = 1.0;
+    if (!binding.format) {
+        binding.format = [labels](double v) {
+            const int i = (int)std::lround(v);
+            return i >= 0 && i < (int)labels.size() ? labels[(size_t)i]
+                                                    : std::string();
+        };
+    }
+    return binding;
+}
+
+float optionRowWidth(const std::vector<std::string>& labels, float padPerSeg,
+                     float minSeg)
+{
+    std::size_t longest = 0;
+    for (const std::string& l : labels)
+        longest = std::max(longest, l.size());
+    // Build-time estimate (no font metrics needed outside a frame).
+    return std::max(minSeg, padPerSeg + 7.5f * (float)longest);
+}
+
+} // namespace
+
+Node::Ptr segmented(NodeId id, std::string name, std::vector<std::string> labels,
+                    ValueBinding binding, PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    const int count = (int)labels.size();
+    auto node = Node::make(std::move(id), Role::Slider);
+    if (size.x <= 0.0f)
+        size.x = (float)std::max(1, count) * optionRowWidth(labels, 18.0f, 52.0f);
+    if (size.y <= 0.0f)
+        size.y = 24.0f;
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+
+    ValueBinding indexBinding = optionIndexBinding(std::move(binding), labels);
+    Semantics sem = named(Role::Slider, name);
+    sem.description = "Segmented switch";
+    setBindingSemantics(sem, indexBinding);
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(indexBinding));
+
+    node->setOnEvent([count](Node& n, const Event& event) {
+        if (event.type != EventType::MouseDown ||
+            event.button != MouseButton::Left)
+            return false;
+        const Rect bounds = n.bounds();
+        if (bounds.w <= 0.0f || count <= 0)
+            return false;
+        const double frac = (event.position.x - bounds.x) / bounds.w;
+        const int seg = std::clamp((int)(frac * count), 0, count - 1);
+        return setBindingValue(n, (double)seg);
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Segmented;
+        style.segments = std::move(labels);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr cycleButton(NodeId id, std::string name, std::vector<std::string> labels,
+                      ValueBinding binding, PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    const int count = (int)labels.size();
+    auto node = Node::make(std::move(id), Role::Button);
+    if (size.x <= 0.0f)
+        size.x = optionRowWidth(labels, 26.0f, 64.0f);
+    if (size.y <= 0.0f)
+        size.y = 26.0f;
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+
+    ValueBinding indexBinding = optionIndexBinding(std::move(binding), labels);
+    Semantics sem = named(Role::Button, name);
+    sem.description = "Cycles through options";
+    setBindingSemantics(sem, indexBinding);
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(indexBinding));
+    node->setOnActivate([count](Node& n) {
+        const ValueBinding* b = n.valueBinding();
+        if (!b || !b->get || !b->set || count <= 0)
+            return;
+        const int cur = std::clamp((int)std::lround(b->get()), 0, count - 1);
+        setBindingValue(n, (double)((cur + 1) % count));
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::CycleButton;
+        style.segments = std::move(labels);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr ledButton(NodeId id, std::string name, std::string glyph,
+                    ValueBinding binding, bool blink, PaintRenderer* renderer,
+                    Vec2 size, ImU32 ledColor, IconFont font)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Toggle);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    Semantics sem = named(Role::Toggle, name);
+    sem.value.hasNumeric = true;
+    sem.value.min = binding.min;
+    sem.value.max = binding.max;
+    sem.value.step = binding.step;
+    if (binding.get) {
+        sem.value.value = binding.get();
+        if (sem.value.value >= (binding.min + binding.max) * 0.5)
+            sem.states |= SemanticState::Checked;
+    }
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(binding));
+    node->setOnActivate([](Node& n) {
+        const ValueBinding* b = n.valueBinding();
+        if (!b || !b->get || !b->set)
+            return;
+        const bool next = b->get() < (b->min + b->max) * 0.5;
+        b->set(next ? b->max : b->min);
+        setCheckedState(n, next);
+    });
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::LedButton;
+        style.glyph = std::move(glyph);
+        style.iconFont = font;
+        style.accent = ledColor;
+        style.ledBlink = blink;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
                  PaintRenderer* renderer)
 {
@@ -1820,6 +3621,24 @@ Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
         style.bipolar = bipolar;
         style.knobPainter = std::move(painter);
         renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
+               std::function<KnobMod()> mod, PaintRenderer* renderer,
+               KnobStyle knobStyle, bool bipolar, float diameter,
+               paint::KnobPainter painter)
+{
+    NodeId sid = id;
+    auto node = knob(std::move(id), std::move(name), std::move(binding),
+                     renderer, knobStyle, bipolar, diameter, std::move(painter));
+    if (renderer && mod) {
+        if (const VisualStyle* base = renderer->styleFor(sid)) {
+            VisualStyle style = *base;
+            style.knobMod = std::move(mod);
+            renderer->setStyle(sid, style);
+        }
     }
     return node;
 }
