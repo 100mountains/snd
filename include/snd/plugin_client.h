@@ -39,6 +39,7 @@ struct PluginSpec {
     std::string subCategories = "Fx"; // VST3 subcategory string, e.g. "Fx|Filter"
     uint32_t uid[4] = {0, 0, 0, 0};   // unique per plugin; pick once, keep forever
     bool isInstrument = false;        // no audio input; MIDI drives it
+    bool wantsAudioInput = false;     // instrument that ALSO reads audio in (e.g. NxD Audio Key): the host/graph feeds `in`
     bool wantsMidi = false;           // receive note events in process()
     // Audio channel counts. Default is stereo. Set higher for multi-bus
     // plugins (a mixer's many lanes, aux sends/returns): process() then
