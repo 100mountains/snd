@@ -9,6 +9,10 @@ namespace snd::ui::paint {
 
 ImU32 withAlpha(ImU32 c, uint32_t a) { return (c & 0x00FFFFFF) | (a << 24); }
 
+namespace {
+bool visible(ImU32 c) { return (c & 0xFF000000u) != 0; }
+} // namespace
+
 ImU32 mix(ImU32 a, ImU32 b, float t)
 {
     t = std::clamp(t, 0.0f, 1.0f);
@@ -632,6 +636,56 @@ void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
         drawFocusRing(dl, topLeft, mx, pal, r);
 }
 
+void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                       const ImVec2& size, const char* text,
+                       const Palette& pal, const ControlState& state,
+                       const OutlineButtonStyle& style)
+{
+    if (!dl || !font)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = style.rounding > 0.0f ? style.rounding : 0.0f;
+
+    ImU32 fill = style.fill;
+    if (state.hovered && visible(style.hoverFill))
+        fill = style.hoverFill;
+    if (state.active && visible(style.activeFill))
+        fill = style.activeFill;
+    if (state.selected && visible(style.selectedFill))
+        fill = style.selectedFill;
+    if (state.disabled && visible(fill))
+        fill = mix(fill, IM_COL32(0, 0, 0, 255), 0.35f);
+    if (visible(fill))
+        dl->AddRectFilled(topLeft, mx, fill, r);
+
+    ImU32 border = style.border;
+    if (state.hovered)
+        border = visible(style.hoverBorder) ? style.hoverBorder : pal.accent;
+    if (state.active)
+        border = visible(style.activeBorder) ? style.activeBorder : pal.accent;
+    if (state.selected)
+        border = visible(style.selectedBorder) ? style.selectedBorder : pal.accent;
+    if (state.disabled && visible(border))
+        border = mix(border, pal.frameBright, 0.65f);
+    if (visible(border))
+        dl->AddRect(topLeft, mx, border, r, 0, state.active || state.selected ? 1.6f : 1.0f);
+
+    if (text && text[0]) {
+        const float fs = ImGui::GetFontSize() *
+                         (style.fontScale > 0.0f ? style.fontScale : 0.90f);
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
+        ImVec2 p(topLeft.x + std::max(0.0f, size.x - ts.x) * 0.5f,
+                 topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f);
+        const ImU32 textCol = state.disabled ? pal.textDim
+                                             : visible(style.text) ? style.text : pal.text;
+        dl->AddText(font, fs, p, textCol, text);
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
 void drawDefaultButton(const ButtonPaintArgs& args)
 {
     if (!args.palette || !args.state)
@@ -689,7 +743,7 @@ void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     if (text && text[0]) {
         const float fs = ImGui::GetFontSize() * fontScale;
         ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
-        ImVec2 p(topLeft.x + 10.0f + (state.selected ? 3.0f : 0.0f),
+        ImVec2 p(topLeft.x + 10.0f,
                  topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f);
         dl->AddText(font, fs, p, state.disabled ? pal.textDim : pal.text, text);
     }

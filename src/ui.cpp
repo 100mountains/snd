@@ -288,6 +288,27 @@ bool button(const char* label, const ImVec2& size,
     return pressed;
 }
 
+bool outlineButton(const char* label, const ImVec2& size)
+{
+    paint::OutlineButtonStyle style;
+    return outlineButton(label, size, style);
+}
+
+bool outlineButton(const char* label, const ImVec2& size,
+                   const paint::OutlineButtonStyle& style, bool selected)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    bool pressed = ImGui::InvisibleButton(label, size);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    state.selected = selected;
+    paint::drawOutlineButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
+                             label, palette(), state, style);
+    return pressed;
+}
+
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, bool active)
 {
     ImVec2 p = ImGui::GetCursorScreenPos();

@@ -46,6 +46,20 @@ struct ButtonPaintArgs {
     float fontScale = 0.90f;
 };
 
+struct OutlineButtonStyle {
+    ImU32 fill = 0;
+    ImU32 hoverFill = 0;
+    ImU32 activeFill = 0;
+    ImU32 selectedFill = 0;
+    ImU32 border = 0;
+    ImU32 hoverBorder = 0;
+    ImU32 activeBorder = 0;
+    ImU32 selectedBorder = 0;
+    ImU32 text = 0;
+    float rounding = 0.0f;
+    float fontScale = 0.90f;
+};
+
 ImU32 withAlpha(ImU32 c, uint32_t a);
 ImU32 mix(ImU32 a, ImU32 b, float t);
 ImVec4 toVec4(ImU32 c);
@@ -109,6 +123,10 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,
                 const ControlState& state, float fontScale = 0.90f);
+void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                       const ImVec2& size, const char* text,
+                       const Palette& pal, const ControlState& state,
+                       const OutlineButtonStyle& style = {});
 void drawDefaultButton(const ButtonPaintArgs& args);
 void drawButtonWithPainter(const ButtonPaintArgs& args,
                            const ButtonPainter& painter = {});

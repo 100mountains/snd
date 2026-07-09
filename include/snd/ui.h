@@ -15,6 +15,7 @@ namespace snd::ui {
 namespace paint {
 struct KnobPaintArgs;
 struct ButtonPaintArgs;
+struct OutlineButtonStyle;
 using KnobPainter = std::function<void(const KnobPaintArgs&)>;
 using ButtonPainter = std::function<void(const ButtonPaintArgs&)>;
 } // namespace paint
@@ -82,6 +83,12 @@ bool animatedButton(const char* label, const ImVec2& size,
 // hit-testing, focus indication, activation, and accessibility expectations.
 bool button(const char* label, const ImVec2& size,
             const paint::ButtonPainter& painter);
+// Border-first action button. Default style has no fill and shows an accent
+// rectangle on hover/active; pass OutlineButtonStyle to set fill/border colours.
+bool outlineButton(const char* label, const ImVec2& size);
+bool outlineButton(const char* label, const ImVec2& size,
+                   const paint::OutlineButtonStyle& style,
+                   bool selected = false);
 
 // Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
 // independent like SVG). `active` renders with the accent colour + border.

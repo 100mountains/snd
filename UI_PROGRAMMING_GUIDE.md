@@ -165,8 +165,8 @@ SND look. The helper namespace is `snd::ui::retained::widgets`; the renderer is
 `snd::ui::retained::PaintRenderer`.
 
 Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`, `sectionHeader`,
-`badge`, `listItem`, `button`, `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`,
-`meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
+`badge`, `listItem`, `button`, `outlineButton`, `animatedButton`, `iconButton`, `toggle`,
+`knob`, `fader`, `meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
 `envelopeEditor`, and `canvas`. Value controls use `ValueBinding`; the caller
 still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
 faders, drag numbers, XY pads, pattern grids, keyboards, and envelope editors
@@ -214,6 +214,10 @@ compact slider-like value row that edits horizontally; Shift-drag is fine
 adjustment and keyboard/semantic increments use `ValueBinding::step`.
 Use `widgets::led(..., &renderer, radius, onColor)` when a retained LED needs
 the same radius or accent override as the immediate LED helper.
+Use `widgets::outlineButton(id, name, onActivate, &renderer, size, style,
+selected)` for a border-first text action. The default style has no fill or
+resting border and shows an accent rectangle on hover/active, while
+`paint::OutlineButtonStyle` can set fill, border, text, and selected colours.
 Use `widgets::animatedButton(id, name, onActivate, &renderer, size)` for
 generation/action buttons that need a subtle live sweep. It is Canvas-backed
 for pixels, but remains a retained `Role::Button` with normal focus,
@@ -298,6 +302,9 @@ members).
   button with a subtle live sweep; `0` colours use the current palette accent.
 - `button(label, size, painter)` → clicked. Generic custom-painted button;
   SND still owns activation and focus.
+- `outlineButton(label, size)` → clicked. Border-first text action; the
+  default style has no fill and shows the accent border on hover/active. The
+  overload accepts `paint::OutlineButtonStyle` and a selected flag.
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.

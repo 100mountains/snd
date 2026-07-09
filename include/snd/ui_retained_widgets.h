@@ -22,6 +22,7 @@ enum class VisualKind {
     Button,
     IconButton,
     VectorIconButton,
+    OutlineButton,
     Toggle,
     Knob,
     Led,
@@ -57,6 +58,7 @@ struct VisualStyle {
     float fontScale = 1.0f;
     paint::KnobPainter knobPainter;
     paint::ButtonPainter buttonPainter;
+    paint::OutlineButtonStyle outlineButtonStyle;
     bool panelFill = false;
     bool panelBorder = false;
     bool lit = false;
@@ -157,6 +159,12 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate = {},
                  PaintRenderer* renderer = nullptr,
                  paint::ButtonPainter painter = {});
+Node::Ptr outlineButton(NodeId id, std::string name,
+                        std::function<void(Node&)> onActivate = {},
+                        PaintRenderer* renderer = nullptr,
+                        Vec2 size = {72.0f, 28.0f},
+                        paint::OutlineButtonStyle style = {},
+                        bool selected = false);
 Node::Ptr animatedButton(NodeId id, std::string name,
                          std::function<void(Node&)> onActivate = {},
                          PaintRenderer* renderer = nullptr,

@@ -1064,6 +1064,13 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         paint::drawButtonWithPainter(args, style.buttonPainter);
         break;
     }
+    case VisualKind::OutlineButton: {
+        const std::string name = nodeName(node, sem);
+        paint::drawOutlineButton(drawList, ImGui::GetFont(), topLeft(bounds),
+                                 sizeOf(bounds), name.c_str(), pal, state,
+                                 style.outlineButtonStyle);
+        break;
+    }
     case VisualKind::IconButton: {
         const bool down = state.active || state.selected || checked(node, sem);
         paint::drawTactileIconButton(drawList, iconFont(style.iconFont), topLeft(bounds),
@@ -1662,6 +1669,28 @@ Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActiv
         VisualStyle style;
         style.kind = VisualKind::Button;
         style.buttonPainter = std::move(painter);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr outlineButton(NodeId id, std::string name,
+                        std::function<void(Node&)> onActivate,
+                        PaintRenderer* renderer, Vec2 size,
+                        paint::OutlineButtonStyle outlineStyle, bool selected)
+{
+    NodeId sid = id;
+    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    node->setIntrinsicSize(size);
+    if (selected) {
+        Semantics sem = node->semantics();
+        sem.states |= SemanticState::Selected;
+        node->setSemantics(sem);
+    }
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::OutlineButton;
+        style.outlineButtonStyle = outlineStyle;
         renderer->setStyle(sid, style);
     }
     return node;
