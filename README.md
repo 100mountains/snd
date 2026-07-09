@@ -1,9 +1,10 @@
 # SND
 
-**A permissively-licensed JUCE/iPlug replacement.** SND is a small, in-house
+**A source-available JUCE/iPlug replacement.** SND is a small, in-house
 audio+UI foundation library — cross-platform audio I/O, a GUI shell, plugin
-hosting, and a write-once plugin SDK — without JUCE's AGPLv3-or-pay licensing.
-Apps (WaveBob, bob) build on SND instead of on JUCE.
+hosting, and a write-once plugin SDK. Apps (WaveBob, bob) build on SND instead
+of on JUCE. Free for any noncommercial use; commercial use needs a licence —
+see [License](#license).
 
 ## Modules
 
@@ -22,8 +23,8 @@ Apps (WaveBob, bob) build on SND instead of on JUCE.
 - `snd::state` — a ValueTree-shaped state tree with XML round-trip + undo
 - `snd::platform` — native file dialogs, per-OS config dir
 
-Mac and Linux are supported; Windows is planned. `DESIGN.md` records the
-architecture, `PROGRAMMING-GUIDE.md` the how-to, `docs/research/` the audits.
+Mac, Linux, and Windows are supported. `DESIGN.md` records the architecture,
+`PROGRAMMING-GUIDE.md` the how-to, `docs/research/` the audits.
 
 ## Build & test
 
@@ -61,3 +62,22 @@ script by hand.
 
 See `AGENTS.md` for the multi-agent dev workflow (genericized from Murk's)
 that applies to work in this repo.
+
+## License
+
+SND is **source-available, not open source**. It is licensed under the
+[PolyForm Noncommercial License 1.0.0](LICENSE): free to use, modify, and share
+for any **noncommercial** purpose (personal projects, research, education,
+non-profits, evaluation).
+
+**Commercial use requires a separate commercial licence from the author.** If
+you want to ship SND — or anything built on it — in a product or service for
+commercial advantage or monetary compensation, open an issue at
+<https://github.com/100mountains/snd> or contact @100mountains on GitHub to
+arrange one.
+
+Copyright 2026 100mountains. The dependencies SND fetches keep their own
+licences (mostly permissive: ImGui, GLFW, miniaudio, PFFFT, NFD, libFLAC,
+imgui-knobs, nanosvg, AudioUnitSDK). One to note: the **VST3 SDK** is
+GPLv3-or-Steinberg — if you build VST3 targets, your use of that SDK is governed
+by Steinberg's terms, separately from SND's licence.

@@ -1,2 +1,5 @@
 build/
 imgui.ini
+
+# macOS
+.DS_Store
