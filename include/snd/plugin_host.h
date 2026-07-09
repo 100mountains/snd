@@ -1,9 +1,9 @@
-// snd::plugin -- headless hosting of third-party audio plugins (VST3 + AU).
+// snd::plugin -- hosting of third-party audio plugins (VST3 + AU).
 //
 // Shape mirrors the audited JUCE Format/FormatManager/unified-instance design
-// (see docs/research/juce-hosting-audit.md). Headless-first: there is no
-// editor-window concept in this API yet. No MIDI: hosted plugins receive an
-// empty event list.
+// (see docs/research/juce-hosting-audit.md). Instances expose audio, MIDI,
+// state, latency, transport, parameters, and optional native editor windows
+// through one format-neutral API.
 //
 // Threading contract (matches both formats' specs):
 //   - create/prepare/unprepare/saveState/loadState/idle: MAIN thread only
@@ -102,11 +102,11 @@ public:
     virtual bool loadState(const uint8_t* data, size_t size) = 0;
 
     // --- The plugin's own editor GUI ---
-    // Opens in a floating native window (macOS today; other platforms report
-    // no editor). Main thread only. The user closing the window is handled
-    // internally -- poll editorOpen() for the current state. The editor is
-    // closed automatically when the instance is destroyed. Call idle() each
-    // frame while an editor is open so parameter changes flow both ways.
+    // Opens in a floating native window when the format/plugin supplies one.
+    // Main thread only. The user closing the window is handled internally --
+    // poll editorOpen() for the current state. The editor is closed
+    // automatically when the instance is destroyed. Call idle() each frame
+    // while an editor is open so parameter changes flow both ways.
     // AU: every plugin has an editor (its own Cocoa view when it ships one,
     // the system generic parameter view otherwise).
     virtual bool hasEditor() = 0;

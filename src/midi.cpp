@@ -1,5 +1,5 @@
 // snd::midi -- CoreMIDI on macOS (modern MIDIEventList API), ALSA sequencer
-// on Linux, stubs on Windows until the WinMM/WinRT backend lands.
+// on Linux, WinMM on Windows, and stubs only on unsupported platforms.
 
 #include "snd/midi.h"
 

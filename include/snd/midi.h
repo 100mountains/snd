@@ -1,7 +1,7 @@
 // snd::midi -- MIDI events and device I/O.
 //
 // Charter note: MIDI entered SND on 2026-07-07, owner-blessed, because the
-// Murk migration requires it (53 of 57 Murfy files touch MIDI). Apps that
+// bob/Murk surface requires it (53 of 57 Murfy files touched MIDI). Apps that
 // don't need it (WaveBob) simply never call it.
 //
 // Device callbacks run on the MIDI system's thread: treat them like audio

@@ -1,5 +1,7 @@
 # Design
 
+Verified against: `bb98209e009095769dae5fe8dd64bd1452190c29`.
+
 This is the current high-level design for this project. It records architectural
 decisions, ownership boundaries, and the technical reasons behind them.
 
@@ -17,15 +19,23 @@ root `PROGRAMMING-GUIDE.md`.
 
 ## What This Repo Is
 
-**SND** is a small, permissively-licensed, in-house audio+UI foundation
+**SND** is a small, source-available, in-house audio+UI foundation
 library, in the shape of JUCE or iPlug2, built by wrapping
 [miniaudio](https://github.com/mackron/miniaudio) (audio I/O + decoding) and
 [Dear ImGui](https://github.com/ocornut/imgui) (UI) behind an original API in
-`include/snd/`. Apps are built on top of it rather than on JUCE.
+`include/snd/`. It is free for noncommercial use under PolyForm
+Noncommercial; commercial use requires a separate licence. Apps are built on
+top of it rather than on JUCE.
 
 SND is its own thing, independent of any specific app: decisions here are
 driven by what makes SND a coherent, reusable foundation, not narrowed to one
 downstream app's requirements. WaveBob and bob are consumers.
+
+Current downstream status, owner-updated 2026-07-09: bob is the active
+Murk/Murfy successor, and the Murk-facing surface is done on SND/GL, including
+the Arrange and Perform pages. Treat those pages as proven consumer pressure
+for SND's UI/plugin/MIDI APIs, but keep product-specific behaviour in the
+downstream app rather than folding it into the foundation.
 
 ## Why Not JUCE
 
@@ -40,12 +50,14 @@ miniaudio (by David Reid, aka `mackron` — also the author of the `dr_wav` /
 `dr_flac` / `dr_mp3` single-header libraries) is dual-licensed public domain /
 MIT-0. Dear ImGui is MIT. Neither requires attribution, permits unrestricted
 commercial use and modification, and neither imposes anything on code that
-merely depends on them. Building on these instead of JUCE means SND, and
-anything built on SND, keeps full licensing freedom by construction.
+merely depends on them. Building on these instead of JUCE means SND's own
+licensing can be chosen by the project owner without dependency-driven copyleft
+or fee obligations.
 
-This is unrelated to Murk, which keeps its own existing, working JUCE setup
-untouched — SND is a separate, from-scratch effort, not a replacement being
-retrofitted into a shipping app.
+SND began separate from Murk, whose old JUCE tree remains read-only reference
+material. The current bob/Murk surface now consumes SND through the GL UI and
+plugin layers; SND itself remains a from-scratch foundation rather than a
+forked retrofit of the old app.
 
 ## Layering, Modeled On JUCE's Own Module Boundaries
 
@@ -65,8 +77,8 @@ audio-device layer is architecturally separate from its plugin-hosting layer:
 A plain JUCE standalone app never touches the plugin-processor module at all,
 and a plugin doesn't own the audio device (the host does, calling it back with
 buffers). These are genuinely separable concerns, not entangled ones — which is
-why SND can build the audio+UI foundation now without that work being
-incompatible with adding plugin hosting later.
+why SND keeps device I/O, UI, plugin hosting, and plugin-client wrapping as
+separable layers even though all of them now exist in-tree.
 
 ## SND's Own Layering (Intended)
 
@@ -127,8 +139,8 @@ Shape (from the audits in `docs/research/`):
 
 Deliberate, not an oversight: no obligation to keep an API stable for external
 consumers, no docs/issue/PR overhead, and freedom to redesign as real usage
-(WaveBob, and possibly Murk later) reveals what's actually needed. Going
-private → public is a one-click decision that can be made anytime later; the
+(WaveBob and bob) reveals what's actually needed. Going private → public is a
+one-click decision that can be made anytime later; the
 reverse isn't, so there's no cost to deferring that choice.
 
 ## Testing And Verification: No CI, Ever
@@ -170,6 +182,6 @@ Three flows, kept separate:
 - Remove dead code.
 - Prefer the smallest change that solves the actual problem.
 - Never fork a vendored dependency just to rename it — wrap it instead.
-- Keep the audio-I/O layer and any future plugin-hosting layer separable, the
-  way JUCE itself does.
+- Keep audio I/O, UI, plugin hosting, and plugin-client wrapping separable, the
+  way JUCE keeps device, GUI, hosting, and plugin-client concerns separate.
 - No CI. Verification is `tools/build.sh` and `--selftest`, run by hand.

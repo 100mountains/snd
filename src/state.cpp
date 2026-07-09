@@ -1,5 +1,5 @@
 // snd::state implementation. Nodes are shared; listeners bubble up the
-// parent chain; XML matches JUCE ValueTree's shape for later Murk reads.
+// parent chain; XML matches JUCE ValueTree's shape for bob/Murk compatibility.
 
 #include "snd/state.h"
 

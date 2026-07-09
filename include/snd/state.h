@@ -1,8 +1,9 @@
 // snd::state -- a small tree of named nodes with typed properties, listeners,
-// undo, and XML (de)serialization. The ValueTree replacement for the Murk
-// migration: the XML shape matches JUCE's ValueTree writeToXml output
-// (type = element name, properties = attributes, children = child elements)
-// so existing Murk state files can be read once ported.
+// undo, and XML (de)serialization. The ValueTree-shaped state model used by
+// bob/Murk compatibility work: the XML shape matches JUCE's ValueTree
+// writeToXml output (type = element name, properties = attributes, children =
+// child elements) so historical Murk state files can be read or converted when
+// needed.
 //
 // Main-thread only, like ValueTree. Tree is a lightweight reference; copies
 // share the same node.

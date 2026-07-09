@@ -47,7 +47,8 @@ bool mp3EncoderAvailable();
 // Extract the audio track from any media file the OS can read -- video
 // (mp4/mov/m4v...) or audio (m4a/aac...). Preserves the track's channel
 // count (5.1 film audio arrives as 6 channels) and sample rate.
-// macOS (AVFoundation) today; other platforms report failure.
+// macOS uses AVFoundation, Windows uses Media Foundation, and Linux pipes
+// through ffprobe/ffmpeg when those tools are on PATH.
 bool loadMediaAudio(const std::string& path, Buffer& out, std::string* error = nullptr);
 
 // Resample to a new rate (miniaudio's resampler, highest built-in quality).

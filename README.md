@@ -17,14 +17,15 @@ see [License](#license).
 - `snd::plugin` — VST3 + AU **hosting** (editor GUIs in native windows, MIDI,
   host transport) and a **client SDK**: write a `Processor` + ImGui editor once
   and build it as VST3, AU, and a standalone app. Multichannel buses, an
-  inter-plugin control bus, out-of-process crash-safe scanning.
-- `snd::midi` — MIDI events + CoreMIDI/ALSA device I/O
+  inter-plugin control-bus API, out-of-process crash-safe scanning.
+- `snd::midi` — MIDI events + CoreMIDI/ALSA/WinMM device I/O
 - `snd::dsp` — real FFT + COLA STFT (PFFFT)
 - `snd::state` — a ValueTree-shaped state tree with XML round-trip + undo
 - `snd::platform` — native file dialogs, per-OS config dir
 
 Mac, Linux, and Windows are supported. `DESIGN.md` records the architecture,
-`PROGRAMMING-GUIDE.md` the how-to, `docs/research/` the audits.
+`PROGRAMMING-GUIDE.md` the how-to, `AUDIT.md` the current architecture audit,
+and `docs/research/` the supporting format research.
 
 ## Build & test
 

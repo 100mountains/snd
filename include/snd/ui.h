@@ -84,6 +84,24 @@ enum class Icon {
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);
 
+// --- Icon fonts (embedded: Material Icons + Lucide) -------------------------
+// SND embeds two icon fonts. Material Icons (Apache-2.0) is merged into the
+// default font, so ICON_MD_* from <snd/icons.h> works inline with text and in
+// the widgets below. Lucide (ISC) is a second font (ICON_LC_*). Accessors
+// return the font in the CURRENT window's context.
+void loadFonts();           // internal: Window::create calls this per context
+ImFont* iconFontMaterial(); // the default font (Material glyphs merged in)
+ImFont* iconFontLucide();
+
+// Tactile icon button: a raised light-grey face that presses into a dark inset
+// (the bevel flips on press/toggle). `glyph` is an icon string from
+// <snd/icons.h>. size 0 = a square sized to the frame height. `font` null =
+// the Material/default font (pass iconFontLucide() for the Lucide style).
+// `toggled` holds the pressed/inset look (on/off buttons); `face` 0 = the
+// default light grey, else a themed face colour. Returns true on click.
+bool iconButton(const char* id, const char* glyph, const ImVec2& size = ImVec2(0, 0),
+                ImFont* font = nullptr, bool toggled = false, ImU32 face = 0);
+
 // --- SVG assets -> bitmap / GPU texture -------------------------------------
 // Parse + rasterize an SVG document (nanosvg) so vector logos/icons stay crisp
 // at any size or DPI. Rasterizes heightPx tall; width follows the source

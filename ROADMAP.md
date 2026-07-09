@@ -1,15 +1,18 @@
-# Roadmap — SND to WaveBob-done and Murk-off-JUCE
+# Roadmap — SND after WaveBob and the Murk GL surface
 
 SND is the backbone: audio I/O, UI, plugin hosting, DSP, and all
 platform-specific glue live here behind one API. Two apps ride on it:
 **WaveBob** (wave editor — near feature-complete, keeps shipping) and
-**Murk/Murfy** (the migration target). The original phase 1–4 build plan that
-used to live in this file is complete (see git history); this is what's left.
+**bob** (the Murk/Murfy successor). The original phase 1–4 SND build plan and
+the Murk GL surface port are complete; this file now tracks residual SND work
+and any downstream pressure that should feed back into the foundation.
 
-Murk's measured surface (what "done" means): 1 JUCE GUI app + MurfyMainPlugin
-(Standalone/VST3/AU) + ~6 module plugins (Pattern, Seq, PbQuntise,
-BassController, module-plugin set) + 3 panel-preview dev tools; 57 app source
-files, **53 of them touching MIDI**; ONNX engine on the side (JUCE-light).
+Historical Murk surface (what the port had to cover): 1 JUCE GUI app +
+MurfyMainPlugin (Standalone/VST3/AU) + ~6 module plugins (Pattern, Seq,
+PbQuntise, BassController, module-plugin set) + 3 panel-preview dev tools; 57
+app source files, **53 of them touching MIDI**; ONNX engine on the side
+(JUCE-light). Current state: the Murk-facing surface is done on SND/GL, with
+Arrange and Perform pages done.
 
 Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as ever.
 
@@ -20,9 +23,9 @@ Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as eve
 | `snd::audio` | built — devices, Player (gapless loop, RT insert hook), fast load, probe/prefix, resample |
 | `snd::dsp` | built — PFFFT, COLA STFT (−140 dB round-trip) |
 | `snd::plugin` (hosting) | built — VST3+AU, editor GUIs in native windows, out-of-process scanning |
-| `snd::plugin` (client) | built — Processor+params, VST3 wrapper, ImGui editor in IPlugView, standalone; AU wrapper pending |
-| `snd::ui` | built v1 — frameless window, native drag, icon buttons, widget set (Palette, knobs, toggle, LED, dB meter, fader, badge) |
-| `snd::midi` | built — Message/Buffer, CoreMIDI I/O, host wiring (VST3 events + IMidiMapping, AU MusicDevice) |
+| `snd::plugin` (client) | built — Processor+params, VST3 wrapper, ImGui editor in IPlugView, standalone, AU wrapper |
+| `snd::ui` | built v1 — frameless window, native drag, SVG assets, icon buttons, and audio widgets (knobs, meters, faders, keyboard, pattern grid, envelope, XY pad, lists, drag number, file browser) |
+| `snd::midi` | built — Message/Buffer, CoreMIDI/ALSA/WinMM I/O, host wiring (VST3 events + IMidiMapping, AU MusicDevice) |
 | `snd::platform` | built — dialogs, configDir, executablePath |
 | state / graph / plumbing | built — snd::state, Graph w/ latency comp, StreamReader, timers/queue, ThreadPool, FLAC/MP3/media |
 
@@ -36,12 +39,12 @@ persistent paint via per-file session sidecars, pop-out windows.
 Owner dropped: parametric EQ, pitch/time-stretch, noise reduction v2.
 Remaining candidates: OGG export, loudness-select for the brush.
 
-## Track 2 — SND pillars (the Murk enablers)
+## Track 2 — SND pillars (the bob/Murk enablers)
 
-### ① Widgets — v1 done; Murk parity still needs
-- list/table conventions (thin wrappers over ImGui tables) — S
-- MIDI keyboard widget, XY pad, envelope/curve + pattern-grid editors — M/L
-- file-browser panel, drag-number entry, menu/tooltip conventions — S/M
+### ① Widgets — v1 done; Murk GL surface covered
+- Arrange and Perform page needs are covered by the current SND/GL surface.
+- Remaining polish candidates: list/table helpers and menu/tooltip conventions
+  if another real consumer needs them.
 
 ### ② Plugin **client** SDK — CORE DONE (M1 hit 2026-07-07)
 - ~~Processor base, declarative params, state chunks, VST3 wrapper w/ runtime
@@ -64,16 +67,18 @@ Remaining candidates: OGG export, loudness-select for the brush.
   loopback selftest)
 - ~~host side: VST3 IEventList + IMidiMapping CC route, AU
   MusicDeviceMIDIEvent, aumu/aumf in the scan~~ done (DLS-synth-sings selftest)
-- client side: MIDI through the plugin SDK processor API — lands with ② — S
+- ~~client side: MIDI through the plugin SDK processor API~~ done with ②
 
 ### ④ App plumbing — DONE 2026-07-07
 - ~~snd::state (tree + listeners + transactional undo + ValueTree-shaped
   XML), runOnMain/processMainQueue + frame timers, StreamReader, ThreadPool,
   snd::plugin::Graph w/ automatic latency compensation,
-  Instance::latencySamples (VST3+AU), FLAC/MP3 encoders, AVFoundation media
-  reads (covers AIFF on mac)~~ all landed with behaviour selftests (20/20)
+  Instance::latencySamples (VST3+AU), FLAC/MP3 encoders, media extraction
+  backends (AVFoundation / Media Foundation / ffmpeg-on-PATH)~~ all landed
+  with behaviour selftests
 - remaining: imgui-node-editor vendoring for the graph UI (with its first
-  consumer); cross-platform AIFF if Murk ever leaves the Mac
+  consumer); cross-platform AIFF only if a downstream app needs OS-independent
+  AIFF beyond miniaudio's normal decode path
 
 ## Track 4 — MULTIPLATFORM (owner-declared very important, 2026-07-07)
 
@@ -84,11 +89,11 @@ per-OS backends (MIDI, media extraction, editor windows) exist for each.
 
 | Gap | Windows backend | Linux backend |
 |---|---|---|
-| MIDI devices | WinMM / WinRT MIDI | ALSA sequencer |
-| media extraction (video audio) | Media Foundation (OS API) | GStreamer (dlopen'd) or ffmpeg-on-PATH pipe |
+| MIDI devices | WinMM | ALSA sequencer |
+| media extraction (video audio) | Media Foundation (OS API) | ffmpeg-on-PATH pipe |
 | plugin editor windows (host) | HWND child window | X11 embed |
 | ImGui editor in plugins (client) | WGL view | GLX view |
-| frameless-window native drag | Win32 path partially written | manual drag fallback |
+| frameless-window native drag | Win32 native drag | manual drag fallback |
 | AU hosting | n/a (AU is Apple-only; VST3 covers) | n/a |
 
 Phases (verification is LOCAL AND MANUAL — no CI, ever):
@@ -144,10 +149,11 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
    pbquntise, scale, basscontroller, drums, synth, seq, pattern (generative,
    ONNX), sampler, nxd (neural drum, ONNX). Last one **bassmodel** (embeds the
    AID engine + Faust bass voices + shared filter) in progress.
-3. App shell + panels: Manager/PluginList panels (host UI already exists in
-   SND), GraphEditorPanel → imgui-node-editor, SampleEditView → componentized
-   WaveBob edit view, LoopSequencer/pattern editors → new widgets —
-   **XL, the long tail** (not started — modules first, shell after)
+3. App shell + GL surface — ✅ DONE: the Murk-facing surface is running on
+   SND/GL, with Arrange and Perform pages done. Manager/PluginList, graph,
+   sample edit, and sequencer/pattern surface work are no longer tracked here
+   as future SND blockers; any remaining issues should come back as specific
+   SND defects or focused widget/API requests.
 4. State migration: ValueTree XML → snd state tree (converter or read-compat) — M
 5. Parked / unknowns: `android/` build (SND excludes Android by charter),
    `web/` dir, accessibility (ImGui has none — known regression), AAX (never
@@ -160,7 +166,8 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
 - **M3** — ✅ DONE (and then some): 14 of 15 bob modules ship on SND as
   VST3+AU+standalone with behaviour-verifying selftests, incl. the ONNX ones
   (pattern groove/feel, nxd neural drum). Last module bassmodel in flight.
-- **M4** — bob app shell on SND with first panels; then panel-by-panel
+- **M4** — ✅ DONE: bob app shell and Murk GL surface on SND, including
+  Arrange and Perform pages
 - **M5** — JUCE deleted from the bob tree
 
 ## Still-true operational notes
@@ -169,9 +176,10 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
   needs the library-validation entitlement — SND documents/owns this.
 - Every capability lands with a behaviour-verifying `--selftest` check, run
   by hand via `tools/build.sh`. No CI, ever.
-- Murk (`~/Documents/murk`) is reference/requirements until Track 3 — nothing
-  under that path gets modified.
+- Murk (`~/Documents/murk`, renamed in-tree to `Bob/`) remains read-only
+  reference material when historical behaviour needs checking; current work
+  lands in bob/SND, not in that reference tree.
 
-**How much, in one line:** Track 1 ≈ ten S/M items; Track 2 is the heavy
-middle (② and ④ dominate); Track 3 is the long tail, dominated by panel/UI
-porting, with MIDI threaded through everything.
+**How much, in one line:** the old SND buildout and Murk GL surface work are
+done; remaining roadmap items should be concrete foundation fixes, downstream
+bug reports, or owner-approved cleanup.

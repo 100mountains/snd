@@ -375,6 +375,50 @@ void badge(const char* text, ImU32 fill)
     dl->AddText(font, fs, ImVec2(p.x + 5.0f, p.y + 2.5f), gPalette.text, text);
 }
 
+bool iconButton(const char* id, const char* glyph, const ImVec2& size, ImFont* font,
+                bool toggled, ImU32 face)
+{
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f)
+        sz.x = sz.y = ImGui::GetFrameHeight() * 1.35f;
+    else if (sz.y <= 0.0f)
+        sz.y = sz.x;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton(id, sz);
+    const bool held = ImGui::IsItemActive();
+    const bool hovered = ImGui::IsItemHovered();
+    const bool down = held || toggled; // pressed / inset look
+
+    // face: a light-grey hardware button by default, darker when pressed
+    ImU32 light = face ? face : IM_COL32(0xc6, 0xc9, 0xcf, 255);
+    if (hovered && !down)
+        light = mixCol(light, IM_COL32(255, 255, 255, 255), 0.12f);
+    ImU32 dark = face ? mixCol(face, IM_COL32(0, 0, 0, 255), 0.55f)
+                      : IM_COL32(0x35, 0x38, 0x3e, 255);
+    ImU32 faceCol = down ? dark : light;
+
+    auto* dl = ImGui::GetWindowDrawList();
+    const float r = 4.0f;
+    const ImVec2 mx(p.x + sz.x, p.y + sz.y);
+    dl->AddRectFilled(p, mx, faceCol, r);
+    // bevel: raised = light top edge / dark bottom edge; inset flips it
+    ImU32 topEdge = down ? IM_COL32(0, 0, 0, 110) : IM_COL32(255, 255, 255, 150);
+    ImU32 botEdge = down ? IM_COL32(255, 255, 255, 40) : IM_COL32(0, 0, 0, 90);
+    dl->AddLine(ImVec2(p.x + r, p.y + 1.0f), ImVec2(mx.x - r, p.y + 1.0f), topEdge, 1.6f);
+    dl->AddLine(ImVec2(p.x + r, mx.y - 1.5f), ImVec2(mx.x - r, mx.y - 1.5f), botEdge, 1.6f);
+    dl->AddRect(p, mx, IM_COL32(0, 0, 0, 110), r, 0, 1.0f);
+
+    // the icon glyph, centred (nudged down 1px when pressed)
+    ImFont* f = font ? font : ImGui::GetFont();
+    const float iconPx = sz.y * 0.60f;
+    ImU32 iconCol = down ? IM_COL32(0xec, 0xef, 0xf3, 255) : IM_COL32(0x2b, 0x2e, 0x34, 255);
+    ImVec2 ts = f->CalcTextSizeA(iconPx, FLT_MAX, 0.0f, glyph);
+    ImVec2 gp(p.x + (sz.x - ts.x) * 0.5f, p.y + (sz.y - ts.y) * 0.5f + (down ? 1.0f : 0.0f));
+    dl->AddText(f, iconPx, gp, iconCol, glyph);
+    return clicked;
+}
+
 bool keyboard(const char* id, KeyboardState& st, const ImVec2& size, int firstNote,
               int octaves, const std::function<void(uint8_t, uint8_t)>& noteOn,
               const std::function<void(uint8_t)>& noteOff, const bool* lit)

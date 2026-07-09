@@ -15,6 +15,7 @@
 #include "snd/plugin_graph.h"
 #include "snd/plugin_host.h"
 #include "snd/state.h"
+#include "snd/icons.h"
 #include "snd/ui.h"
 
 #include <atomic>
@@ -522,6 +523,7 @@ static int runSelftest()
         // no window -- proves the widget layer stands on its own
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        snd::ui::loadFonts(); // exercise the embedded Material/Lucide fonts headlessly
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2(800, 600);
         unsigned char* pixels = nullptr;
@@ -551,6 +553,7 @@ static int runSelftest()
             interacted = snd::ui::knob("rng", &kr, -1.0f, 1.0f,
                                        snd::ui::KnobStyle::Ring, 0.0f, "%.2f", true) ||
                          interacted;
+            snd::ui::iconButton("ico", ICON_MD_SETTINGS, ImVec2(22, 22));
             interacted = snd::ui::toggle("t", &sw) || interacted;
             interacted = snd::ui::led("l", true, 5.0f, true) || interacted;
             snd::ui::meter("m", ms, 0.5f, ImVec2(10, 80));
@@ -1291,6 +1294,23 @@ int main(int argc, char** argv)
         ImGui::SameLine();
         snd::ui::knob("PAN", &kpan, -1.0f, 1.0f, snd::ui::KnobStyle::Ring, 0.0f, "%+.2f",
                       true);
+        snd::ui::sectionHeader("icons (material + lucide, tactile buttons)");
+        snd::ui::iconButton("g_set", ICON_MD_SETTINGS);
+        ImGui::SameLine();
+        snd::ui::iconButton("g_play", ICON_MD_PLAY_ARROW);
+        ImGui::SameLine();
+        snd::ui::iconButton("g_fold", ICON_MD_FOLDER);
+        ImGui::SameLine();
+        static bool gpow = true; // toggled = held inset look
+        if (snd::ui::iconButton("g_pow", ICON_MD_POWER_SETTINGS_NEW, ImVec2(0, 0), nullptr, gpow))
+            gpow = !gpow;
+        ImGui::SameLine();
+        snd::ui::iconButton("g_acc", ICON_MD_GRAPHIC_EQ, ImVec2(0, 0), nullptr, false,
+                            IM_COL32(0x2e, 0x6d, 0xb4, 255)); // themed face
+        ImGui::SameLine();
+        snd::ui::iconButton("g_lc", ICON_LC_SETTINGS, ImVec2(0, 0), snd::ui::iconFontLucide());
+        ImGui::SameLine();
+        ImGui::TextUnformatted(ICON_MD_INFO " inline");
         snd::ui::sectionHeader("switches");
         snd::ui::toggle("live", &live);
         ImGui::SameLine();

@@ -85,6 +85,7 @@ bool Window::create(int width, int height, const std::string& title, bool decora
     IMGUI_CHECKVERSION();
     impl->ctx = ImGui::CreateContext();
     ImGui::SetCurrentContext(impl->ctx);
+    loadFonts(); // text + embedded Material/Lucide icon fonts (this context)
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(impl->window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);
