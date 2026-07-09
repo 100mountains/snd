@@ -21,6 +21,7 @@ enum class VisualKind {
     Text,
     Button,
     IconButton,
+    VectorIconButton,
     Toggle,
     Knob,
     Led,
@@ -48,13 +49,17 @@ struct VisualStyle {
     IconFont iconFont = IconFont::Material;
     std::string glyph;
     bool bipolar = false;
+    Icon vectorIcon = Icon::Play;
     ImU32 accent = 0;
     ImU32 face = 0;
     float meterFloorDb = -48.0f;
     float ledRadius = 5.0f;
     float fontScale = 1.0f;
+    paint::KnobPainter knobPainter;
+    paint::ButtonPainter buttonPainter;
     bool panelFill = false;
     bool panelBorder = false;
+    bool lit = false;
     CanvasDraw canvasDraw;
 };
 
@@ -150,7 +155,8 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  Role semanticRole = Role::Canvas);
 
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate = {},
-                 PaintRenderer* renderer = nullptr);
+                 PaintRenderer* renderer = nullptr,
+                 paint::ButtonPainter painter = {});
 Node::Ptr animatedButton(NodeId id, std::string name,
                          std::function<void(Node&)> onActivate = {},
                          PaintRenderer* renderer = nullptr,
@@ -161,13 +167,19 @@ Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,
                      IconFont font = IconFont::Material);
+Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
+                     std::function<void(Node&)> onActivate = {},
+                     PaintRenderer* renderer = nullptr,
+                     Vec2 size = {30.0f, 30.0f},
+                     ImU32 accent = 0, bool active = false);
 
 Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
                  PaintRenderer* renderer = nullptr);
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
                PaintRenderer* renderer = nullptr,
                KnobStyle style = KnobStyle::Ring, bool bipolar = false,
-               float diameter = 56.0f);
+               float diameter = 56.0f,
+               paint::KnobPainter painter = {});
 Node::Ptr fader(NodeId id, std::string name, ValueBinding binding,
                 PaintRenderer* renderer = nullptr, Vec2 size = {26.0f, 120.0f});
 

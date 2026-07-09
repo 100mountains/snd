@@ -21,6 +21,31 @@ struct ControlState {
     bool selected = false;
 };
 
+struct KnobPaintArgs {
+    ImDrawList* drawList = nullptr;
+    ImVec2 topLeft;
+    float size = 0.0f;
+    float rawValue = 0.0f;
+    float normalizedValue = 0.0f;
+    KnobStyle style = KnobStyle::Ring;
+    bool bipolar = false;
+    ImU32 accent = 0;
+    const Palette* palette = nullptr;
+    const ControlState* state = nullptr;
+};
+
+struct ButtonPaintArgs {
+    ImDrawList* drawList = nullptr;
+    ImFont* font = nullptr;
+    ImVec2 topLeft;
+    ImVec2 size;
+    const char* text = "";
+    ImU32 face = 0;
+    const Palette* palette = nullptr;
+    const ControlState* state = nullptr;
+    float fontScale = 0.90f;
+};
+
 ImU32 withAlpha(ImU32 c, uint32_t a);
 ImU32 mix(ImU32 a, ImU32 b, float t);
 ImVec4 toVec4(ImU32 c);
@@ -52,6 +77,9 @@ void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
               KnobStyle style, const Palette& pal, const ControlState& state,
               bool bipolar = false, ImU32 accent = 0);
+void drawDefaultKnob(const KnobPaintArgs& args);
+void drawKnobWithPainter(const KnobPaintArgs& args,
+                         const KnobPainter& painter = {});
 
 void drawToggle(ImDrawList* dl, const ImVec2& topLeft, float width, float height,
                 float anim, const Palette& pal, const ControlState& state);
@@ -73,9 +101,17 @@ void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                            const Palette& pal, const ControlState& state,
                            bool down, ImU32 face = 0);
 
+void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
+                          const ImVec2& size, Icon icon, ImU32 accent,
+                          const Palette& pal, const ControlState& state,
+                          bool active = false);
+
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,
                 const ControlState& state, float fontScale = 0.90f);
+void drawDefaultButton(const ButtonPaintArgs& args);
+void drawButtonWithPainter(const ButtonPaintArgs& args,
+                           const ButtonPainter& painter = {});
 
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   const ImVec2& size, const char* text, const Palette& pal,

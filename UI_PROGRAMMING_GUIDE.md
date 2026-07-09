@@ -125,6 +125,39 @@ accessible name and action; sliders/knobs/faders need range, value, value text,
 and value actions; meters expose read-only value text; decorative icons or LEDs
 must be hidden or marked as non-interactive status.
 
+### Custom painters
+
+Include `snd/ui_paint.h` when you want to skin a knob or button body without
+forking SND interaction. Use `paint::KnobPainter` or `paint::ButtonPainter` to
+draw only the control body from the supplied args. SND still owns hit-testing,
+drag/key handling, value mapping, focus rings, semantic names/actions, and
+accessibility. Painters must not create ImGui controls, read input, mutate app
+or plugin state, touch audio-thread state, or own model data. The state passed
+to a body painter has focus suppressed; SND draws the focus ring afterward so a
+custom face cannot remove keyboard visibility.
+
+Immediate example:
+
+```cpp
+snd::ui::button("Generate", {110.0f, 52.0f}, [](const snd::ui::paint::ButtonPaintArgs& a) {
+    snd::ui::paint::drawDefaultButton(a); // Or draw your own body with a.drawList.
+});
+
+snd::ui::knob("Tone", &tone, 0.0f, 1.0f, [](const snd::ui::paint::KnobPaintArgs& a) {
+    snd::ui::paint::drawDefaultKnob(a); // Keeps SND's default as a composable base.
+});
+```
+
+Retained example:
+
+```cpp
+auto gain = w::knob("gain", "Gain", binding, &renderer,
+                    snd::ui::KnobStyle::Ring, false, 56.0f,
+                    [](const snd::ui::paint::KnobPaintArgs& a) {
+                        snd::ui::paint::drawDefaultKnob(a);
+                    });
+```
+
 ## Retained widgets
 
 Include `snd/ui_retained_widgets.h` to build retained panels with the shared
@@ -185,6 +218,12 @@ Use `widgets::animatedButton(id, name, onActivate, &renderer, size)` for
 generation/action buttons that need a subtle live sweep. It is Canvas-backed
 for pixels, but remains a retained `Role::Button` with normal focus,
 activation, and accessible-name expectations.
+Use the `widgets::iconButton(..., Icon::Play, ...)` overload for retained
+transport/tool buttons that should match the immediate vector icon buttons;
+use the string-glyph overload for Material/Lucide tactile icon buttons.
+Retained `widgets::button(...)` and `widgets::knob(...)` accept optional custom
+painters using the same `paint::ButtonPaintArgs` and `paint::KnobPaintArgs`
+contract as immediate mode.
 
 Envelope and curve drawing is shared in `paint::drawEnvelope(...)`.
 The immediate and retained envelope editors use the same curve, point, segment,
@@ -257,6 +296,8 @@ members).
 - `gradientButton(label, size, top, bottom)` → clicked.
 - `animatedButton(label, size, top=0, bottom=0)` → clicked. Gradient action
   button with a subtle live sweep; `0` colours use the current palette accent.
+- `button(label, size, painter)` → clicked. Generic custom-painted button;
+  SND still owns activation and focus.
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
@@ -268,6 +309,8 @@ members).
 
 - `knob(label, float* v, size=0, format="%.2f")` → changing. Rotary 0..1;
   label drawn under it.
+- `knob(label, float* v, min, max, painter, size=0, format="%.2f")` →
+  changing. Custom-painted knob body with SND-owned drag/focus/value handling.
 - `knobDb(label, float* db, minDb, maxDb, size=0)` → changing. Rotary over a dB
   range; a tick marks 0 dB when in range.
 - `fader(id, float* v, size)` → dragging. Vertical fader 0..1.

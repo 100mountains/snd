@@ -33,6 +33,81 @@ const char* visibleLabelEnd(const char* label)
     return end;
 }
 
+bool knobPainted(const char* label, float* value, float minV, float maxV,
+                 KnobStyle style, const paint::KnobPainter& painter,
+                 float size, const char* format, bool bipolar, ImU32 accent)
+{
+    const float fs = ImGui::GetFontSize();
+    if (size <= 0.0f)
+        size = fs * 3.2f;
+    if (accent == 0)
+        accent = gPalette.accent;
+
+    const char* displayLabel = label ? label : "";
+    const char* labelEnd = visibleLabelEnd(displayLabel);
+    const bool hasLabel = labelEnd > displayLabel;
+    const float labelH = hasLabel ? fs * 0.90f + 3.0f : 0.0f;
+    const float valueH = format ? fs * 0.80f + 1.0f : 0.0f;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(label && label[0] ? label : "##knob",
+                           ImVec2(size, size + labelH + valueH));
+    bool changed = false;
+    if (ImGui::IsItemActive()) {
+        float dy = ImGui::GetIO().MouseDelta.y;
+        if (dy != 0.0f) {
+            float speed = (maxV - minV) / 220.0f;
+            if (ImGui::GetIO().KeyShift)
+                speed *= 0.15f; // fine adjust
+            float lo = std::min(minV, maxV), hi = std::max(minV, maxV);
+            float nv = std::clamp(*value - dy * speed, lo, hi);
+            if (nv != *value) {
+                *value = nv;
+                changed = true;
+            }
+        }
+    }
+
+    const float R = size * 0.5f;
+    const ImVec2 c(p.x + R, p.y + R);
+    float frac = (maxV != minV) ? (*value - minV) / (maxV - minV) : 0.0f;
+    frac = std::clamp(frac, 0.0f, 1.0f);
+    auto* dl = ImGui::GetWindowDrawList();
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+
+    paint::KnobPaintArgs args;
+    args.drawList = dl;
+    args.topLeft = p;
+    args.size = size;
+    args.rawValue = value ? *value : 0.0f;
+    args.normalizedValue = frac;
+    args.style = style;
+    args.bipolar = bipolar;
+    args.accent = accent;
+    args.palette = &gPalette;
+    args.state = &state;
+    paint::drawKnobWithPainter(args, painter);
+
+    ImFont* font = ImGui::GetFont();
+    if (hasLabel) {
+        const float w = font->CalcTextSizeA(fs * 0.90f, FLT_MAX, 0.0f,
+                                            displayLabel, labelEnd).x;
+        dl->AddText(font, fs * 0.90f, ImVec2(c.x - w * 0.5f, p.y + size + 2.0f),
+                    gPalette.text, displayLabel, labelEnd);
+    }
+    if (format) {
+        char vbuf[32];
+        std::snprintf(vbuf, sizeof vbuf, format, value ? *value : 0.0f);
+        const float w = font->CalcTextSizeA(fs * 0.80f, FLT_MAX, 0.0f, vbuf).x;
+        dl->AddText(font, fs * 0.80f, ImVec2(c.x - w * 0.5f, p.y + size + labelH),
+                    gPalette.textDim, vbuf);
+    }
+    return changed;
+}
+
 } // namespace
 
 void setPalette(const Palette& p) { gPalette = p; }
@@ -68,63 +143,16 @@ bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, float size, const char* format, bool bipolar,
           ImU32 accent)
 {
-    const float fs = ImGui::GetFontSize();
-    if (size <= 0.0f)
-        size = fs * 3.2f;
-    if (accent == 0)
-        accent = gPalette.accent;
+    return knobPainted(label, value, minV, maxV, style, {}, size, format,
+                       bipolar, accent);
+}
 
-    // display label = text before "##"
-    const char* labelEnd = label ? label : "";
-    while (*labelEnd && !(labelEnd[0] == '#' && labelEnd[1] == '#'))
-        ++labelEnd;
-    const bool hasLabel = labelEnd != label;
-    const float labelH = hasLabel ? fs * 0.90f + 3.0f : 0.0f;
-    const float valueH = format ? fs * 0.80f + 1.0f : 0.0f;
-
-    ImVec2 p = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton(label && label[0] ? label : "##knob",
-                           ImVec2(size, size + labelH + valueH));
-    bool changed = false;
-    if (ImGui::IsItemActive()) {
-        float dy = ImGui::GetIO().MouseDelta.y;
-        if (dy != 0.0f) {
-            float speed = (maxV - minV) / 220.0f;
-            if (ImGui::GetIO().KeyShift)
-                speed *= 0.15f; // fine adjust
-            float lo = std::min(minV, maxV), hi = std::max(minV, maxV);
-            float nv = std::clamp(*value - dy * speed, lo, hi);
-            if (nv != *value) {
-                *value = nv;
-                changed = true;
-            }
-        }
-    }
-    const float R = size * 0.5f;
-    const ImVec2 c(p.x + R, p.y + R);
-    float frac = (maxV != minV) ? (*value - minV) / (maxV - minV) : 0.0f;
-    frac = std::clamp(frac, 0.0f, 1.0f);
-    auto* dl = ImGui::GetWindowDrawList();
-    paint::ControlState state;
-    state.hovered = ImGui::IsItemHovered();
-    state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
-    paint::drawKnob(dl, p, size, frac, style, gPalette, state, bipolar, accent);
-
-    ImFont* font = ImGui::GetFont();
-    if (hasLabel) {
-        const float w = font->CalcTextSizeA(fs * 0.90f, FLT_MAX, 0.0f, label, labelEnd).x;
-        dl->AddText(font, fs * 0.90f, ImVec2(c.x - w * 0.5f, p.y + size + 2.0f),
-                    gPalette.text, label, labelEnd);
-    }
-    if (format) {
-        char vbuf[32];
-        std::snprintf(vbuf, sizeof vbuf, format, *value);
-        const float w = font->CalcTextSizeA(fs * 0.80f, FLT_MAX, 0.0f, vbuf).x;
-        dl->AddText(font, fs * 0.80f, ImVec2(c.x - w * 0.5f, p.y + size + labelH),
-                    gPalette.textDim, vbuf);
-    }
-    return changed;
+bool knob(const char* label, float* value, float minV, float maxV,
+          const paint::KnobPainter& painter, float size, const char* format,
+          bool bipolar, ImU32 accent)
+{
+    return knobPainted(label, value, minV, maxV, KnobStyle::Ring, painter, size,
+                       format, bipolar, accent);
 }
 
 bool toggle(const char* label, bool* on)

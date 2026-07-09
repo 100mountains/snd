@@ -1049,9 +1049,21 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             paint::drawFocusRing(drawList, topLeft(bounds), bottomRight(bounds), pal, 3.0f);
         break;
     case VisualKind::Button:
-        paint::drawButton(drawList, ImGui::GetFont(), topLeft(bounds), sizeOf(bounds),
-                          nodeName(node, sem).c_str(), pal, state);
+    {
+        const std::string name = nodeName(node, sem);
+        paint::ButtonPaintArgs args;
+        args.drawList = drawList;
+        args.font = ImGui::GetFont();
+        args.topLeft = topLeft(bounds);
+        args.size = sizeOf(bounds);
+        args.text = name.c_str();
+        args.face = style.face;
+        args.palette = &pal;
+        args.state = &state;
+        args.fontScale = style.fontScale > 0.0f ? style.fontScale : 0.90f;
+        paint::drawButtonWithPainter(args, style.buttonPainter);
         break;
+    }
     case VisualKind::IconButton: {
         const bool down = state.active || state.selected || checked(node, sem);
         paint::drawTactileIconButton(drawList, iconFont(style.iconFont), topLeft(bounds),
@@ -1059,6 +1071,11 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                      down, style.face);
         break;
     }
+    case VisualKind::VectorIconButton:
+        paint::drawVectorIconButton(drawList, topLeft(bounds), sizeOf(bounds),
+                                    style.vectorIcon, style.accent, pal, state,
+                                    style.lit);
+        break;
     case VisualKind::Toggle:
         paint::drawToggle(drawList, topLeft(bounds), bounds.w, bounds.h,
                           checked(node, sem) ? 1.0f : 0.0f, pal, state);
@@ -1073,8 +1090,18 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     case VisualKind::Knob: {
         const float d = std::min(bounds.w, bounds.h);
         const ImVec2 p(bounds.x + (bounds.w - d) * 0.5f, bounds.y);
-        paint::drawKnob(drawList, p, d, (float)normalizedValue(node, sem),
-                        style.knobStyle, pal, state, style.bipolar, style.accent);
+        paint::KnobPaintArgs args;
+        args.drawList = drawList;
+        args.topLeft = p;
+        args.size = d;
+        args.rawValue = (float)valueOf(node, sem);
+        args.normalizedValue = (float)normalizedValue(node, sem);
+        args.style = style.knobStyle;
+        args.bipolar = style.bipolar;
+        args.accent = style.accent;
+        args.palette = &pal;
+        args.state = &state;
+        paint::drawKnobWithPainter(args, style.knobPainter);
         const std::string name = nodeName(node, sem);
         if (!name.empty()) {
             Rect labelBounds{bounds.x, bounds.y + d + 2.0f, bounds.w,
@@ -1621,7 +1648,7 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
 }
 
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate,
-                 PaintRenderer* renderer)
+                 PaintRenderer* renderer, paint::ButtonPainter painter)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Button);
@@ -1634,6 +1661,7 @@ Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActiv
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Button;
+        style.buttonPainter = std::move(painter);
         renderer->setStyle(sid, style);
     }
     return node;
@@ -1683,6 +1711,24 @@ Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
     return node;
 }
 
+Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
+                     std::function<void(Node&)> onActivate,
+                     PaintRenderer* renderer, Vec2 size, ImU32 accent, bool active)
+{
+    NodeId sid = id;
+    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    node->setIntrinsicSize(size);
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::VectorIconButton;
+        style.vectorIcon = icon;
+        style.accent = accent;
+        style.lit = active;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
                  PaintRenderer* renderer)
 {
@@ -1721,7 +1767,7 @@ Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
 
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
                PaintRenderer* renderer, KnobStyle knobStyle, bool bipolar,
-               float diameter)
+               float diameter, paint::KnobPainter painter)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Slider);
@@ -1743,6 +1789,7 @@ Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
         style.kind = VisualKind::Knob;
         style.knobStyle = knobStyle;
         style.bipolar = bipolar;
+        style.knobPainter = std::move(painter);
         renderer->setStyle(sid, style);
     }
     return node;

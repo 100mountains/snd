@@ -266,88 +266,38 @@ bool animatedButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
     return pressed;
 }
 
+bool button(const char* label, const ImVec2& size,
+            const paint::ButtonPainter& painter)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    bool pressed = ImGui::InvisibleButton(label, size);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+
+    paint::ButtonPaintArgs args;
+    args.drawList = ImGui::GetWindowDrawList();
+    args.font = ImGui::GetFont();
+    args.topLeft = p;
+    args.size = size;
+    args.text = label;
+    args.palette = &palette();
+    args.state = &state;
+    paint::drawButtonWithPainter(args, painter);
+    return pressed;
+}
+
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, bool active)
 {
     ImVec2 p = ImGui::GetCursorScreenPos();
     bool pressed = ImGui::InvisibleButton(id, size);
-    bool hovered = ImGui::IsItemHovered();
-    bool held = ImGui::IsItemActive();
-
-    auto* dl = ImGui::GetWindowDrawList();
-    const ImGuiStyle& st = ImGui::GetStyle();
-    ImU32 bg = ImGui::GetColorU32(held      ? st.Colors[ImGuiCol_ButtonActive]
-                                  : hovered ? st.Colors[ImGuiCol_ButtonHovered]
-                                            : st.Colors[ImGuiCol_Button]);
-    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), bg, 4.0f);
-    if (active)
-        dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), accent, 4.0f, 0, 2.0f);
-
-    ImU32 fg = active ? accent : ImGui::GetColorU32(st.Colors[ImGuiCol_Text]);
-    ImVec2 c(p.x + size.x * 0.5f, p.y + size.y * 0.5f);
-    float r = std::min(size.x, size.y) * 0.28f; // icon radius
-
-    switch (icon) {
-    case Icon::Play:
-        dl->AddTriangleFilled(ImVec2(c.x - r * 0.7f, c.y - r), ImVec2(c.x - r * 0.7f, c.y + r),
-                              ImVec2(c.x + r, c.y), fg);
-        break;
-    case Icon::Stop:
-        dl->AddRectFilled(ImVec2(c.x - r * 0.8f, c.y - r * 0.8f),
-                          ImVec2(c.x + r * 0.8f, c.y + r * 0.8f), fg, 2.0f);
-        break;
-    case Icon::Record:
-        dl->AddCircleFilled(c, r * 0.9f, fg, 24);
-        break;
-    case Icon::SkipToStart:
-        dl->AddRectFilled(ImVec2(c.x - r, c.y - r), ImVec2(c.x - r + 2.5f, c.y + r), fg);
-        dl->AddTriangleFilled(ImVec2(c.x + r, c.y - r), ImVec2(c.x + r, c.y + r),
-                              ImVec2(c.x - r * 0.5f, c.y), fg);
-        break;
-    case Icon::SkipToEnd:
-        dl->AddRectFilled(ImVec2(c.x + r - 2.5f, c.y - r), ImVec2(c.x + r, c.y + r), fg);
-        dl->AddTriangleFilled(ImVec2(c.x - r, c.y - r), ImVec2(c.x - r, c.y + r),
-                              ImVec2(c.x + r * 0.5f, c.y), fg);
-        break;
-    case Icon::Loop: {
-        dl->PathArcTo(c, r, 0.3f, 2.0f * (float)M_PI - 0.6f, 24);
-        dl->PathStroke(fg, 0, 2.0f);
-        // arrowhead at the arc's open end
-        float ax = c.x + r * std::cos(0.3f);
-        float ay = c.y + r * std::sin(0.3f);
-        dl->AddTriangleFilled(ImVec2(ax - 4, ay - 1), ImVec2(ax + 3, ay + 3),
-                              ImVec2(ax + 2, ay - 5), fg);
-        break;
-    }
-    case Icon::Waveform: {
-        // stylised min/max columns
-        const float heights[7] = {0.35f, 0.75f, 0.5f, 1.0f, 0.6f, 0.85f, 0.4f};
-        float step = (r * 2.2f) / 7.0f;
-        for (int i = 0; i < 7; ++i) {
-            float x = c.x - r * 1.1f + step * (i + 0.5f);
-            float h = r * heights[i];
-            dl->AddLine(ImVec2(x, c.y - h), ImVec2(x, c.y + h), fg, 2.0f);
-        }
-        break;
-    }
-    case Icon::Follow: {
-        dl->AddLine(ImVec2(c.x - r * 0.9f, c.y - r), ImVec2(c.x - r * 0.9f, c.y + r), fg, 2.0f);
-        dl->AddLine(ImVec2(c.x - r * 0.4f, c.y), ImVec2(c.x + r * 0.4f, c.y), fg, 2.0f);
-        dl->AddTriangleFilled(ImVec2(c.x + r * 0.3f, c.y - r * 0.5f),
-                              ImVec2(c.x + r * 0.3f, c.y + r * 0.5f), ImVec2(c.x + r, c.y), fg);
-        break;
-    }
-    case Icon::Spectrum: {
-        // rising frequency sweep
-        for (int i = 0; i < 12; ++i) {
-            float t = i / 11.0f;
-            float x = c.x - r * 1.1f + t * r * 2.2f;
-            float h = r * (0.2f + 0.8f * t);
-            dl->AddLine(ImVec2(x, c.y + r * 0.9f), ImVec2(x, c.y + r * 0.9f - h * 1.8f), fg,
-                        1.5f);
-        }
-        break;
-    }
-    }
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawVectorIconButton(ImGui::GetWindowDrawList(), p, size, icon, accent,
+                                palette(), state, active);
     return pressed;
 }
 

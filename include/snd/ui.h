@@ -12,6 +12,13 @@
 
 namespace snd::ui {
 
+namespace paint {
+struct KnobPaintArgs;
+struct ButtonPaintArgs;
+using KnobPainter = std::function<void(const KnobPaintArgs&)>;
+using ButtonPainter = std::function<void(const ButtonPaintArgs&)>;
+} // namespace paint
+
 class Window {
 public:
     Window();
@@ -71,6 +78,10 @@ bool gradientButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
 // sweep. Use for actions that should read as energetic but still be a button.
 bool animatedButton(const char* label, const ImVec2& size,
                     ImU32 top = 0, ImU32 bottom = 0);
+// Generic SND button whose body is drawn by a custom painter. SND still owns
+// hit-testing, focus indication, activation, and accessibility expectations.
+bool button(const char* label, const ImVec2& size,
+            const paint::ButtonPainter& painter);
 
 // Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
 // independent like SVG). `active` renders with the accent colour + border.
@@ -173,6 +184,10 @@ enum class KnobStyle {
 bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, float size = 0.0f, const char* format = "%.2f",
           bool bipolar = false, ImU32 accent = 0);
+bool knob(const char* label, float* value, float minV, float maxV,
+          const paint::KnobPainter& painter, float size = 0.0f,
+          const char* format = "%.2f", bool bipolar = false,
+          ImU32 accent = 0);
 
 // Animated on/off switch. Returns true when toggled.
 bool toggle(const char* label, bool* on);

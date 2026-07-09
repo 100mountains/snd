@@ -265,6 +265,34 @@ void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
                       pal, size * 0.5f, 2.0f);
 }
 
+void drawDefaultKnob(const KnobPaintArgs& args)
+{
+    if (!args.palette || !args.state)
+        return;
+    drawKnob(args.drawList, args.topLeft, args.size, args.normalizedValue,
+             args.style, *args.palette, *args.state, args.bipolar, args.accent);
+}
+
+void drawKnobWithPainter(const KnobPaintArgs& args, const KnobPainter& painter)
+{
+    ControlState bodyState = args.state ? *args.state : ControlState{};
+    bodyState.focused = false;
+    KnobPaintArgs bodyArgs = args;
+    bodyArgs.state = &bodyState;
+
+    if (painter)
+        painter(bodyArgs);
+    else
+        drawDefaultKnob(bodyArgs);
+
+    if (args.drawList && args.palette && args.state &&
+        args.state->focused && !args.state->disabled) {
+        drawFocusRing(args.drawList, args.topLeft,
+                      ImVec2(args.topLeft.x + args.size, args.topLeft.y + args.size),
+                      *args.palette, args.size * 0.5f, 2.0f);
+    }
+}
+
 void drawToggle(ImDrawList* dl, const ImVec2& topLeft, float width, float height,
                 float anim, const Palette& pal, const ControlState& state)
 {
@@ -469,6 +497,106 @@ void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     }
 }
 
+void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
+                          const ImVec2& size, Icon icon, ImU32 accent,
+                          const Palette& pal, const ControlState& state,
+                          bool active)
+{
+    if (!dl)
+        return;
+    if (accent == 0)
+        accent = pal.accent;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const ImGuiStyle& st = ImGui::GetStyle();
+    ImU32 bg = ImGui::GetColorU32(state.active      ? st.Colors[ImGuiCol_ButtonActive]
+                                  : state.hovered  ? st.Colors[ImGuiCol_ButtonHovered]
+                                                   : st.Colors[ImGuiCol_Button]);
+    if (state.disabled)
+        bg = mix(bg, pal.frame, 0.65f);
+    dl->AddRectFilled(topLeft, mx, bg, 4.0f);
+
+    const bool lit = active || state.selected;
+    if (lit)
+        dl->AddRect(topLeft, mx, accent, 4.0f, 0, 2.0f);
+
+    const ImU32 fg = state.disabled ? pal.textDim
+                                    : lit ? accent
+                                          : ImGui::GetColorU32(st.Colors[ImGuiCol_Text]);
+    const ImVec2 c(topLeft.x + size.x * 0.5f, topLeft.y + size.y * 0.5f);
+    const float r = std::min(size.x, size.y) * 0.28f;
+
+    switch (icon) {
+    case Icon::Play:
+        dl->AddTriangleFilled(ImVec2(c.x - r * 0.7f, c.y - r),
+                              ImVec2(c.x - r * 0.7f, c.y + r),
+                              ImVec2(c.x + r, c.y), fg);
+        break;
+    case Icon::Stop:
+        dl->AddRectFilled(ImVec2(c.x - r * 0.8f, c.y - r * 0.8f),
+                          ImVec2(c.x + r * 0.8f, c.y + r * 0.8f), fg, 2.0f);
+        break;
+    case Icon::Record:
+        dl->AddCircleFilled(c, r * 0.9f, fg, 24);
+        break;
+    case Icon::SkipToStart:
+        dl->AddRectFilled(ImVec2(c.x - r, c.y - r),
+                          ImVec2(c.x - r + 2.5f, c.y + r), fg);
+        dl->AddTriangleFilled(ImVec2(c.x + r, c.y - r),
+                              ImVec2(c.x + r, c.y + r),
+                              ImVec2(c.x - r * 0.5f, c.y), fg);
+        break;
+    case Icon::SkipToEnd:
+        dl->AddRectFilled(ImVec2(c.x + r - 2.5f, c.y - r),
+                          ImVec2(c.x + r, c.y + r), fg);
+        dl->AddTriangleFilled(ImVec2(c.x - r, c.y - r),
+                              ImVec2(c.x - r, c.y + r),
+                              ImVec2(c.x + r * 0.5f, c.y), fg);
+        break;
+    case Icon::Loop: {
+        dl->PathArcTo(c, r, 0.3f, 2.0f * 3.14159265f - 0.6f, 24);
+        dl->PathStroke(fg, 0, 2.0f);
+        const float ax = c.x + r * std::cos(0.3f);
+        const float ay = c.y + r * std::sin(0.3f);
+        dl->AddTriangleFilled(ImVec2(ax - 4.0f, ay - 1.0f),
+                              ImVec2(ax + 3.0f, ay + 3.0f),
+                              ImVec2(ax + 2.0f, ay - 5.0f), fg);
+        break;
+    }
+    case Icon::Waveform: {
+        const float heights[7] = {0.35f, 0.75f, 0.5f, 1.0f, 0.6f, 0.85f, 0.4f};
+        const float step = (r * 2.2f) / 7.0f;
+        for (int i = 0; i < 7; ++i) {
+            const float x = c.x - r * 1.1f + step * (i + 0.5f);
+            const float h = r * heights[i];
+            dl->AddLine(ImVec2(x, c.y - h), ImVec2(x, c.y + h), fg, 2.0f);
+        }
+        break;
+    }
+    case Icon::Follow:
+        dl->AddLine(ImVec2(c.x - r * 0.9f, c.y - r),
+                    ImVec2(c.x - r * 0.9f, c.y + r), fg, 2.0f);
+        dl->AddLine(ImVec2(c.x - r * 0.4f, c.y),
+                    ImVec2(c.x + r * 0.4f, c.y), fg, 2.0f);
+        dl->AddTriangleFilled(ImVec2(c.x + r * 0.3f, c.y - r * 0.5f),
+                              ImVec2(c.x + r * 0.3f, c.y + r * 0.5f),
+                              ImVec2(c.x + r, c.y), fg);
+        break;
+    case Icon::Spectrum:
+        for (int i = 0; i < 12; ++i) {
+            const float t = i / 11.0f;
+            const float x = c.x - r * 1.1f + t * r * 2.2f;
+            const float h = r * (0.2f + 0.8f * t);
+            dl->AddLine(ImVec2(x, c.y + r * 0.9f),
+                        ImVec2(x, c.y + r * 0.9f - h * 1.8f), fg, 1.5f);
+        }
+        break;
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, 4.0f);
+}
+
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,
                 const ControlState& state, float fontScale)
@@ -502,6 +630,36 @@ void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 
     if (state.focused && !state.disabled)
         drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
+void drawDefaultButton(const ButtonPaintArgs& args)
+{
+    if (!args.palette || !args.state)
+        return;
+    drawButton(args.drawList, args.font, args.topLeft, args.size, args.text,
+               *args.palette, *args.state, args.fontScale);
+}
+
+void drawButtonWithPainter(const ButtonPaintArgs& args,
+                           const ButtonPainter& painter)
+{
+    ControlState bodyState = args.state ? *args.state : ControlState{};
+    bodyState.focused = false;
+    ButtonPaintArgs bodyArgs = args;
+    bodyArgs.state = &bodyState;
+
+    if (painter)
+        painter(bodyArgs);
+    else
+        drawDefaultButton(bodyArgs);
+
+    if (args.drawList && args.palette && args.state &&
+        args.state->focused && !args.state->disabled) {
+        drawFocusRing(args.drawList, args.topLeft,
+                      ImVec2(args.topLeft.x + args.size.x,
+                             args.topLeft.y + args.size.y),
+                      *args.palette, 4.0f, 2.0f);
+    }
 }
 
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
