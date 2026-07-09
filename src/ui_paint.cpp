@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <vector>
 
 namespace snd::ui::paint {
 
@@ -69,7 +70,9 @@ void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
     const float valAng = knobAngle(frac);
     const bool hot = !state.disabled && (state.hovered || state.active);
 
-    if (style == KnobStyle::Ring) {
+    if (style == KnobStyle::Ring || style == KnobStyle::Seq) {
+        // Butt-capped background ring + accent value sweep (murk's SEQ RingKnobLnf).
+        // Ring adds a thumb dot at the value; Seq is the pure flat-ended sweep.
         const float lineW = std::min(5.0f, radius * 0.42f);
         const float rr = radius - lineW * 0.5f - 1.0f;
         dl->PathArcTo(c, rr, kKnobA0, kKnobA1, 40);
@@ -79,9 +82,73 @@ void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
             dl->PathArcTo(c, rr, std::min(aFrom, valAng), std::max(aFrom, valAng), 40);
             dl->PathStroke(accent, 0, lineW);
         }
+        if (style == KnobStyle::Ring) {
+            const ImVec2 d = dirAt(valAng);
+            dl->AddCircleFilled(ImVec2(c.x + d.x * rr, c.y + d.y * rr), lineW * 0.55f,
+                                hot ? IM_COL32(255, 255, 255, 255) : accent);
+        }
+    } else if (style == KnobStyle::Synth) {
+        // murk's FlatLnf synth knob: dished disc + faint track ring + accent value
+        // arc + a single white pointer tick.
+        dl->AddCircleFilled(ImVec2(c.x, c.y + 1.5f), radius, IM_COL32(0, 0, 0, 90)); // shadow
+        dl->AddCircleFilled(c, radius, IM_COL32(0x1c, 0x1f, 0x25, 255));             // body base
+        dl->AddCircleFilled(ImVec2(c.x, c.y - radius * 0.34f), radius * 0.62f,
+                            IM_COL32(0x28, 0x2c, 0x33, 150));                        // top-lit
+        dl->AddCircle(c, radius - 0.5f, IM_COL32(255, 255, 255, 16), 0, 1.0f);       // rim
+        const float tr = std::max(4.0f, radius - 6.0f);
+        dl->PathArcTo(c, tr, kKnobA0, kKnobA1, 40);
+        dl->PathStroke(IM_COL32(255, 255, 255, 26), 0, 2.0f);
+        const float aFrom = bipolar ? knobAngle(0.5f) : kKnobA0;
+        if (std::abs(valAng - aFrom) > 0.001f) {
+            dl->PathArcTo(c, tr, std::min(aFrom, valAng), std::max(aFrom, valAng), 40);
+            dl->PathStroke(accent, 0, 2.4f);
+        }
+        const float ri = std::max(2.0f, tr - 8.0f);
         const ImVec2 d = dirAt(valAng);
-        dl->AddCircleFilled(ImVec2(c.x + d.x * rr, c.y + d.y * rr), lineW * 0.55f,
-                            hot ? IM_COL32(255, 255, 255, 255) : accent);
+        dl->AddLine(ImVec2(c.x + d.x * ri, c.y + d.y * ri),
+                    ImVec2(c.x + d.x * (tr - 1.0f), c.y + d.y * (tr - 1.0f)),
+                    state.disabled ? pal.textDim : IM_COL32(255, 255, 255, 235), 2.2f);
+        if (hot)
+            dl->AddCircleFilled(c, radius - 2.0f, withAlpha(accent, 0x1A));
+    } else if (style == KnobStyle::Nxd) {
+        // murk's AID/NxD scalloped knob: a 12-scallop outer case that rotates with
+        // the value, an inner face, a rotating tick ring, and a bold pointer.
+        const float outerR = radius, innerR = outerR * 0.83f;
+        const int tickCount = 12, samplesPerScallop = 10;
+        const float tickStep = 6.2831853f / (float)tickCount;
+        const float scallopDepth = std::clamp(outerR * 0.095f, 1.4f, 3.6f);
+        dl->AddCircleFilled(ImVec2(c.x, c.y + 1.8f), outerR, IM_COL32(0, 0, 0, 107)); // shadow
+
+        std::vector<ImVec2> pts;
+        pts.reserve((size_t)(tickCount * (samplesPerScallop + 1) + 1));
+        for (int i = 0; i <= tickCount; ++i) {
+            const int maxS = (i == tickCount) ? 0 : samplesPerScallop;
+            for (int s = 0; s <= maxS; ++s) {
+                const float u = (float)s / (float)samplesPerScallop;
+                const float a = valAng + (float)i * tickStep + u * tickStep;
+                const float rad = outerR - scallopDepth * std::sin(u * 3.14159265f);
+                pts.push_back(ImVec2(c.x + std::cos(a) * rad, c.y + std::sin(a) * rad));
+            }
+        }
+        const ImU32 rim = mix(IM_COL32(0x30, 0x34, 0x3a, 255), IM_COL32(0x11, 0x13, 0x19, 255), 0.5f);
+        dl->AddConcavePolyFilled(pts.data(), (int)pts.size(), rim);
+        dl->AddPolyline(pts.data(), (int)pts.size(), IM_COL32(0, 0, 0, 184), ImDrawFlags_Closed, 1.2f);
+        dl->AddCircleFilled(c, innerR, mix(IM_COL32(0x24, 0x29, 0x30, 255), IM_COL32(0x12, 0x16, 0x1c, 255), 0.5f));
+        dl->AddCircleFilled(ImVec2(c.x - outerR * 0.11f, c.y - outerR * 0.14f), innerR * 0.54f,
+                            IM_COL32(255, 255, 255, 15)); // specular
+        for (int i = 0; i < tickCount; ++i) {
+            const float a = valAng + (float)i * tickStep;
+            const ImVec2 d = dirAt(a);
+            dl->AddLine(ImVec2(c.x + d.x * (outerR - 3.7f), c.y + d.y * (outerR - 3.7f)),
+                        ImVec2(c.x + d.x * (outerR - 1.2f), c.y + d.y * (outerR - 1.2f)),
+                        withAlpha(accent, i == 0 ? 0xF8 : 0x8A), i == 0 ? 1.6f : 1.1f);
+        }
+        const ImVec2 d = dirAt(valAng);
+        dl->AddLine(ImVec2(c.x + d.x * outerR * 0.16f, c.y + d.y * outerR * 0.16f),
+                    ImVec2(c.x + d.x * (outerR - 3.7f), c.y + d.y * (outerR - 3.7f)),
+                    state.disabled ? pal.textDim : accent, std::clamp(outerR * 0.13f, 2.0f, 3.1f));
+        if (hot)
+            dl->AddPolyline(pts.data(), (int)pts.size(), withAlpha(accent, 0x2E), ImDrawFlags_Closed, 1.6f);
     } else {
         dl->AddCircleFilled(ImVec2(c.x, c.y + 1.4f), radius, IM_COL32(0, 0, 0, 90));
         dl->AddCircleFilled(c, radius, IM_COL32(0xc8, 0xcc, 0xd2, 255));

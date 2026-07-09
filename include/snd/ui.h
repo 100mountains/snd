@@ -161,7 +161,10 @@ bool knobDb(const char* label, float* db, float minDb, float maxDb,
 // vendored imgui-knobs wiper/tick styles.)
 enum class KnobStyle {
     Davies, // synth-panel knob: dark dished face, chrome skirt, pointer, ticks
-    Ring,   // ring only: dim background arc + accent value arc (no body/ticks)
+    Ring,   // ring only: dim background arc + accent value arc + thumb dot
+    Seq,    // sequencer ring: flat/butt-capped arcs, no thumb dot (SEQ matrix)
+    Synth,  // flat disc + track ring + accent value arc + single pointer tick
+    Nxd,    // scalloped rotating case + inner face + tick ring + pointer (AID/NxD)
 };
 bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, float size = 0.0f, const char* format = "%.2f",
