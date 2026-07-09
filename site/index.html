@@ -65,9 +65,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .btn.sel{background:color-mix(in srgb,var(--frame),var(--accent) 40%);position:relative;}
 .btn.sel::after{content:"";position:absolute;left:2px;right:2px;bottom:2px;height:2px;border-radius:2px;background:var(--accent);}
 .btn.dis{opacity:.5;cursor:default;}
-.outlinebtn{min-width:96px;height:30px;padding:0 14px;border-radius:0;border:1px solid transparent;background:transparent;color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s,color .12s,box-shadow .12s;}
+.outlinebtn{appearance:none;-webkit-appearance:none;min-width:96px;height:30px;padding:0 14px;border-radius:0;border:1px solid transparent;background:transparent;color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit;outline:none;box-shadow:none;-webkit-tap-highlight-color:transparent;}
 .outlinebtn:hover,.outlinebtn.hov{border-color:var(--accent);}
-.outlinebtn.act{border-color:var(--accent);background:color-mix(in srgb,transparent,var(--accent) 16%);}
+.outlinebtn:active,.outlinebtn.act{border-color:var(--accent);background:color-mix(in srgb,transparent,var(--accent) 16%);}
+.outlinebtn:focus-visible{outline:1px solid var(--accent);outline-offset:2px;}
 .outlinebtn.sel{border-color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);}
 .outlinebtn.custom{border-color:#8de3ff;background:rgba(141,227,255,.08);color:#d8fbff;}
 .badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:11px;letter-spacing:.05em;background:color-mix(in srgb,transparent,var(--accent) 27%);color:var(--ink);}

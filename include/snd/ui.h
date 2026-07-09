@@ -83,8 +83,8 @@ bool animatedButton(const char* label, const ImVec2& size,
 // hit-testing, focus indication, activation, and accessibility expectations.
 bool button(const char* label, const ImVec2& size,
             const paint::ButtonPainter& painter);
-// Border-first action button. Default style has no fill and shows an accent
-// rectangle on hover/active; pass OutlineButtonStyle to set fill/border colours.
+// Border-first action button. Default style has no resting fill, shows an
+// accent border on hover, and fills immediately while pressed.
 bool outlineButton(const char* label, const ImVec2& size);
 bool outlineButton(const char* label, const ImVec2& size,
                    const paint::OutlineButtonStyle& style,

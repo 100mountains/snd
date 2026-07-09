@@ -650,8 +650,9 @@ void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     ImU32 fill = style.fill;
     if (state.hovered && visible(style.hoverFill))
         fill = style.hoverFill;
-    if (state.active && visible(style.activeFill))
-        fill = style.activeFill;
+    if (state.active)
+        fill = visible(style.activeFill) ? style.activeFill
+                                         : withAlpha(pal.accent, 0x2A);
     if (state.selected && visible(style.selectedFill))
         fill = style.selectedFill;
     if (state.disabled && visible(fill))

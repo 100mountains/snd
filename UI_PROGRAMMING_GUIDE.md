@@ -216,8 +216,9 @@ Use `widgets::led(..., &renderer, radius, onColor)` when a retained LED needs
 the same radius or accent override as the immediate LED helper.
 Use `widgets::outlineButton(id, name, onActivate, &renderer, size, style,
 selected)` for a border-first text action. The default style has no fill or
-resting border and shows an accent rectangle on hover/active, while
-`paint::OutlineButtonStyle` can set fill, border, text, and selected colours.
+resting border, shows an accent border on hover, and fills immediately while
+pressed. `paint::OutlineButtonStyle` can set fill, border, text, and selected
+colours.
 Use `widgets::animatedButton(id, name, onActivate, &renderer, size)` for
 generation/action buttons that need a subtle live sweep. It is Canvas-backed
 for pixels, but remains a retained `Role::Button` with normal focus,
@@ -267,6 +268,8 @@ PanelModel model;
 auto root = w::column("panel", 8.0f, r::Insets::all(8.0f));
 auto top = w::row("panel.top", 8.0f);
 top->addChild(w::button("transport.play", "Play", [](r::Node&) {}, &renderer));
+top->addChild(w::outlineButton("transport.arm", "Arm", [](r::Node&) {}, &renderer,
+                               {64.0f, 28.0f}));
 top->addChild(w::toggle("effect.bypass", "Bypass", bind(model.bypass), &renderer));
 top->addChild(w::knob("gain", "Gain", bind(model.gain), &renderer));
 top->addChild(w::fader("output.fader", "Output", bind(model.fader), &renderer));
@@ -303,8 +306,9 @@ members).
 - `button(label, size, painter)` → clicked. Generic custom-painted button;
   SND still owns activation and focus.
 - `outlineButton(label, size)` → clicked. Border-first text action; the
-  default style has no fill and shows the accent border on hover/active. The
-  overload accepts `paint::OutlineButtonStyle` and a selected flag.
+  default style has no fill, shows the accent border on hover, and fills
+  immediately while pressed. The overload accepts `paint::OutlineButtonStyle`
+  and a selected flag.
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.

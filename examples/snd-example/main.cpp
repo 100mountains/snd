@@ -18,6 +18,7 @@
 #include "snd/icons.h"
 #include "snd/ui.h"
 #include "snd/ui_retained.h"
+#include "snd/ui_retained_widgets.h"
 
 #include <algorithm>
 #include <atomic>
@@ -425,6 +426,7 @@ static bool selftestLooping()
 static bool selftestRetainedUi()
 {
     namespace r = snd::ui::retained;
+    namespace w = snd::ui::retained::widgets;
 
     auto named = [](r::Role role, const char* name) {
         r::Semantics sem;
@@ -922,13 +924,36 @@ static bool selftestRetainedUi()
          std::abs(externalSem.value.value - 4.0) < 0.0001 &&
          externalSem.value.text == "4 external items";
 
+    int outlineActivated = 0;
+    r::PaintRenderer outlineRenderer;
+    auto outlineRoot = w::column("outline.root", 4.0f);
+    outlineRoot->addChild(w::outlineButton(
+        "outline.square", "Square outline", [&](r::Node&) { ++outlineActivated; },
+        &outlineRenderer, {96.0f, 30.0f}));
+    r::Tree outlineTree(std::move(outlineRoot));
+    outlineTree.layout({120.0f, 44.0f});
+    const auto* outlineNode = outlineTree.find("outline.square");
+    const auto* outlineStyle = outlineRenderer.styleFor("outline.square");
+    r::SemanticNode outlineSem;
+    ok = ok && outlineNode && outlineNode->bounds().w == 96.0f &&
+         outlineNode->bounds().h == 30.0f && outlineStyle &&
+         outlineStyle->kind == r::VisualKind::OutlineButton &&
+         outlineStyle->outlineButtonStyle.rounding == 0.0f &&
+         outlineTree.semanticNode("outline.square", outlineSem) &&
+         outlineSem.role == r::Role::Button &&
+         outlineSem.name == "Square outline" &&
+         hasAction(&outlineSem, r::Action::Activate) &&
+         outlineTree.performAction("outline.square", r::Action::Activate) &&
+         outlineActivated == 1;
+
     if (ok)
-        printf("PASS (layout/focus/events/semantics/dirty state)\n");
+        printf("PASS (layout/focus/events/semantics/dirty state/widgets)\n");
     else
         printf("FAIL (activated=%d gain=%.3f custom=%d right=%d dbl=%d "
-               "wheel=%d ctx=%d semantics=%zu)\n",
+               "wheel=%d ctx=%d outline=%d semantics=%zu)\n",
                activated, gain, customEvents, rightClickEvents,
-               doubleClickEvents, wheelEvents, contextEvents, semantics.size());
+               doubleClickEvents, wheelEvents, contextEvents, outlineActivated,
+               semantics.size());
     return ok;
 }
 
