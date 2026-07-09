@@ -121,11 +121,14 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 
     <section id="knobs">
       <div class="sechead"><h2>Knobs</h2><span class="tag">paint::drawKnob · KnobStyle</span></div>
-      <p class="desc">Two styles. <b>Ring</b> — a value arc that sweeps 270° from 7 o'clock, with a bipolar variant that grows from centre. <b>Davies</b> — a moulded cap with tick ring and pointer. <b class="try">Drag a knob up / down to turn it.</b> The last one is disabled.</p>
+      <p class="desc">Five styles, each ported from a murk module. <b>Ring</b> / <b>Seq</b> — the sequencer ring (Seq has flat, square-capped ends and no thumb dot). <b>Synth</b> — flat dished disc + track ring + value arc + pointer tick. <b>Davies</b> — moulded cap with a full tick ring. <b>NxD</b> — the scalloped case that rotates with the value, with a tick ring and bold pointer. <b class="try">Drag any knob up / down.</b></p>
       <div class="rack">
         <div class="unit"><canvas class="cv live" data-w="ring"    width="72" height="72"></canvas><div class="cellcap">Ring</div></div>
-        <div class="unit"><canvas class="cv live" data-w="ringbi"  width="72" height="72"></canvas><div class="cellcap">Ring · bipolar</div></div>
+        <div class="unit"><canvas class="cv live" data-w="seq"     width="72" height="72"></canvas><div class="cellcap">Seq · square ends</div></div>
+        <div class="unit"><canvas class="cv live" data-w="synth"   width="72" height="72"></canvas><div class="cellcap">Synth</div></div>
         <div class="unit"><canvas class="cv live" data-w="davies"  width="72" height="72"></canvas><div class="cellcap">Davies</div></div>
+        <div class="unit"><canvas class="cv live" data-w="nxd"     width="72" height="72"></canvas><div class="cellcap">NxD · scalloped</div></div>
+        <div class="unit"><canvas class="cv live" data-w="ringbi"  width="72" height="72"></canvas><div class="cellcap">Ring · bipolar</div></div>
         <div class="unit"><canvas class="cv"      data-w="ringdis" width="72" height="72"></canvas><div class="cellcap">disabled</div></div>
       </div>
     </section>
@@ -311,15 +314,43 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   function dbNorm(lin,floor){if(lin<=0)return 0;var db=20*Math.log10(lin);return Math.max(0,Math.min(1,1-db/floor));}
   function cl(x){return Math.max(0,Math.min(1,x));}
 
-  function knobRing(g,W,H,frac,bip,dis){
+  function knobRing(g,W,H,frac,bip,dis,dot){
     var r=W/2, cx=r, cy=r, acc=dis?mix(A.accent,PAL.frameB,0.65):A.accent;
     var lw=Math.min(5,r*0.42), rr=r-lw/2-1, va=kang(frac);
     g.lineCap='butt';
     g.beginPath();g.arc(cx,cy,rr,A0,A1);g.strokeStyle=PAL.frameB;g.lineWidth=lw;g.stroke();
     var af=bip?kang(0.5):A0;
     if(va!=af){g.beginPath();g.arc(cx,cy,rr,Math.min(af,va),Math.max(af,va));g.strokeStyle=acc;g.lineWidth=lw;g.stroke();}
-    var dx=Math.cos(va),dy=Math.sin(va);
-    g.beginPath();g.arc(cx+dx*rr,cy+dy*rr,lw*0.55,0,7);g.fillStyle=dis?acc:'#fff';g.fill();
+    if(dot!==false){var dx=Math.cos(va),dy=Math.sin(va);
+      g.beginPath();g.arc(cx+dx*rr,cy+dy*rr,lw*0.55,0,7);g.fillStyle=dis?acc:'#fff';g.fill();}
+  }
+  function knobSynth(g,W,H,frac,bip){
+    var r=W/2,cx=r,cy=r,va=kang(frac),acc=A.accent;
+    g.beginPath();g.arc(cx,cy+1.5,r,0,7);g.fillStyle='rgba(0,0,0,.35)';g.fill();
+    g.beginPath();g.arc(cx,cy,r,0,7);g.fillStyle='#1c1f25';g.fill();
+    g.beginPath();g.arc(cx,cy-r*0.34,r*0.62,0,7);g.fillStyle='rgba(40,44,51,.6)';g.fill();
+    g.beginPath();g.arc(cx,cy-0.5,r-0.5,0,7);g.strokeStyle='rgba(255,255,255,.06)';g.lineWidth=1;g.stroke();
+    var tr=Math.max(4,r-6);g.lineCap='butt';
+    g.beginPath();g.arc(cx,cy,tr,A0,A1);g.strokeStyle='rgba(255,255,255,.1)';g.lineWidth=2;g.stroke();
+    var af=bip?kang(0.5):A0;
+    if(Math.abs(va-af)>0.001){g.beginPath();g.arc(cx,cy,tr,Math.min(af,va),Math.max(af,va));g.strokeStyle=acc;g.lineWidth=2.4;g.stroke();}
+    var ri=Math.max(2,tr-8),dx=Math.cos(va),dy=Math.sin(va);
+    g.beginPath();g.moveTo(cx+dx*ri,cy+dy*ri);g.lineTo(cx+dx*(tr-1),cy+dy*(tr-1));g.strokeStyle='rgba(255,255,255,.92)';g.lineWidth=2.2;g.lineCap='round';g.stroke();
+  }
+  function knobNxd(g,W,H,frac){
+    var r=W/2,cx=r,cy=r,va=kang(frac),acc=A.accent;
+    var outerR=r,innerR=r*0.83,N=12,SPS=10,step=2*Math.PI/N,depth=Math.max(1.4,Math.min(3.6,outerR*0.095));
+    g.beginPath();g.arc(cx,cy+1.8,outerR,0,7);g.fillStyle='rgba(0,0,0,.42)';g.fill();
+    g.beginPath();var first=true;
+    for(var i=0;i<=N;i++){var mS=(i==N)?0:SPS;for(var s=0;s<=mS;s++){var u=s/SPS;var a=va+i*step+u*step;var rad=outerR-depth*Math.sin(u*Math.PI);var px=cx+Math.cos(a)*rad,py=cy+Math.sin(a)*rad;if(first){g.moveTo(px,py);first=false;}else g.lineTo(px,py);}}
+    g.closePath();
+    var gr=g.createLinearGradient(0,cy-outerR,0,cy+outerR);gr.addColorStop(0,'#30343a');gr.addColorStop(1,'#111319');
+    g.fillStyle=gr;g.fill();g.strokeStyle='rgba(0,0,0,.72)';g.lineWidth=1.2;g.lineJoin='round';g.stroke();
+    var g2=g.createLinearGradient(0,cy-innerR,0,cy+innerR);g2.addColorStop(0,'#242930');g2.addColorStop(1,'#12161c');
+    g.beginPath();g.arc(cx,cy,innerR,0,7);g.fillStyle=g2;g.fill();
+    g.beginPath();g.arc(cx-outerR*0.11,cy-outerR*0.14,innerR*0.54,0,7);g.fillStyle='rgba(255,255,255,.06)';g.fill();
+    for(var t=0;t<N;t++){var a2=va+t*step,dx=Math.cos(a2),dy=Math.sin(a2);g.beginPath();g.moveTo(cx+dx*(outerR-3.7),cy+dy*(outerR-3.7));g.lineTo(cx+dx*(outerR-1.2),cy+dy*(outerR-1.2));g.strokeStyle=rgba(acc,t==0?0.97:0.54);g.lineWidth=t==0?1.6:1.1;g.lineCap='round';g.stroke();}
+    var px2=Math.cos(va),py2=Math.sin(va);g.beginPath();g.moveTo(cx+px2*outerR*0.16,cy+py2*outerR*0.16);g.lineTo(cx+px2*(outerR-3.7),cy+py2*(outerR-3.7));g.strokeStyle=acc;g.lineWidth=Math.max(2,Math.min(3.1,outerR*0.13));g.lineCap='round';g.stroke();
   }
   function knobDavies(g,W,H,frac){
     var r=W/2, cx=r, cy=r, va=kang(frac);
@@ -422,7 +453,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   var ROWS=4,STEPS=16,pat=[];
   (function(){var seed=[[0,4,8,12],[4,12],[2,6,10,14,3,11],[7,15,0]];
     for(var r=0;r<ROWS;r++)for(var c=0;c<STEPS;c++)pat[r*STEPS+c]=seed[r].indexOf(c)>=0;})();
-  var S={ring:{v:0.62},ringbi:{v:0.5},davies:{v:0.4},ringdis:{v:0.7},
+  var S={ring:{v:0.62},ringbi:{v:0.5},seq:{v:0.55},synth:{v:0.66},davies:{v:0.4},nxd:{v:0.42},ringdis:{v:0.7},
     fader0:{v:0.62},fader1:{v:0.72},fader2:{v:0.4},fader3:{v:0.9},
     toggle:{v:1,anim:1},toggleon:{v:1,anim:1},toggleoff:{v:0,anim:0},
     ledblink:{on:true},ledon:{on:true},ledoff:{on:false},
@@ -444,7 +475,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     switch(k){
       case 'ring': knobRing(g,W,H,s.v,false,false);break;
       case 'ringbi': knobRing(g,W,H,s.v,true,false);break;
+      case 'seq': knobRing(g,W,H,s.v,false,false,false);break;
+      case 'synth': knobSynth(g,W,H,s.v,false);break;
       case 'davies': knobDavies(g,W,H,s.v);break;
+      case 'nxd': knobNxd(g,W,H,s.v);break;
       case 'ringdis': knobRing(g,W,H,s.v,false,true);break;
       case 'fader0': case 'fader1': case 'fader2': case 'fader3': fader(g,W,H,s.v,!!s.hot);break;
       case 'toggle': case 'toggleon': case 'toggleoff': toggle(g,W,H,s.anim);break;
@@ -488,7 +522,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   function clickToggle(cv,fn){cv.style.cursor='pointer';cv.addEventListener('pointerdown',function(e){fn();e.preventDefault();});}
 
   cvs.forEach(function(cv){var k=cv._k,s=S[k];
-    if(k==='ring'||k==='ringbi'||k==='davies') knobDrag(cv,s);
+    if(k==='ring'||k==='ringbi'||k==='seq'||k==='synth'||k==='davies'||k==='nxd') knobDrag(cv,s);
     else if(/^fader/.test(k)) faderDrag(cv,s);
     else if(/^toggle/.test(k)) clickToggle(cv,function(){s.v=s.v>0.5?0:1;});
     else if(/^led/.test(k)) clickToggle(cv,function(){s.on=!s.on;drawOne(cv);});
