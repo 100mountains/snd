@@ -200,6 +200,8 @@ enum class EventType {
     MouseMove,
     MouseDown,
     MouseUp,
+    MouseWheel,
+    ContextMenu,
     KeyDown,
     KeyUp,
 };
@@ -208,6 +210,7 @@ enum class MouseButton {
     Left,
     Right,
     Middle,
+    None,
 };
 
 enum class Key {
@@ -223,11 +226,19 @@ enum class Key {
 };
 
 struct Event {
+    // Pointer coordinates are tree-local. Use clickCount >= 2 for
+    // double-click style gestures; delta and wheelDelta are adapter-provided.
     EventType type = EventType::MouseMove;
     Vec2 position;
+    Vec2 delta;
     MouseButton button = MouseButton::Left;
     Key key = Key::Unknown;
+    Vec2 wheelDelta;
+    int clickCount = 0;
     bool shift = false;
+    bool ctrl = false;
+    bool alt = false;
+    bool super = false;
 };
 
 struct ValueBinding {
@@ -301,6 +312,7 @@ public:
     bool activate();
     void setOnAction(std::function<bool(Node&, Action, double)> callback);
     void setOnEvent(std::function<bool(Node&, const Event&)> callback);
+    void setOnRefresh(std::function<bool(Node&)> callback);
 
     void setValueBinding(ValueBinding binding);
     void clearValueBinding();
@@ -324,6 +336,7 @@ private:
     void setPressed(bool pressed);
     bool handleEvent(const Event& event);
     bool refreshBindingState();
+    bool refreshExternalState();
 
     NodeId id_;
     Role role_ = Role::Group;
@@ -345,6 +358,7 @@ private:
     std::function<void(Node&)> onActivate_;
     std::function<bool(Node&, Action, double)> onAction_;
     std::function<bool(Node&, const Event&)> onEvent_;
+    std::function<bool(Node&)> onRefresh_;
     std::unique_ptr<ValueBinding> valueBinding_;
     bool hasObservedBinding_ = false;
     ValueRange observedBindingValue_;

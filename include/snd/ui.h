@@ -67,6 +67,10 @@ void gradientPanel(const ImVec2& size, ImU32 topLeft, ImU32 topRight,
 
 // Gradient-filled button. Returns true when clicked.
 bool gradientButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bottom);
+// Generation/action button with the same gradient body plus a subtle live
+// sweep. Use for actions that should read as energetic but still be a button.
+bool animatedButton(const char* label, const ImVec2& size,
+                    ImU32 top = 0, ImU32 bottom = 0);
 
 // Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
 // independent like SVG). `active` renders with the accent colour + border.
@@ -235,7 +239,7 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size);
 bool selectableList(const char* id, const std::vector<std::string>& items,
                     int* selected, const ImVec2& size);
 
-// Number field you drag horizontally (themed DragFloat).
+// Number field you drag horizontally, painted with SND's value-row style.
 bool dragNumber(const char* label, float* value, float speed, float minV,
                 float maxV, const char* format = "%.2f");
 

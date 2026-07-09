@@ -8,6 +8,7 @@
 #include <functional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "snd/ui_paint.h"
 #include "snd/ui_retained.h"
@@ -28,6 +29,7 @@ enum class VisualKind {
     Badge,
     SectionHeader,
     ListItem,
+    ValueRow,
     Canvas,
 };
 
@@ -107,6 +109,10 @@ namespace widgets {
 Node::Ptr panel(NodeId id, Layout layout = {}, Insets padding = {});
 Node::Ptr row(NodeId id, float gap = 6.0f, Insets padding = {});
 Node::Ptr column(NodeId id, float gap = 6.0f, Insets padding = {});
+Node::Ptr gradientPanel(NodeId id, Vec2 size,
+                        ImU32 topLeft, ImU32 topRight,
+                        ImU32 bottomRight, ImU32 bottomLeft,
+                        PaintRenderer* renderer = nullptr);
 Node::Ptr label(NodeId id, std::string text, PaintRenderer* renderer = nullptr);
 Node::Ptr sectionHeader(NodeId id, std::string text, PaintRenderer* renderer = nullptr);
 Node::Ptr badge(NodeId id, std::string text, PaintRenderer* renderer = nullptr);
@@ -126,6 +132,18 @@ Node::Ptr keyboard(NodeId id, std::string name, int firstNote, int octaves,
                    const bool* lit = nullptr,
                    PaintRenderer* renderer = nullptr,
                    Vec2 size = {280.0f, 72.0f});
+Node::Ptr envelopeEditor(NodeId id, std::string name,
+                         std::vector<EnvPoint>& points,
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {200.0f, 80.0f},
+                         std::vector<float>* tensions = nullptr);
+Node::Ptr valueRow(NodeId id, std::string name, ValueBinding binding,
+                   PaintRenderer* renderer = nullptr,
+                   Vec2 size = {160.0f, 26.0f});
+Node::Ptr dragNumber(NodeId id, std::string name, ValueBinding binding,
+                     PaintRenderer* renderer = nullptr,
+                     Vec2 size = {160.0f, 26.0f},
+                     double dragSpeed = 0.0);
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
@@ -133,6 +151,12 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
 
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate = {},
                  PaintRenderer* renderer = nullptr);
+Node::Ptr animatedButton(NodeId id, std::string name,
+                         std::function<void(Node&)> onActivate = {},
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {110.0f, 52.0f},
+                         ImU32 top = 0, ImU32 bottom = 0,
+                         bool animate = true);
 Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,
@@ -153,9 +177,11 @@ Node::Ptr meter(NodeId id, std::string name, ValueBinding binding,
                 PaintRenderer* renderer = nullptr, Vec2 size = {10.0f, 80.0f});
 Node::Ptr led(NodeId id, std::string name, bool on, bool clickable = false,
               std::function<void(Node&)> onActivate = {},
-              PaintRenderer* renderer = nullptr);
+              PaintRenderer* renderer = nullptr,
+              float radius = 5.0f, ImU32 onColor = 0);
 Node::Ptr led(NodeId id, std::string name, ValueBinding binding,
-              bool clickable = false, PaintRenderer* renderer = nullptr);
+              bool clickable = false, PaintRenderer* renderer = nullptr,
+              float radius = 5.0f, ImU32 onColor = 0);
 
 } // namespace widgets
 

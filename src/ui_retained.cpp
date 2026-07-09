@@ -522,6 +522,12 @@ void Node::setOnAction(std::function<bool(Node&, Action, double)> callback)
     markDirty();
 }
 
+void Node::setOnRefresh(std::function<bool(Node&)> callback)
+{
+    onRefresh_ = std::move(callback);
+    markDirty();
+}
+
 bool Node::activate()
 {
     if (!isInteractive(*this))
@@ -721,6 +727,16 @@ bool Node::refreshBindingState()
     return true;
 }
 
+bool Node::refreshExternalState()
+{
+    if (!onRefresh_)
+        return false;
+    if (!onRefresh_(*this))
+        return false;
+    markDirty();
+    return true;
+}
+
 Tree::Tree(Node::Ptr root) : root_(std::move(root))
 {
     if (!root_)
@@ -899,10 +915,20 @@ bool Tree::dispatch(const Event& event)
         if (pressed)
             pressed->setPressed(false);
         pressedId_.clear();
-        bool handled = target && isInteractive(*target) && target->handleEvent(event);
+        Node* receiver = pressed ? pressed : target;
+        bool handled = receiver && isInteractive(*receiver) && receiver->handleEvent(event);
         if (pressed && target == pressed)
             return pressed->perform(Action::Activate) || handled;
         return pressed != nullptr || handled;
+    }
+
+    if (event.type == EventType::MouseDown ||
+        event.type == EventType::MouseUp ||
+        event.type == EventType::MouseWheel ||
+        event.type == EventType::ContextMenu) {
+        Node* target = hitTest(event.position);
+        setHoveredNode(target);
+        return target && isInteractive(*target) && target->handleEvent(event);
     }
 
     if (event.type != EventType::KeyDown && event.type != EventType::KeyUp)
@@ -984,6 +1010,7 @@ bool Tree::refreshBoundValues()
     bool changed = false;
     std::function<void(Node&)> visit = [&](Node& node) {
         changed = node.refreshBindingState() || changed;
+        changed = node.refreshExternalState() || changed;
         for (const auto& child : node.children_)
             visit(*child);
     };

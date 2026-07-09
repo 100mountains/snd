@@ -87,6 +87,12 @@ callbacks or small adapters so the caller remains the state owner.
 After a mouse press, custom event hooks on the pressed node continue receiving
 mouse-move events until release so custom controls can implement drags without
 renderer-local capture state.
+Pointer events carry button identity, click count, modifier keys, pointer
+delta, wheel delta, and context-menu intent in the retained `Event`.
+Left-button press/release keeps the default focus, pressed, capture, and
+activation behaviour. Right/middle buttons, wheel, and context-menu events are
+delivered to the hit node's custom event hook without triggering built-in
+button activation.
 
 Use stable, caller-chosen node IDs. Do not derive durable IDs from visible
 labels, child indices, or translated text. Call `validate()` in headless tests
@@ -110,7 +116,10 @@ as the accessibility boundary. Shared visual work should consume
 `snd::ui::paint` helpers rather than copying immediate-mode drawing code.
 If a caller-owned bound value changes outside retained dispatch, call
 `refreshBoundValues()` on the UI thread before deciding whether to repaint or
-publish fresh semantics.
+publish fresh semantics. Custom Canvas/widgets with caller-owned models that
+are not representable as a simple `ValueBinding` should install
+`setOnRefresh(...)`; the hook is invoked by `refreshBoundValues()` and should
+return true only when it refreshed model-derived semantics or node state.
 Native accessibility bridges should operate through `semanticNode(id)`,
 `performSemanticAction(id, action)`, `value(id)`, `setValue(id, value)`,
 `incrementValue(id)`, and `decrementValue(id)` instead of reading renderer

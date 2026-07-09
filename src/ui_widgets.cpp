@@ -6,6 +6,7 @@
 #include "snd/ui_paint.h"
 
 #include "imgui-knobs.h"
+#include "imgui_internal.h"
 
 #include <algorithm>
 #include <cctype>
@@ -21,6 +22,16 @@ namespace snd::ui {
 namespace {
 
 Palette gPalette;
+
+const char* visibleLabelEnd(const char* label)
+{
+    if (!label)
+        return "";
+    const char* end = label;
+    while (*end && !(end[0] == '#' && end[1] == '#'))
+        ++end;
+    return end;
+}
 
 } // namespace
 
@@ -377,18 +388,6 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
     return changed;
 }
 
-// Segment ease used when tensions are present: +t = slow start, -t = fast
-// start (matches Bob's envelope contours so edited shapes sound identical).
-static float easeSegment(float t, float ten)
-{
-    ten = std::clamp(ten, -1.0f, 1.0f);
-    if (ten > 0.0f)
-        return std::pow(t, 1.0f + ten * 3.0f);
-    if (ten < 0.0f)
-        return 1.0f - std::pow(1.0f - t, 1.0f - ten * 3.0f);
-    return t;
-}
-
 bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2& size,
                     std::vector<float>* tensions)
 {
@@ -418,7 +417,7 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
         const auto& a = points[i];
         const auto& b = points[i + 1];
         float t = std::clamp((x - a.x) / std::max(1e-6f, b.x - a.x), 0.0f, 1.0f);
-        return a.y + (b.y - a.y) * easeSegment(t, segTen(i));
+        return a.y + (b.y - a.y) * paint::envelopeEase(t, segTen(i));
     };
 
     ImVec2 m = ImGui::GetIO().MousePos;
@@ -502,38 +501,12 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
         changed = true;
     }
 
-    // draw
-    dl->AddRectFilled(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frame, 3.0f);
-    for (size_t i = 1; i < points.size(); ++i) {
-        float ten = segTen(i - 1);
-        ImU32 col = tensions && (int)(i - 1) == (hotSeg >= 0 ? hotSeg : dragSeg)
-                        ? gPalette.text
-                        : gPalette.accent;
-        if (ten == 0.0f) {
-            dl->AddLine(toScreen(points[i - 1]), toScreen(points[i]), col, 2.0f);
-        } else {
-            const int steps = 16;
-            ImVec2 prev = toScreen(points[i - 1]);
-            for (int s = 1; s <= steps; ++s) {
-                float t = (float)s / steps;
-                EnvPoint q{points[i - 1].x + (points[i].x - points[i - 1].x) * t,
-                           points[i - 1].y +
-                               (points[i].y - points[i - 1].y) * easeSegment(t, ten)};
-                ImVec2 cur = toScreen(q);
-                dl->AddLine(prev, cur, col, 2.0f);
-                prev = cur;
-            }
-        }
-    }
-    for (int i = 0; i < (int)points.size(); ++i) {
-        ImVec2 s = toScreen(points[(size_t)i]);
-        dl->AddCircleFilled(s, i == hot || i == dragging ? 6.0f : 4.5f,
-                            i == hot || i == dragging ? gPalette.text
-                                                      : gPalette.accent);
-    }
-    dl->AddRect(p, ImVec2(p.x + size.x, p.y + size.y), gPalette.frameBright, 3.0f);
-    if (ImGui::IsItemFocused())
-        paint::drawFocusRing(dl, p, ImVec2(p.x + size.x, p.y + size.y), gPalette, 3.0f);
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = ImGui::IsItemFocused();
+    paint::drawEnvelope(dl, p, size, points, tensions, hot, dragging, hotSeg, dragSeg,
+                        gPalette, state);
     return changed;
 }
 
@@ -585,11 +558,47 @@ bool selectableList(const char* id, const std::vector<std::string>& items,
 bool dragNumber(const char* label, float* value, float speed, float minV, float maxV,
                 const char* format)
 {
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, paint::toVec4(gPalette.frame));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, paint::toVec4(gPalette.frameBright));
-    ImGui::PushStyleColor(ImGuiCol_Text, paint::toVec4(gPalette.text));
-    bool changed = ImGui::DragFloat(label, value, speed, minV, maxV, format);
-    ImGui::PopStyleColor(3);
+    const char* idLabel = label && label[0] ? label : "##dragNumber";
+    const char* displayEnd = visibleLabelEnd(label);
+    const char* valueFormat = format ? format : "%.2f";
+    std::string displayLabel;
+    if (label && displayEnd > label)
+        displayLabel.assign(label, displayEnd);
+
+    const float baseWidth = ImGui::CalcItemWidth();
+    const float labelWidth = label && displayEnd > label
+                                 ? ImGui::CalcTextSize(label, displayEnd).x
+                                 : 0.0f;
+    const float rowWidth = baseWidth + (labelWidth > 0.0f
+                                            ? ImGui::GetStyle().ItemInnerSpacing.x + labelWidth
+                                            : 0.0f);
+
+    ImGui::PushID(idLabel);
+    ImGui::PushItemWidth(rowWidth);
+    const ImGuiID dragId = ImGui::GetID("##value");
+    const bool tempInputBefore = ImGui::TempInputIsActive(dragId);
+    bool changed = ImGui::DragFloat("##value", value, speed, minV, maxV, valueFormat);
+    const bool tempInputActive = tempInputBefore || ImGui::TempInputIsActive(dragId);
+    ImGui::PopItemWidth();
+
+    if (!tempInputActive) {
+        char valueText[32];
+        std::snprintf(valueText, sizeof valueText, valueFormat, value ? *value : 0.0f);
+
+        paint::ControlState state;
+        state.hovered = ImGui::IsItemHovered();
+        state.active = ImGui::IsItemActive();
+        state.focused = ImGui::IsItemFocused();
+
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+        paint::drawValueRow(ImGui::GetWindowDrawList(), ImGui::GetFont(), min,
+                            ImVec2(max.x - min.x, max.y - min.y),
+                            displayLabel.c_str(), valueText, gPalette, state,
+                            0.90f, true);
+    }
+
+    ImGui::PopID();
     return changed;
 }
 

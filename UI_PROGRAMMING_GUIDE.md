@@ -131,16 +131,17 @@ Include `snd/ui_retained_widgets.h` to build retained panels with the shared
 SND look. The helper namespace is `snd::ui::retained::widgets`; the renderer is
 `snd::ui::retained::PaintRenderer`.
 
-Current helpers cover `row`, `column`, `panel`, `label`, `sectionHeader`,
-`badge`, `listItem`, `button`, `iconButton`, `toggle`, `knob`, `fader`,
-`meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, and `canvas`. Value
-controls use `ValueBinding`; the caller still owns plugin parameters, app
-state, undo, and audio-thread handoff. Knobs and faders support retained
-pointer editing through the ImGui input bridge. Meters and LEDs can also use
-`ValueBinding` so a stable retained tree can display changing audio/UI state
-without recreating nodes. `xyPad` takes separate X/Y bindings, while
-`patternGrid` edits a caller-owned row-major bool array and can read a dynamic
-playhead callback.
+Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`, `sectionHeader`,
+`badge`, `listItem`, `button`, `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`,
+`meter`, `led`, `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
+`envelopeEditor`, and `canvas`. Value controls use `ValueBinding`; the caller
+still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
+faders, drag numbers, XY pads, pattern grids, keyboards, and envelope editors
+support retained pointer editing through the ImGui input bridge. Meters and
+LEDs can also use `ValueBinding` so a stable retained tree can display
+changing audio/UI state without recreating nodes. `xyPad` takes separate X/Y
+bindings, while `patternGrid` edits a caller-owned row-major bool array and
+can read a dynamic playhead callback.
 
 The normal retained frame call is:
 
@@ -159,6 +160,8 @@ meters, playheads, and other views whose node should own layout, focus,
 hit-testing, and semantics while custom code draws inside its bounds.
 Canvas-backed controls expose focus and names today; add richer custom value
 text where practical, and prefer built-in helpers when one exists.
+Use `widgets::gradientPanel(...)` only for decorative retained chrome; it is
+semantic-hidden and non-interactive.
 
 Use `widgets::patternGrid(id, name, cells, rows, steps, &renderer, size,
 playheadFn)` for step grids. `cells` stays caller-owned, mouse drag paints, and
@@ -167,6 +170,28 @@ size)` for two-axis controls over normalized values. Use
 `widgets::keyboard(id, name, firstNote, octaves, noteOn, noteOff, lit,
 &renderer, size)` for piano surfaces; `noteOn`/`noteOff` fire from retained
 pointer transitions and `lit` is an optional caller-owned `bool[128]`.
+Use `widgets::envelopeEditor(id, name, points, &renderer, size, tensions)` for
+breakpoint envelopes. `points` and optional `tensions` stay caller-owned;
+dragging edits points or segment bend, double-clicking empty space adds a
+point, and right-click/context-click deletes an interior point.
+Use `widgets::valueRow(id, name, binding, &renderer, size)` for compact
+read-only numeric/status rows; it keeps the setter out of retained semantics.
+Use `widgets::dragNumber(id, name, binding, &renderer, size, dragSpeed)` for a
+compact slider-like value row that edits horizontally; Shift-drag is fine
+adjustment and keyboard/semantic increments use `ValueBinding::step`.
+Use `widgets::led(..., &renderer, radius, onColor)` when a retained LED needs
+the same radius or accent override as the immediate LED helper.
+Use `widgets::animatedButton(id, name, onActivate, &renderer, size)` for
+generation/action buttons that need a subtle live sweep. It is Canvas-backed
+for pixels, but remains a retained `Role::Button` with normal focus,
+activation, and accessible-name expectations.
+
+Envelope and curve drawing is shared in `paint::drawEnvelope(...)`.
+The immediate and retained envelope editors use the same curve, point, segment,
+and focus treatment. `dispatchImGuiInput(...)` populates retained pointer
+events with tree-local pointer delta, right/middle buttons, wheel delta, click
+count, context-menu intent, and modifier keys for Canvas-backed controls that
+need richer gestures.
 
 Minimal retained panel:
 
@@ -230,6 +255,8 @@ members).
 
 - `gradientPanel(size, tl, tr, br, bl)` — filled rect with a 4-corner gradient.
 - `gradientButton(label, size, top, bottom)` → clicked.
+- `animatedButton(label, size, top=0, bottom=0)` → clicked. Gradient action
+  button with a subtle live sweep; `0` colours use the current palette accent.
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
@@ -245,7 +272,7 @@ members).
   range; a tick marks 0 dB when in range.
 - `fader(id, float* v, size)` → dragging. Vertical fader 0..1.
 - `dragNumber(label, float* v, speed, min, max, format="%.2f")` → changing.
-  Horizontal-drag number field.
+  Horizontal-drag number field using the shared value-row paint.
 
 ### Switches and indicators
 

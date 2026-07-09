@@ -53,6 +53,87 @@ void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                 withAlpha(pal.accent, 0xB0), rounding + expand + 1.5f, 0, 1.0f);
 }
 
+void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
+                       const ImVec2& size, ImU32 topLeftColor,
+                       ImU32 topRightColor, ImU32 bottomRightColor,
+                       ImU32 bottomLeftColor)
+{
+    if (!dl)
+        return;
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    dl->AddRectFilledMultiColor(topLeft, mx, topLeftColor, topRightColor,
+                                bottomRightColor, bottomLeftColor);
+}
+
+void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                        const ImVec2& size, const char* text, ImU32 top,
+                        ImU32 bottom, const Palette& pal,
+                        const ControlState& state, float pulse, float fontScale)
+{
+    if (!dl || !font)
+        return;
+    if (top == 0)
+        top = pal.accent;
+    if (bottom == 0)
+        bottom = pal.accentDim;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = 4.0f;
+    ImU32 topCol = top;
+    ImU32 bottomCol = bottom;
+    if (state.hovered && !state.disabled) {
+        topCol = mix(topCol, IM_COL32(255, 255, 255, 255), 0.15f);
+        bottomCol = mix(bottomCol, IM_COL32(255, 255, 255, 255), 0.11f);
+    }
+    if (state.active && !state.disabled) {
+        topCol = mix(topCol, IM_COL32(0, 0, 0, 255), 0.10f);
+        bottomCol = mix(bottomCol, IM_COL32(0, 0, 0, 255), 0.18f);
+    }
+    if (state.disabled) {
+        topCol = mix(topCol, IM_COL32(0, 0, 0, 255), 0.55f);
+        bottomCol = mix(bottomCol, IM_COL32(0, 0, 0, 255), 0.55f);
+    }
+
+    dl->AddRectFilledMultiColor(topLeft, mx, topCol, topCol, bottomCol, bottomCol);
+    dl->AddRectFilled(topLeft, ImVec2(mx.x, topLeft.y + std::min(3.0f, size.y * 0.16f)),
+                      withAlpha(IM_COL32(255, 255, 255, 255),
+                                state.disabled ? 0x16 : 0x42), r);
+
+    pulse = std::clamp(pulse, 0.0f, 1.0f);
+    const bool glow = pulse > 0.001f && !state.disabled;
+    if (glow) {
+        const float hot = 0.30f + 0.70f * pulse;
+        dl->AddRectFilled(topLeft, mx, withAlpha(pal.accent, (uint32_t)(0x24 * hot)), r);
+        const float sweepW = std::max(8.0f, size.x * 0.22f);
+        const float sx = topLeft.x - sweepW + pulse * (size.x + sweepW * 2.0f);
+        dl->PushClipRect(topLeft, mx, true);
+        dl->AddRectFilled(ImVec2(sx, topLeft.y),
+                          ImVec2(sx + sweepW, mx.y),
+                          withAlpha(IM_COL32(255, 255, 255, 255),
+                                    (uint32_t)(0x38 * hot)), 3.0f);
+        dl->PopClipRect();
+    }
+
+    dl->AddRect(topLeft, mx,
+                state.active || state.selected ? pal.accent
+                                               : IM_COL32(0, 0, 0, 130),
+                r, 0, state.active || state.selected ? 1.8f : 1.0f);
+
+    if (text && text[0]) {
+        const float fs = ImGui::GetFontSize() * fontScale;
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, text);
+        ImVec2 p(topLeft.x + std::max(0.0f, size.x - ts.x) * 0.5f,
+                 topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f +
+                     (state.active ? 1.0f : 0.0f));
+        dl->AddText(font, fs, p, state.disabled ? pal.textDim
+                                                : IM_COL32(255, 255, 255, 245),
+                    text);
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
 void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
               KnobStyle style, const Palette& pal, const ControlState& state,
               bool bipolar, ImU32 accent)
@@ -459,6 +540,70 @@ void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
         drawFocusRing(dl, topLeft, mx, pal, 3.0f);
 }
 
+void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                  const ImVec2& size, const char* label, const char* valueText,
+                  const Palette& pal, const ControlState& state,
+                  float fontScale, bool draggable)
+{
+    if (!dl || !font)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const float r = 3.0f;
+    ImU32 fill = state.active ? mix(pal.frame, pal.accent, 0.24f) : pal.frame;
+    if (state.hovered && !state.active && !state.disabled)
+        fill = mix(fill, pal.frameBright, 0.55f);
+    if (state.disabled)
+        fill = mix(fill, IM_COL32(0, 0, 0, 255), 0.35f);
+
+    dl->AddRectFilled(topLeft, mx, fill, r);
+    dl->AddRect(topLeft, mx, state.active ? pal.accent : pal.frameBright, r);
+
+    const ImU32 accent = state.disabled ? mix(pal.accent, pal.frameBright, 0.65f)
+                                        : pal.accent;
+    const float railW = state.active ? 4.0f : 3.0f;
+    dl->AddRectFilled(ImVec2(topLeft.x + 2.0f, topLeft.y + 3.0f),
+                      ImVec2(topLeft.x + 2.0f + railW, mx.y - 3.0f),
+                      state.active ? accent : withAlpha(accent, 0x86), 2.0f);
+
+    const float fs = ImGui::GetFontSize() * fontScale;
+    const float padX = 10.0f;
+    const float y = topLeft.y + std::max(0.0f, size.y - fs) * 0.5f - 1.0f;
+    const char* labelText = label ? label : "";
+    const char* value = valueText ? valueText : "";
+    ImVec2 valueSize = font->CalcTextSizeA(fs, FLT_MAX, 0.0f, value);
+    const float valueX = std::max(topLeft.x + padX, mx.x - padX - valueSize.x);
+    const float labelRight = std::max(topLeft.x + padX, valueX - 8.0f);
+
+    dl->PushClipRect(ImVec2(topLeft.x + padX, topLeft.y),
+                     ImVec2(labelRight, mx.y), true);
+    if (labelText[0]) {
+        dl->AddText(font, fs, ImVec2(topLeft.x + padX, y), pal.textDim, labelText);
+    }
+    dl->PopClipRect();
+
+    dl->PushClipRect(ImVec2(topLeft.x + padX, topLeft.y),
+                     ImVec2(mx.x - padX, mx.y), true);
+    if (value[0]) {
+        dl->AddText(font, fs, ImVec2(valueX, y),
+                    state.disabled ? pal.textDim : pal.text,
+                    value);
+    }
+    dl->PopClipRect();
+
+    if (draggable) {
+        const float gripX = mx.x - 5.0f;
+        const ImU32 grip = state.disabled ? withAlpha(pal.textDim, 0x60)
+                                          : withAlpha(pal.textDim, state.hovered ? 0xB8 : 0x80);
+        dl->AddLine(ImVec2(gripX, topLeft.y + 7.0f), ImVec2(gripX, mx.y - 7.0f), grip, 1.0f);
+        dl->AddLine(ImVec2(gripX - 3.0f, topLeft.y + 8.0f),
+                    ImVec2(gripX - 3.0f, mx.y - 8.0f), withAlpha(grip, 0x72), 1.0f);
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, r);
+}
+
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
                      const Palette& pal, const ControlState& state)
@@ -589,6 +734,80 @@ void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
     if (state.focused && !state.disabled)
         drawFocusRing(dl, topLeft, ImVec2(topLeft.x + size.x, topLeft.y + size.y),
                       pal, 3.0f);
+}
+
+float envelopeEase(float t, float tension)
+{
+    t = std::clamp(t, 0.0f, 1.0f);
+    tension = std::clamp(tension, -1.0f, 1.0f);
+    if (tension > 0.0f)
+        return std::pow(t, 1.0f + tension * 3.0f);
+    if (tension < 0.0f)
+        return 1.0f - std::pow(1.0f - t, 1.0f - tension * 3.0f);
+    return t;
+}
+
+void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  const std::vector<EnvPoint>& points,
+                  const std::vector<float>* tensions,
+                  int hotPoint, int activePoint,
+                  int hotSegment, int activeSegment,
+                  const Palette& pal, const ControlState& state)
+{
+    if (!dl)
+        return;
+
+    const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    dl->AddRectFilled(topLeft, mx, pal.frame, 3.0f);
+
+    if (size.x > 0.0f && size.y > 0.0f && points.size() >= 2) {
+        auto toScreen = [&](const EnvPoint& e) {
+            return ImVec2(topLeft.x + e.x * size.x,
+                          topLeft.y + (1.0f - e.y) * size.y);
+        };
+        auto segTen = [&](size_t i) {
+            return tensions && i < tensions->size() ? (*tensions)[i] : 0.0f;
+        };
+
+        ImU32 accent = state.disabled ? mix(pal.accent, pal.frameBright, 0.65f)
+                                      : pal.accent;
+        ImU32 hot = state.disabled ? pal.textDim : pal.text;
+
+        for (size_t i = 1; i < points.size(); ++i) {
+            const int segment = (int)i - 1;
+            const bool segmentHot = segment == (activeSegment >= 0 ? activeSegment
+                                                                   : hotSegment);
+            const ImU32 col = segmentHot ? hot : accent;
+            const float ten = segTen(i - 1);
+            if (ten == 0.0f) {
+                dl->AddLine(toScreen(points[i - 1]), toScreen(points[i]), col, 2.0f);
+            } else {
+                constexpr int kSteps = 16;
+                ImVec2 prev = toScreen(points[i - 1]);
+                for (int s = 1; s <= kSteps; ++s) {
+                    const float t = (float)s / (float)kSteps;
+                    EnvPoint q{points[i - 1].x + (points[i].x - points[i - 1].x) * t,
+                               points[i - 1].y +
+                                   (points[i].y - points[i - 1].y) *
+                                       envelopeEase(t, ten)};
+                    ImVec2 cur = toScreen(q);
+                    dl->AddLine(prev, cur, col, 2.0f);
+                    prev = cur;
+                }
+            }
+        }
+
+        for (int i = 0; i < (int)points.size(); ++i) {
+            const bool pointHot = i == (activePoint >= 0 ? activePoint : hotPoint);
+            const ImVec2 s = toScreen(points[(size_t)i]);
+            dl->AddCircleFilled(s, pointHot ? 6.0f : 4.5f,
+                                pointHot ? hot : accent);
+        }
+    }
+
+    dl->AddRect(topLeft, mx, pal.frameBright, 3.0f);
+    if (state.focused && !state.disabled)
+        drawFocusRing(dl, topLeft, mx, pal, 3.0f);
 }
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

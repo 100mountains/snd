@@ -531,11 +531,56 @@ static bool selftestRetainedUi()
     front->setSize(r::Length::fill(), r::Length::fill());
     front->setSemantics(named(r::Role::Text, "Overlay"));
     int customEvents = 0;
-    front->setOnEvent([&](r::Node&, const r::Event& event) {
-        if (event.type != r::EventType::MouseMove)
-            return false;
-        ++customEvents;
-        return true;
+    int rightClickEvents = 0;
+    int doubleClickEvents = 0;
+    int modifiedEvents = 0;
+    int wheelEvents = 0;
+    int contextEvents = 0;
+    bool sawMoveDelta = false;
+    float wheelY = 0.0f;
+    float moveDeltaY = 0.0f;
+    bool releaseOutside = false;
+    front->setOnEvent([&](r::Node& node, const r::Event& event) {
+        if (event.type == r::EventType::MouseMove) {
+            ++customEvents;
+            if (event.delta.y != 0.0f) {
+                sawMoveDelta = true;
+                moveDeltaY = event.delta.y;
+            }
+            return true;
+        }
+        if (event.type == r::EventType::MouseDown &&
+            event.button == r::MouseButton::Right) {
+            ++rightClickEvents;
+            if (event.shift && event.ctrl && event.alt && event.super)
+                ++modifiedEvents;
+            return true;
+        }
+        if (event.type == r::EventType::MouseDown &&
+            event.button == r::MouseButton::Left && event.clickCount == 2) {
+            ++doubleClickEvents;
+            return true;
+        }
+        if (event.type == r::EventType::MouseUp &&
+            event.button == r::MouseButton::Left && event.clickCount == 2) {
+            return true;
+        }
+        if (event.type == r::EventType::MouseUp &&
+            event.button == r::MouseButton::Left &&
+            !node.bounds().contains(event.position)) {
+            releaseOutside = true;
+            return true;
+        }
+        if (event.type == r::EventType::MouseWheel) {
+            ++wheelEvents;
+            wheelY = event.wheelDelta.y;
+            return true;
+        }
+        if (event.type == r::EventType::ContextMenu) {
+            ++contextEvents;
+            return true;
+        }
+        return false;
     });
 
     overlay->addChild(std::move(decorative));
@@ -594,6 +639,7 @@ static bool selftestRetainedUi()
     ok = ok && findNode("decor.icon") != nullptr; // renderable, but semantic-hidden
 
     move.position = {10.0f, frontNode ? frontNode->bounds().y + 1.0f : 65.0f};
+    const r::Vec2 frontPoint = move.position;
     ok = ok && tree.dispatch(move) && customEvents == 1 && tree.hovered() &&
          tree.hovered()->id() == "overlay.front";
     r::Event drag;
@@ -602,9 +648,46 @@ static bool selftestRetainedUi()
     ok = ok && tree.dispatch(drag);
     drag.type = r::EventType::MouseMove;
     drag.position = {10.0f, 10.0f};
+    drag.delta = {0.0f, -12.0f};
     ok = ok && tree.dispatch(drag) && customEvents == 2;
+    ok = ok && sawMoveDelta && std::abs(moveDeltaY + 12.0f) < 0.0001f;
     drag.type = r::EventType::MouseUp;
     ok = ok && tree.dispatch(drag);
+    ok = ok && releaseOutside;
+
+    r::Event pointer;
+    pointer.type = r::EventType::MouseDown;
+    pointer.position = frontPoint;
+    pointer.button = r::MouseButton::Right;
+    pointer.shift = true;
+    pointer.ctrl = true;
+    pointer.alt = true;
+    pointer.super = true;
+    ok = ok && tree.dispatch(pointer) && rightClickEvents == 1 &&
+         modifiedEvents == 1;
+
+    pointer = r::Event{};
+    pointer.type = r::EventType::MouseDown;
+    pointer.position = frontPoint;
+    pointer.button = r::MouseButton::Left;
+    pointer.clickCount = 2;
+    ok = ok && tree.dispatch(pointer) && doubleClickEvents == 1;
+    pointer.type = r::EventType::MouseUp;
+    ok = ok && tree.dispatch(pointer);
+
+    pointer = r::Event{};
+    pointer.type = r::EventType::MouseWheel;
+    pointer.position = frontPoint;
+    pointer.button = r::MouseButton::None;
+    pointer.wheelDelta = {0.0f, -2.0f};
+    ok = ok && tree.dispatch(pointer) && wheelEvents == 1 &&
+         std::abs(wheelY + 2.0f) < 0.0001f;
+
+    pointer = r::Event{};
+    pointer.type = r::EventType::ContextMenu;
+    pointer.position = frontPoint;
+    pointer.button = r::MouseButton::Right;
+    ok = ok && tree.dispatch(pointer) && contextEvents == 1;
     tree.clearDirty();
 
     ok = ok && tree.focusNext() && tree.focused() &&
@@ -617,6 +700,13 @@ static bool selftestRetainedUi()
     r::Event mouse;
     mouse.type = r::EventType::MouseDown;
     mouse.position = {10.0f, 10.0f};
+    mouse.button = r::MouseButton::Right;
+    ok = ok && !tree.dispatch(mouse) && activated == 1;
+    mouse.type = r::EventType::MouseUp;
+    ok = ok && !tree.dispatch(mouse) && activated == 1;
+
+    mouse.type = r::EventType::MouseDown;
+    mouse.button = r::MouseButton::Left;
     ok = ok && tree.dispatch(mouse);
     mouse.type = r::EventType::MouseUp;
     ok = ok && tree.dispatch(mouse) && activated == 2;
@@ -796,11 +886,49 @@ static bool selftestRetainedUi()
          !readonlyTree.setValue("readonly.meter", 0.2) &&
          !readonlyTree.incrementValue("readonly.meter");
 
+    int externalCount = 2;
+    int observedCount = externalCount;
+    auto externalRoot = r::Node::make("external.root");
+    auto externalCanvas = r::Node::make("external.canvas", r::Role::Canvas);
+    externalCanvas->setSemantics(named(r::Role::Canvas, "External model"));
+    auto refreshExternalSemantics = [&](r::Node& node) {
+        r::Semantics& sem = node.semantics();
+        sem.value.hasNumeric = true;
+        sem.value.min = 0.0;
+        sem.value.max = std::max(0, externalCount);
+        sem.value.step = 1.0;
+        sem.value.value = externalCount;
+        char text[64];
+        std::snprintf(text, sizeof text, "%d external items", externalCount);
+        sem.value.text = text;
+    };
+    refreshExternalSemantics(*externalCanvas);
+    externalCanvas->setOnRefresh([&](r::Node& node) {
+        if (observedCount == externalCount)
+            return false;
+        observedCount = externalCount;
+        refreshExternalSemantics(node);
+        return true;
+    });
+    externalRoot->addChild(std::move(externalCanvas));
+    r::Tree externalTree(std::move(externalRoot));
+    externalTree.clearDirty();
+    ok = ok && !externalTree.refreshBoundValues() && !externalTree.dirty();
+    externalCount = 4;
+    ok = ok && externalTree.refreshBoundValues() && externalTree.dirty();
+    r::SemanticNode externalSem;
+    ok = ok && externalTree.semanticNode("external.canvas", externalSem) &&
+         externalSem.value.hasNumeric &&
+         std::abs(externalSem.value.value - 4.0) < 0.0001 &&
+         externalSem.value.text == "4 external items";
+
     if (ok)
         printf("PASS (layout/focus/events/semantics/dirty state)\n");
     else
-        printf("FAIL (activated=%d gain=%.3f custom=%d semantics=%zu)\n",
-               activated, gain, customEvents, semantics.size());
+        printf("FAIL (activated=%d gain=%.3f custom=%d right=%d dbl=%d "
+               "wheel=%d ctx=%d semantics=%zu)\n",
+               activated, gain, customEvents, rightClickEvents,
+               doubleClickEvents, wheelEvents, contextEvents, semantics.size());
     return ok;
 }
 

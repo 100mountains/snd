@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include "snd/ui.h"
 
@@ -36,6 +37,17 @@ ImVec2 dirAt(float angle);
 // reports item focus.
 void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                    const Palette& pal, float rounding, float expand = 2.0f);
+
+void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
+                       const ImVec2& size, ImU32 topLeftColor,
+                       ImU32 topRightColor, ImU32 bottomRightColor,
+                       ImU32 bottomLeftColor);
+
+void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                        const ImVec2& size, const char* text, ImU32 top,
+                        ImU32 bottom, const Palette& pal,
+                        const ControlState& state, float pulse = 0.0f,
+                        float fontScale = 0.90f);
 
 void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
               KnobStyle style, const Palette& pal, const ControlState& state,
@@ -69,6 +81,11 @@ void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   const ImVec2& size, const char* text, const Palette& pal,
                   const ControlState& state, float fontScale = 0.90f);
 
+void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                  const ImVec2& size, const char* label, const char* valueText,
+                  const Palette& pal, const ControlState& state,
+                  float fontScale = 0.90f, bool draggable = false);
+
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
                      const Palette& pal, const ControlState& state);
@@ -78,6 +95,17 @@ void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
 
 void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   int firstNote, int octaves, int mouseNote, const bool* lit,
+                  const Palette& pal, const ControlState& state);
+
+// Segment ease used by envelope/curve editors. Positive tension slows the
+// start of a segment; negative tension makes it start faster.
+float envelopeEase(float t, float tension);
+
+void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  const std::vector<EnvPoint>& points,
+                  const std::vector<float>* tensions,
+                  int hotPoint, int activePoint,
+                  int hotSegment, int activeSegment,
                   const Palette& pal, const ControlState& state);
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

@@ -6,7 +6,9 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <utility>
 
 namespace snd::ui::retained {
@@ -118,6 +120,21 @@ std::string formatBindingValue(const ValueBinding& binding, double value)
     return std::string(buf);
 }
 
+std::string nodeValueText(const Node& node, const SemanticNode* sem)
+{
+    const ValueRange& range = sem ? sem->value : node.semantics().value;
+    if (!range.text.empty())
+        return range.text;
+    if (const ValueBinding* binding = node.valueBinding())
+        return formatBindingValue(*binding, readBinding(*binding, range.value));
+    if (range.hasNumeric) {
+        char buf[32];
+        std::snprintf(buf, sizeof buf, "%.2f", range.value);
+        return std::string(buf);
+    }
+    return {};
+}
+
 paint::ControlState controlState(const Node& node, const SemanticNode* sem,
                                  const ImVec2& origin)
 {
@@ -174,12 +191,46 @@ Key mapKey(ImGuiKey key)
     }
 }
 
+MouseButton mapMouseButton(ImGuiMouseButton button)
+{
+    switch (button) {
+    case ImGuiMouseButton_Left:
+        return MouseButton::Left;
+    case ImGuiMouseButton_Right:
+        return MouseButton::Right;
+    case ImGuiMouseButton_Middle:
+        return MouseButton::Middle;
+    default:
+        return MouseButton::None;
+    }
+}
+
+void fillModifiers(Event& event, const ImGuiIO& io)
+{
+    event.shift = io.KeyShift;
+    event.ctrl = io.KeyCtrl;
+    event.alt = io.KeyAlt;
+    event.super = io.KeySuper;
+}
+
 Event keyEvent(ImGuiKey key)
 {
     Event event;
     event.type = EventType::KeyDown;
     event.key = mapKey(key);
-    event.shift = ImGui::GetIO().KeyShift;
+    fillModifiers(event, ImGui::GetIO());
+    return event;
+}
+
+Event pointerEvent(EventType type, Vec2 position, Vec2 delta, MouseButton button,
+                   const ImGuiIO& io)
+{
+    Event event;
+    event.type = type;
+    event.position = position;
+    event.delta = delta;
+    event.button = button;
+    fillModifiers(event, io);
     return event;
 }
 
@@ -220,6 +271,17 @@ void setCheckedState(Node& node, bool on)
     }
 }
 
+void setBindingSemantics(Semantics& sem, const ValueBinding& binding)
+{
+    const double current = readBinding(binding, binding.min);
+    sem.value.hasNumeric = true;
+    sem.value.min = binding.min;
+    sem.value.max = binding.max;
+    sem.value.step = binding.step;
+    sem.value.value = current;
+    sem.value.text = formatBindingValue(binding, current);
+}
+
 bool setBindingValue(Node& node, double value)
 {
     const ValueBinding* binding = node.valueBinding();
@@ -235,8 +297,7 @@ bool setBindingValue(Node& node, double value)
     sem.value.max = binding->max;
     sem.value.step = binding->step;
     sem.value.value = next;
-    if (binding->format)
-        sem.value.text = binding->format(next);
+    sem.value.text = formatBindingValue(*binding, next);
     return true;
 }
 
@@ -251,10 +312,14 @@ bool setBindingNormalized(Node& node, double frac)
 void installFaderPointerBehavior(Node& node)
 {
     node.setOnEvent([](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown && event.button != MouseButton::Left)
+            return false;
         if (event.type != EventType::MouseDown && event.type != EventType::MouseMove)
             return false;
+        if (event.type == EventType::MouseMove && !n.pressed())
+            return false;
         if (event.type == EventType::MouseMove &&
-            (!n.pressed() || !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
+            event.delta.x == 0.0f && event.delta.y == 0.0f)
             return false;
 
         const Rect bounds = n.bounds();
@@ -269,15 +334,19 @@ void installFaderPointerBehavior(Node& node)
 void installKnobPointerBehavior(Node& node)
 {
     node.setOnEvent([](Node& n, const Event& event) {
-        if (event.type == EventType::MouseDown)
+        if (event.type == EventType::MouseDown) {
+            if (event.button != MouseButton::Left)
+                return false;
             return true;
+        }
 
-        if (event.type == EventType::MouseUp)
+        if (event.type == EventType::MouseUp) {
+            if (event.button != MouseButton::Left)
+                return false;
             return true;
+        }
 
         if (event.type != EventType::MouseMove || !n.pressed())
-            return false;
-        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
             return false;
 
         const ValueBinding* binding = n.valueBinding();
@@ -288,14 +357,53 @@ void installKnobPointerBehavior(Node& node)
         if (range <= 0.0)
             return false;
 
-        const ImGuiIO& io = ImGui::GetIO();
-        if (io.MouseDelta.x == 0.0f && io.MouseDelta.y == 0.0f)
+        if (event.delta.x == 0.0f && event.delta.y == 0.0f)
             return false;
 
-        const double fine = io.KeyShift ? 0.25 : 1.0;
-        const double delta = (io.MouseDelta.x - io.MouseDelta.y) *
-                             range * (fine / 180.0);
-        return setBindingValue(n, binding->get() + delta);
+        const double fine = event.shift ? 0.25 : 1.0;
+        const double next = (event.delta.x - event.delta.y) * range *
+                            (fine / 180.0);
+        return setBindingValue(n, binding->get() + next);
+    });
+}
+
+void installDragNumberPointerBehavior(Node& node, double dragSpeed)
+{
+    node.setOnEvent([dragSpeed](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown) {
+            if (event.button != MouseButton::Left)
+                return false;
+            return true;
+        }
+
+        if (event.type == EventType::MouseUp) {
+            if (event.button != MouseButton::Left)
+                return false;
+            return true;
+        }
+
+        if (event.type != EventType::MouseMove || !n.pressed())
+            return false;
+
+        const ValueBinding* binding = n.valueBinding();
+        if (!binding || !binding->get)
+            return false;
+
+        const float dx = event.delta.x;
+        if (dx == 0.0f)
+            return false;
+
+        const double range = std::abs(binding->max - binding->min);
+        double speed = 0.01;
+        if (dragSpeed > 0.0)
+            speed = dragSpeed;
+        else if (binding->step > 0.0)
+            speed = binding->step;
+        else if (range > 0.0)
+            speed = range / 100.0;
+        if (event.shift)
+            speed *= 0.1;
+        return setBindingValue(n, binding->get() + (double)dx * speed);
     });
 }
 
@@ -369,7 +477,8 @@ void refreshPatternSemantics(Node& node, const PatternGridBinding& binding)
     sem.value.text = buf;
 }
 
-bool paintPatternCell(Node& node, const PatternGridBinding& binding, Vec2 point)
+bool paintPatternCell(Node& node, const PatternGridBinding& binding, Vec2 point,
+                      bool paintOn)
 {
     const Rect bounds = node.bounds();
     if (!binding.cells || binding.rows <= 0 || binding.steps <= 0 ||
@@ -381,13 +490,322 @@ bool paintPatternCell(Node& node, const PatternGridBinding& binding, Vec2 point)
     if (col < 0 || col >= binding.steps || row < 0 || row >= binding.rows)
         return false;
 
-    const bool want = !ImGui::GetIO().KeyAlt;
     bool& cell = binding.cells[row * binding.steps + col];
-    if (cell == want)
+    if (cell == paintOn)
         return false;
-    cell = want;
+    cell = paintOn;
     refreshPatternSemantics(node, binding);
     return true;
+}
+
+struct EnvelopeBinding {
+    std::vector<EnvPoint>* points = nullptr;
+    std::vector<float>* tensions = nullptr;
+    int activePoint = -1;
+    int activeSegment = -1;
+    uint64_t observedHash = 0;
+    bool hasObservedHash = false;
+};
+
+void ensureEnvelopePoints(EnvelopeBinding& binding)
+{
+    if (!binding.points)
+        return;
+    if (binding.points->empty())
+        *binding.points = {{0.0f, 0.5f}, {1.0f, 0.5f}};
+    if (binding.tensions)
+        binding.tensions->resize(binding.points->size(), 0.0f);
+    if (binding.activePoint >= (int)binding.points->size())
+        binding.activePoint = -1;
+    if (binding.activeSegment + 1 >= (int)binding.points->size())
+        binding.activeSegment = -1;
+}
+
+float envelopeSegmentTension(const EnvelopeBinding& binding, size_t index)
+{
+    return binding.tensions && index < binding.tensions->size()
+               ? (*binding.tensions)[index]
+               : 0.0f;
+}
+
+uint64_t mixEnvelopeHash(uint64_t hash, int value)
+{
+    hash ^= (uint32_t)value;
+    hash *= 1099511628211ull;
+    return hash;
+}
+
+uint64_t envelopeStateHash(const EnvelopeBinding& binding)
+{
+    uint64_t hash = 1469598103934665603ull;
+    if (!binding.points)
+        return hash;
+    hash = mixEnvelopeHash(hash, (int)binding.points->size());
+    for (const EnvPoint& point : *binding.points) {
+        hash = mixEnvelopeHash(hash, (int)std::lround(point.x * 1000000.0f));
+        hash = mixEnvelopeHash(hash, (int)std::lround(point.y * 1000000.0f));
+    }
+    if (binding.tensions) {
+        hash = mixEnvelopeHash(hash, (int)binding.tensions->size());
+        for (float tension : *binding.tensions)
+            hash = mixEnvelopeHash(hash, (int)std::lround(tension * 1000000.0f));
+    }
+    return hash;
+}
+
+float envelopeValueAt(const EnvelopeBinding& binding, float x)
+{
+    const auto& points = *binding.points;
+    size_t i = 0;
+    while (i + 2 < points.size() && x > points[i + 1].x)
+        ++i;
+    const EnvPoint& a = points[i];
+    const EnvPoint& b = points[i + 1];
+    const float t = std::clamp((x - a.x) / std::max(1e-6f, b.x - a.x),
+                               0.0f, 1.0f);
+    return a.y + (b.y - a.y) *
+                     paint::envelopeEase(t, envelopeSegmentTension(binding, i));
+}
+
+Vec2 envelopePointToScreen(Rect bounds, EnvPoint point)
+{
+    return {bounds.x + point.x * bounds.w,
+            bounds.y + (1.0f - point.y) * bounds.h};
+}
+
+EnvPoint envelopePointFromScreen(Rect bounds, Vec2 point)
+{
+    if (bounds.w <= 0.0f || bounds.h <= 0.0f)
+        return {};
+    return {std::clamp((point.x - bounds.x) / bounds.w, 0.0f, 1.0f),
+            std::clamp(1.0f - (point.y - bounds.y) / bounds.h, 0.0f, 1.0f)};
+}
+
+int envelopeHotPoint(EnvelopeBinding& binding, Rect bounds, Vec2 point)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points || bounds.w <= 0.0f || bounds.h <= 0.0f)
+        return -1;
+
+    constexpr float grab = 8.0f;
+    for (int i = 0; i < (int)binding.points->size(); ++i) {
+        Vec2 screen = envelopePointToScreen(bounds, (*binding.points)[(size_t)i]);
+        if (std::fabs(point.x - screen.x) < grab &&
+            std::fabs(point.y - screen.y) < grab) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int envelopeHotSegment(EnvelopeBinding& binding, Rect bounds, Vec2 point)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points || !binding.tensions || binding.points->size() < 2 ||
+        bounds.w <= 0.0f || bounds.h <= 0.0f ||
+        point.x < bounds.x || point.x > bounds.x + bounds.w) {
+        return -1;
+    }
+
+    constexpr float grab = 8.0f;
+    const float nx = std::clamp((point.x - bounds.x) / bounds.w, 0.0f, 1.0f);
+    const float sy = bounds.y + (1.0f - envelopeValueAt(binding, nx)) * bounds.h;
+    if (std::fabs(point.y - sy) >= grab)
+        return -1;
+
+    size_t i = 0;
+    while (i + 2 < binding.points->size() && nx > (*binding.points)[i + 1].x)
+        ++i;
+    return (int)i;
+}
+
+bool refreshEnvelopeSemantics(Node& node, EnvelopeBinding& binding)
+{
+    ensureEnvelopePoints(binding);
+    const Semantics& current = static_cast<const Node&>(node).semantics();
+    Semantics next = current;
+    const int count = binding.points ? (int)binding.points->size() : 0;
+    next.value.hasNumeric = true;
+    next.value.min = 0.0;
+    next.value.max = std::max(0, count);
+    next.value.step = 1.0;
+    next.value.value = count;
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "%d envelope points", count);
+    next.value.text = buf;
+
+    const uint64_t hash = envelopeStateHash(binding);
+    const bool valueChanged = current.value.hasNumeric != next.value.hasNumeric ||
+                              current.value.value != next.value.value ||
+                              current.value.min != next.value.min ||
+                              current.value.max != next.value.max ||
+                              current.value.step != next.value.step ||
+                              current.value.text != next.value.text;
+    const bool stateChanged = !binding.hasObservedHash ||
+                              binding.observedHash != hash;
+    binding.observedHash = hash;
+    binding.hasObservedHash = true;
+    if (valueChanged)
+        node.setSemantics(next);
+    return valueChanged || stateChanged;
+}
+
+bool addEnvelopePoint(Node& node, EnvelopeBinding& binding, Vec2 point)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points)
+        return false;
+
+    EnvPoint env = envelopePointFromScreen(node.bounds(), point);
+    auto& points = *binding.points;
+    auto it = std::find_if(points.begin(), points.end(),
+                           [&](const EnvPoint& candidate) {
+                               return candidate.x > env.x;
+                           });
+    const auto index = it - points.begin();
+    if (binding.tensions)
+        binding.tensions->insert(binding.tensions->begin() + index, 0.0f);
+    points.insert(it, env);
+    binding.activePoint = -1;
+    binding.activeSegment = -1;
+    refreshEnvelopeSemantics(node, binding);
+    node.markDirty();
+    return true;
+}
+
+bool deleteEnvelopePoint(Node& node, EnvelopeBinding& binding, Vec2 point)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points || binding.points->size() <= 2)
+        return false;
+
+    const int hot = envelopeHotPoint(binding, node.bounds(), point);
+    if (hot <= 0 || hot >= (int)binding.points->size() - 1)
+        return false;
+
+    binding.points->erase(binding.points->begin() + hot);
+    if (binding.tensions && hot < (int)binding.tensions->size())
+        binding.tensions->erase(binding.tensions->begin() + hot);
+    binding.activePoint = -1;
+    binding.activeSegment = -1;
+    refreshEnvelopeSemantics(node, binding);
+    node.markDirty();
+    return true;
+}
+
+bool dragEnvelopePoint(Node& node, EnvelopeBinding& binding, Vec2 point)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points || binding.activePoint < 0 ||
+        binding.activePoint >= (int)binding.points->size()) {
+        return false;
+    }
+
+    const Rect bounds = node.bounds();
+    if (bounds.w <= 0.0f || bounds.h <= 0.0f)
+        return false;
+
+    auto& points = *binding.points;
+    auto& env = points[(size_t)binding.activePoint];
+    float lo = binding.activePoint == 0 ? 0.0f
+                                        : points[(size_t)binding.activePoint - 1].x;
+    float hi = binding.activePoint == (int)points.size() - 1
+                   ? 1.0f
+                   : points[(size_t)binding.activePoint + 1].x;
+    if (binding.activePoint == 0)
+        hi = 0.0f;
+    if (binding.activePoint == (int)points.size() - 1)
+        lo = 1.0f;
+
+    const float nextX = std::clamp((point.x - bounds.x) / bounds.w,
+                                   std::min(lo, hi), std::max(lo, hi));
+    const float nextY = std::clamp(1.0f - (point.y - bounds.y) / bounds.h,
+                                   0.0f, 1.0f);
+    const bool changed = env.x != nextX || env.y != nextY;
+    env.x = nextX;
+    env.y = nextY;
+    if (changed)
+        node.markDirty();
+    return changed;
+}
+
+bool dragEnvelopeSegment(Node& node, EnvelopeBinding& binding, Vec2 delta)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points || !binding.tensions || binding.activeSegment < 0 ||
+        binding.activeSegment + 1 >= (int)binding.points->size()) {
+        return false;
+    }
+
+    const float dy = delta.y;
+    if (dy == 0.0f || node.bounds().h <= 0.0f)
+        return false;
+
+    const auto& points = *binding.points;
+    const float dir = points[(size_t)binding.activeSegment + 1].y >=
+                              points[(size_t)binding.activeSegment].y
+                          ? 1.0f
+                          : -1.0f;
+    float& tension = (*binding.tensions)[(size_t)binding.activeSegment];
+    const float next = std::clamp(tension + dir * dy * (3.0f / node.bounds().h),
+                                  -1.0f, 1.0f);
+    const bool changed = tension != next;
+    tension = next;
+    if (changed)
+        node.markDirty();
+    return changed;
+}
+
+bool handleEnvelopeEvent(Node& node, EnvelopeBinding& binding, const Event& event)
+{
+    ensureEnvelopePoints(binding);
+    if (!binding.points)
+        return false;
+
+    if (event.type == EventType::ContextMenu)
+        return deleteEnvelopePoint(node, binding, event.position);
+
+    if (event.type == EventType::MouseDown && event.button == MouseButton::Left) {
+        const int hot = envelopeHotPoint(binding, node.bounds(), event.position);
+        if (event.clickCount >= 2 && hot < 0)
+            return addEnvelopePoint(node, binding, event.position);
+
+        binding.activePoint = hot;
+        binding.activeSegment = hot < 0
+                                    ? envelopeHotSegment(binding, node.bounds(),
+                                                         event.position)
+                                    : -1;
+        return binding.activePoint >= 0 || binding.activeSegment >= 0;
+    }
+
+    if (event.type == EventType::MouseMove) {
+        if (!node.pressed())
+            return false;
+        if (event.delta.x == 0.0f && event.delta.y == 0.0f)
+            return false;
+        if (binding.activePoint >= 0)
+            return dragEnvelopePoint(node, binding, event.position);
+        if (binding.activeSegment >= 0)
+            return dragEnvelopeSegment(node, binding, event.delta);
+        return false;
+    }
+
+    if (event.type == EventType::MouseUp && event.button == MouseButton::Left) {
+        const bool wasActive = binding.activePoint >= 0 || binding.activeSegment >= 0;
+        binding.activePoint = -1;
+        binding.activeSegment = -1;
+        if (wasActive)
+            node.markDirty();
+        return wasActive;
+    }
+
+    return false;
+}
+
+float ledExtent(float radius)
+{
+    const float r = radius > 0.0f ? radius : 5.0f;
+    return r * 3.8f;
 }
 
 struct KeyboardBinding {
@@ -611,6 +1029,15 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                             nodeName(node, sem).c_str(), pal, state,
                             style.fontScale > 0.0f ? style.fontScale : 0.90f);
         break;
+    case VisualKind::ValueRow: {
+        const std::string name = nodeName(node, sem);
+        const std::string valueText = nodeValueText(node, sem);
+        paint::drawValueRow(drawList, ImGui::GetFont(), topLeft(bounds), sizeOf(bounds),
+                            name.c_str(), valueText.c_str(), pal, state,
+                            style.fontScale > 0.0f ? style.fontScale : 0.90f,
+                            node.role() == Role::Slider);
+        break;
+    }
     case VisualKind::Canvas:
         if (style.panelFill)
             drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame, 3.0f);
@@ -691,29 +1118,66 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
     bool consumed = false;
     ImGuiIO& io = ImGui::GetIO();
     const Vec2 localMouse{io.MousePos.x - origin.x, io.MousePos.y - origin.y};
-    const bool mouseReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
+    static std::unordered_map<const Tree*, Vec2> lastMouseByTree;
+    Vec2 moveDelta;
+    auto lastIt = lastMouseByTree.find(&tree);
+    if (lastIt != lastMouseByTree.end()) {
+        moveDelta = {localMouse.x - lastIt->second.x,
+                     localMouse.y - lastIt->second.y};
+    }
+    lastMouseByTree[&tree] = localMouse;
 
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        Event event;
-        event.type = EventType::MouseDown;
-        event.position = localMouse;
-        event.button = MouseButton::Left;
+    constexpr ImGuiMouseButton buttons[] = {
+        ImGuiMouseButton_Left,
+        ImGuiMouseButton_Right,
+        ImGuiMouseButton_Middle,
+    };
+    bool mouseReleased = false;
+    bool mouseClicked = false;
+
+    for (ImGuiMouseButton button : buttons) {
+        if (ImGui::IsMouseClicked(button)) {
+            mouseClicked = true;
+            Event event = pointerEvent(EventType::MouseDown, localMouse, {},
+                                       mapMouseButton(button), io);
+            event.clickCount = ImGui::IsMouseDoubleClicked(button) ? 2 : 1;
+            consumed = tree.dispatch(event) || consumed;
+        }
+        mouseReleased = mouseReleased || ImGui::IsMouseReleased(button);
+    }
+
+    if ((io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f) &&
+        (tree.root().bounds().contains(localMouse) || tree.hovered() != nullptr ||
+         mouseCaptured)) {
+        Event event = pointerEvent(EventType::MouseWheel, localMouse, {},
+                                   MouseButton::None, io);
+        event.wheelDelta = {io.MouseWheelH, io.MouseWheel};
         consumed = tree.dispatch(event) || consumed;
     }
 
     if (tree.root().bounds().contains(localMouse) ||
         tree.hovered() != nullptr || mouseCaptured || mouseReleased) {
-        Event event;
-        event.type = EventType::MouseMove;
-        event.position = localMouse;
+        if (mouseClicked)
+            moveDelta = {};
+        Event event = pointerEvent(EventType::MouseMove, localMouse,
+                                   moveDelta,
+                                   MouseButton::None, io);
         consumed = tree.dispatch(event) || consumed;
     }
 
-    if (mouseReleased) {
-        Event event;
-        event.type = EventType::MouseUp;
-        event.position = localMouse;
-        event.button = MouseButton::Left;
+    for (ImGuiMouseButton button : buttons) {
+        if (ImGui::IsMouseReleased(button)) {
+            Event event = pointerEvent(EventType::MouseUp, localMouse, {},
+                                       mapMouseButton(button), io);
+            event.clickCount = ImGui::IsMouseDoubleClicked(button) ? 2 : 1;
+            consumed = tree.dispatch(event) || consumed;
+        }
+    }
+
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+        Event event = pointerEvent(EventType::ContextMenu, localMouse, {},
+                                   MouseButton::Right, io);
+        event.clickCount = 1;
         consumed = tree.dispatch(event) || consumed;
     }
 
@@ -787,6 +1251,34 @@ Node::Ptr column(NodeId id, float gap, Insets padding)
     layout.gap = gap;
     layout.padding = padding;
     return panel(std::move(id), layout, padding);
+}
+
+Node::Ptr gradientPanel(NodeId id, Vec2 size,
+                        ImU32 topLeftColor, ImU32 topRightColor,
+                        ImU32 bottomRightColor, ImU32 bottomLeftColor,
+                        PaintRenderer* renderer)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Group);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    Semantics sem = named(Role::Group, std::string{});
+    sem.hidden = true;
+    node->setSemantics(sem);
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasDraw = [topLeftColor, topRightColor,
+                            bottomRightColor, bottomLeftColor](
+                               ImDrawList& dl, const Node&, Rect bounds,
+                               const paint::ControlState&) {
+            paint::drawGradientPanel(&dl, topLeft(bounds), sizeOf(bounds),
+                                     topLeftColor, topRightColor,
+                                     bottomRightColor, bottomLeftColor);
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
 }
 
 Node::Ptr label(NodeId id, std::string text, PaintRenderer* renderer)
@@ -872,11 +1364,16 @@ Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int st
     node->setSemantics(sem);
     refreshPatternSemantics(*node, *binding);
     node->setOnEvent([binding](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown && event.button != MouseButton::Left)
+            return false;
         if (event.type != EventType::MouseDown && event.type != EventType::MouseMove)
             return false;
         if (event.type == EventType::MouseMove && !n.pressed())
             return false;
-        return paintPatternCell(n, *binding, event.position);
+        if (event.type == EventType::MouseMove &&
+            event.delta.x == 0.0f && event.delta.y == 0.0f)
+            return false;
+        return paintPatternCell(n, *binding, event.position, !event.alt);
     });
 
     if (renderer) {
@@ -912,9 +1409,14 @@ Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
     sem.value.text = xyValueText(*bindings);
     node->setSemantics(sem);
     node->setOnEvent([bindings](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown && event.button != MouseButton::Left)
+            return false;
         if (event.type != EventType::MouseDown && event.type != EventType::MouseMove)
             return false;
         if (event.type == EventType::MouseMove && !n.pressed())
+            return false;
+        if (event.type == EventType::MouseMove &&
+            event.delta.x == 0.0f && event.delta.y == 0.0f)
             return false;
         return writeXYFromPoint(n, *bindings, event.position);
     });
@@ -958,20 +1460,19 @@ Node::Ptr keyboard(NodeId id, std::string name, int firstNote, int octaves,
     sem.value.text = "No note";
     node->setSemantics(sem);
     node->setOnEvent([binding](Node& n, const Event& event) {
-        if (event.type == EventType::MouseDown)
+        if (event.type == EventType::MouseDown) {
+            if (event.button != MouseButton::Left)
+                return false;
             return playKeyboardFromPoint(n, *binding, event.position);
+        }
         if (event.type == EventType::MouseMove) {
             if (!n.pressed())
                 return false;
-            if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                const bool released = releaseKeyboard(*binding);
-                if (released)
-                    refreshKeyboardSemantics(n, *binding);
-                return released;
-            }
             return playKeyboardFromPoint(n, *binding, event.position);
         }
         if (event.type == EventType::MouseUp) {
+            if (event.button != MouseButton::Left)
+                return false;
             const bool released = releaseKeyboard(*binding);
             if (released)
                 refreshKeyboardSemantics(n, *binding);
@@ -992,6 +1493,106 @@ Node::Ptr keyboard(NodeId id, std::string name, int firstNote, int octaves,
                                 binding->mouseNote, binding->lit,
                                 palette(), inner);
         };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr envelopeEditor(NodeId id, std::string name,
+                         std::vector<EnvPoint>& points,
+                         PaintRenderer* renderer, Vec2 size,
+                         std::vector<float>* tensions)
+{
+    NodeId sid = id;
+    auto binding = std::make_shared<EnvelopeBinding>();
+    binding->points = &points;
+    binding->tensions = tensions;
+    ensureEnvelopePoints(*binding);
+
+    auto node = Node::make(std::move(id), Role::Canvas);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    Semantics sem = named(Role::Canvas, name);
+    sem.description = "Envelope curve editor";
+    node->setSemantics(sem);
+    refreshEnvelopeSemantics(*node, *binding);
+    node->setOnEvent([binding](Node& n, const Event& event) {
+        return handleEnvelopeEvent(n, *binding, event);
+    });
+    node->setOnRefresh([binding](Node& n) {
+        return refreshEnvelopeSemantics(n, *binding);
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasDraw = [binding](ImDrawList& dl, const Node&, Rect bounds,
+                                     const paint::ControlState& state) {
+            ensureEnvelopePoints(*binding);
+            if (!binding->points)
+                return;
+            const ImGuiIO& io = ImGui::GetIO();
+            const Vec2 mouse{io.MousePos.x, io.MousePos.y};
+            paint::ControlState inner = state;
+            inner.focused = false;
+            const int hotPoint = state.hovered
+                                     ? envelopeHotPoint(*binding, bounds, mouse)
+                                     : -1;
+            const int hotSegment = state.hovered && hotPoint < 0
+                                       ? envelopeHotSegment(*binding, bounds, mouse)
+                                       : -1;
+            paint::drawEnvelope(&dl, topLeft(bounds), sizeOf(bounds),
+                                *binding->points, binding->tensions,
+                                hotPoint, binding->activePoint,
+                                hotSegment, binding->activeSegment,
+                                palette(), inner);
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr valueRow(NodeId id, std::string name, ValueBinding binding,
+                   PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Text);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    Semantics sem = named(Role::Text, name);
+    sem.description = "Read-only value";
+    setBindingSemantics(sem, binding);
+    node->setSemantics(sem);
+    binding.set = {};
+    node->setValueBinding(std::move(binding));
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::ValueRow;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr dragNumber(NodeId id, std::string name, ValueBinding binding,
+                     PaintRenderer* renderer, Vec2 size, double dragSpeed)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    Semantics sem = named(Role::Slider, name);
+    sem.description = "Horizontal drag number field";
+    setBindingSemantics(sem, binding);
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(binding));
+    installDragNumberPointerBehavior(*node, dragSpeed);
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::ValueRow;
         renderer->setStyle(sid, style);
     }
     return node;
@@ -1033,6 +1634,33 @@ Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActiv
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Button;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr animatedButton(NodeId id, std::string name,
+                         std::function<void(Node&)> onActivate,
+                         PaintRenderer* renderer, Vec2 size,
+                         ImU32 top, ImU32 bottom, bool animate)
+{
+    NodeId sid = id;
+    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    node->setIntrinsicSize(size);
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasDraw = [label = node->semantics().name, top, bottom, animate](
+                               ImDrawList& dl, const Node&, Rect bounds,
+                               const paint::ControlState& state) {
+            const float pulse = animate
+                                    ? 0.5f + 0.5f *
+                                                   std::sin((float)ImGui::GetTime() * 3.6f)
+                                    : 0.0f;
+            paint::drawAnimatedButton(&dl, ImGui::GetFont(), topLeft(bounds),
+                                      sizeOf(bounds), label.c_str(), top, bottom,
+                                      palette(), state, pulse);
+        };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -1188,11 +1816,13 @@ Node::Ptr meter(NodeId id, std::string name, ValueBinding binding,
 }
 
 Node::Ptr led(NodeId id, std::string name, bool on, bool clickable,
-              std::function<void(Node&)> onActivate, PaintRenderer* renderer)
+              std::function<void(Node&)> onActivate, PaintRenderer* renderer,
+              float radius, ImU32 onColor)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), clickable ? Role::Toggle : Role::Text);
-    node->setIntrinsicSize({22.0f, 22.0f});
+    const float extent = ledExtent(radius);
+    node->setIntrinsicSize({extent, extent});
     node->setSize(Length::intrinsic(), Length::intrinsic());
     node->setFocusable(clickable);
     Semantics sem = named(clickable ? Role::Toggle : Role::Text, name);
@@ -1214,18 +1844,22 @@ Node::Ptr led(NodeId id, std::string name, bool on, bool clickable,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Led;
+        style.ledRadius = radius > 0.0f ? radius : 5.0f;
+        style.accent = onColor;
         renderer->setStyle(sid, style);
     }
     return node;
 }
 
 Node::Ptr led(NodeId id, std::string name, ValueBinding binding,
-              bool clickable, PaintRenderer* renderer)
+              bool clickable, PaintRenderer* renderer,
+              float radius, ImU32 onColor)
 {
     NodeId sid = id;
     const bool on = binding.get && binding.get() >= (binding.min + binding.max) * 0.5;
     auto node = Node::make(std::move(id), clickable ? Role::Toggle : Role::Text);
-    node->setIntrinsicSize({22.0f, 22.0f});
+    const float extent = ledExtent(radius);
+    node->setIntrinsicSize({extent, extent});
     node->setSize(Length::intrinsic(), Length::intrinsic());
     node->setFocusable(clickable);
     Semantics sem = named(clickable ? Role::Toggle : Role::Text, name);
@@ -1255,6 +1889,8 @@ Node::Ptr led(NodeId id, std::string name, ValueBinding binding,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Led;
+        style.ledRadius = radius > 0.0f ? radius : 5.0f;
+        style.accent = onColor;
         renderer->setStyle(sid, style);
     }
     return node;

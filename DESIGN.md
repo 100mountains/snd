@@ -122,7 +122,19 @@ or audio-thread mutation paths. Value controls use callback-backed
 `ValueBinding` adapters so callers remain the owners of their state. When a
 bound value changes outside retained event dispatch, callers can invoke
 `refreshBoundValues()` on the UI thread to mark affected nodes dirty and refresh
-binding-derived states such as toggle checked state.
+binding-derived states such as toggle checked state. Custom nodes with richer
+caller-owned models can install `setOnRefresh(...)`; the same refresh pass calls
+that hook so model-derived semantic text, ranges, and custom state stay current
+without moving ownership into the retained tree.
+
+Pointer dispatch is renderer-neutral. Retained `Event` carries tree-local
+position, adapter-provided pointer delta, mouse button identity, click count,
+modifier keys, wheel delta, and context-menu intent so complex Canvas controls
+can implement gestures such as right-click delete, double-click add, drag
+editing, and scroll adjustment without reaching into the renderer. Only
+left-button press/release participates in the built-in pressed/focus/activation
+path; secondary buttons, wheel, and context-menu events route to the hit node's
+custom event hook.
 
 The first retained layout model is deliberately small: stack, row, column,
 padding, gap, alignment, fixed size, intrinsic size, and weighted fill. Do not
