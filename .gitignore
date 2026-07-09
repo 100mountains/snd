@@ -5,6 +5,7 @@ imgui.ini
 AGENTS.md
 agents/
 docs/research/
+CLAUDE.md
 
 # macOS
 .DS_Store
