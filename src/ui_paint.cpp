@@ -562,15 +562,33 @@ void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
     const ImU32 litBlack = state.disabled ? mix(pal.accentDim, pal.frameBright, 0.65f)
                                           : pal.accentDim;
 
+    const ImVec2 kbBottomRight(topLeft.x + size.x, topLeft.y + size.y);
+    const ImU32 keySep = IM_COL32(28, 30, 38, 255);
+
+    // White keys: one light bed rounded at the bottom, lit columns painted on
+    // top, then thin hairlines at the interior boundaries. No per-key gap or
+    // border (those used to stack into thick grey lines between keys).
+    dl->AddRectFilled(topLeft, kbBottomRight, whiteUp, 2.0f,
+                      ImDrawFlags_RoundCornersBottom);
     for (int w = 0; w < whites; ++w) {
         int note = firstNote + (w / 7) * 12 + whiteSemi[w % 7];
+        if (!isDown(note))
+            continue;
         ImVec2 a(topLeft.x + w * ww, topLeft.y);
-        ImVec2 b(topLeft.x + (w + 1) * ww - 1.0f, topLeft.y + size.y);
-        dl->AddRectFilled(a, b, isDown(note) ? litWhite : whiteUp,
-                          2.0f, ImDrawFlags_RoundCornersBottom);
-        dl->AddRect(a, b, IM_COL32(40, 42, 50, 255), 2.0f,
-                    ImDrawFlags_RoundCornersBottom);
+        ImVec2 b(topLeft.x + (w + 1) * ww, topLeft.y + size.y);
+        ImDrawFlags corner = ImDrawFlags_RoundCornersNone;
+        if (w == 0)
+            corner = ImDrawFlags_RoundCornersBottomLeft;
+        else if (w == whites - 1)
+            corner = ImDrawFlags_RoundCornersBottomRight;
+        dl->AddRectFilled(a, b, litWhite, 2.0f, corner);
     }
+    for (int w = 1; w < whites; ++w) {
+        float x = topLeft.x + w * ww;
+        dl->AddLine(ImVec2(x, topLeft.y), ImVec2(x, topLeft.y + size.y), keySep);
+    }
+    dl->AddRect(topLeft, kbBottomRight, keySep, 2.0f,
+                ImDrawFlags_RoundCornersBottom);
 
     for (int w = 0; w < whites; ++w) {
         int inOct = w % 7;
