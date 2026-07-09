@@ -134,6 +134,21 @@ bool knob(const char* label, float* value, float size = 0.0f,
 bool knobDb(const char* label, float* db, float minDb, float maxDb,
             float size = 0.0f);
 
+// Rotary knob library (SND-drawn, palette-themed). `style` picks the look;
+// `value` maps linearly across [minV,maxV]. Draws `label` (text before "##")
+// centred under the knob and, if `format` != nullptr, the value under that.
+// `size` 0 = a sensible default diameter. `bipolar` grows the Ring value arc
+// from 12 o'clock (for -x..+x params). `accent` 0 = palette accent. Returns
+// true while the value is changing. (The plain knob()/knobDb() above stay the
+// vendored imgui-knobs wiper/tick styles.)
+enum class KnobStyle {
+    Davies, // synth-panel knob: dark dished face, chrome skirt, pointer, ticks
+    Ring,   // ring only: dim background arc + accent value arc (no body/ticks)
+};
+bool knob(const char* label, float* value, float minV, float maxV,
+          KnobStyle style, float size = 0.0f, const char* format = "%.2f",
+          bool bipolar = false, ImU32 accent = 0);
+
 // Animated on/off switch. Returns true when toggled.
 bool toggle(const char* label, bool* on);
 

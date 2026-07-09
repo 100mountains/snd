@@ -532,6 +532,7 @@ static int runSelftest()
         snd::ui::setPalette(pal);
 
         float k = 0.5f, db = -6.0f, fad = 0.7f;
+        float kd = 0.5f, kr = -0.25f; // styled knobs (Davies / Ring)
         bool sw = true;
         snd::ui::MeterState ms;
 
@@ -544,6 +545,12 @@ static int runSelftest()
             ImGui::Begin("w");
             interacted = snd::ui::knob("k", &k) || interacted;
             interacted = snd::ui::knobDb("g", &db, -60.0f, 12.0f) || interacted;
+            interacted = snd::ui::knob("dav", &kd, 0.0f, 1.0f,
+                                       snd::ui::KnobStyle::Davies) ||
+                         interacted;
+            interacted = snd::ui::knob("rng", &kr, -1.0f, 1.0f,
+                                       snd::ui::KnobStyle::Ring, 0.0f, "%.2f", true) ||
+                         interacted;
             interacted = snd::ui::toggle("t", &sw) || interacted;
             interacted = snd::ui::led("l", true, 5.0f, true) || interacted;
             snd::ui::meter("m", ms, 0.5f, ImVec2(10, 80));
@@ -574,7 +581,7 @@ static int runSelftest()
         // no input was fed, so nothing may report interaction; values intact;
         // the meter must have integrated the level; something got drawn
         ok10 = !interacted && k == 0.5f && db == -6.0f && sw && fad == 0.7f &&
-               ms.shown > 0.4f && drawLists > 0;
+               kd == 0.5f && kr == -0.25f && ms.shown > 0.4f && drawLists > 0;
         if (ok10)
             printf("PASS (knob/toggle/led/meter/fader/badge drew headless)\n");
         else
@@ -1273,6 +1280,17 @@ int main(int argc, char** argv)
         snd::ui::knob("mix", &mix);
         ImGui::SameLine();
         snd::ui::knobDb("gain", &gainDb, -60.0f, 12.0f);
+        snd::ui::sectionHeader("styled knobs (davies / seq-ring)");
+        static float kcut = 0.6f, ktune = 0.0f, kstr = 0.75f, kpan = -0.3f;
+        snd::ui::knob("CUTOFF", &kcut, 0.0f, 1.0f, snd::ui::KnobStyle::Davies);
+        ImGui::SameLine();
+        snd::ui::knob("TUNE", &ktune, -1.0f, 1.0f, snd::ui::KnobStyle::Davies, 0.0f,
+                      "%+.2f", true);
+        ImGui::SameLine();
+        snd::ui::knob("STRENGTH", &kstr, 0.0f, 1.0f, snd::ui::KnobStyle::Ring);
+        ImGui::SameLine();
+        snd::ui::knob("PAN", &kpan, -1.0f, 1.0f, snd::ui::KnobStyle::Ring, 0.0f, "%+.2f",
+                      true);
         snd::ui::sectionHeader("switches");
         snd::ui::toggle("live", &live);
         ImGui::SameLine();

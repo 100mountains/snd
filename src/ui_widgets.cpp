@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -44,6 +45,13 @@ float dbNorm(float lin, float floorDb)
     return std::clamp(1.0f - db / floorDb, 0.0f, 1.0f);
 }
 
+// Rotary sweep: 270° with the gap at the bottom -- frac 0 = 7 o'clock,
+// frac 1 = 5 o'clock. Angles are ImGui draw angles (0 = +x, +cw, y-down).
+constexpr float kKnobA0 = -3.92699082f; // -225 deg
+constexpr float kKnobA1 = 0.78539816f;  // +45 deg
+float knobAngle(float f) { return kKnobA0 + std::clamp(f, 0.0f, 1.0f) * (kKnobA1 - kKnobA0); }
+ImVec2 dirAt(float a) { return ImVec2(std::cos(a), std::sin(a)); }
+
 } // namespace
 
 void setPalette(const Palette& p) { gPalette = p; }
@@ -72,6 +80,108 @@ bool knobDb(const char* label, float* db, float minDb, float maxDb, float size)
     bool changed = ImGuiKnobs::Knob(label, db, minDb, maxDb, 0.0f, "%.1f dB",
                                     ImGuiKnobVariant_Tick, size);
     ImGui::PopStyleColor(3);
+    return changed;
+}
+
+bool knob(const char* label, float* value, float minV, float maxV,
+          KnobStyle style, float size, const char* format, bool bipolar,
+          ImU32 accent)
+{
+    const float fs = ImGui::GetFontSize();
+    if (size <= 0.0f)
+        size = fs * 3.2f;
+    if (accent == 0)
+        accent = gPalette.accent;
+
+    // display label = text before "##"
+    const char* labelEnd = label ? label : "";
+    while (*labelEnd && !(labelEnd[0] == '#' && labelEnd[1] == '#'))
+        ++labelEnd;
+    const bool hasLabel = labelEnd != label;
+    const float labelH = hasLabel ? fs * 0.90f + 3.0f : 0.0f;
+    const float valueH = format ? fs * 0.80f + 1.0f : 0.0f;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(label && label[0] ? label : "##knob",
+                           ImVec2(size, size + labelH + valueH));
+    bool changed = false;
+    if (ImGui::IsItemActive()) {
+        float dy = ImGui::GetIO().MouseDelta.y;
+        if (dy != 0.0f) {
+            float speed = (maxV - minV) / 220.0f;
+            if (ImGui::GetIO().KeyShift)
+                speed *= 0.15f; // fine adjust
+            float lo = std::min(minV, maxV), hi = std::max(minV, maxV);
+            float nv = std::clamp(*value - dy * speed, lo, hi);
+            if (nv != *value) {
+                *value = nv;
+                changed = true;
+            }
+        }
+    }
+    const bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+
+    const float R = size * 0.5f;
+    const ImVec2 c(p.x + R, p.y + R);
+    float frac = (maxV != minV) ? (*value - minV) / (maxV - minV) : 0.0f;
+    frac = std::clamp(frac, 0.0f, 1.0f);
+    const float valAng = knobAngle(frac);
+    auto* dl = ImGui::GetWindowDrawList();
+
+    if (style == KnobStyle::Ring) {
+        const float lineW = std::min(5.0f, R * 0.42f);
+        const float rr = R - lineW * 0.5f - 1.0f;
+        dl->PathArcTo(c, rr, kKnobA0, kKnobA1, 40);
+        dl->PathStroke(gPalette.frameBright, 0, lineW); // background ring
+        const float aFrom = bipolar ? knobAngle(0.5f) : kKnobA0;
+        if (valAng != aFrom) {
+            dl->PathArcTo(c, rr, std::min(aFrom, valAng), std::max(aFrom, valAng), 40);
+            dl->PathStroke(accent, 0, lineW); // value arc
+        }
+        const ImVec2 d = dirAt(valAng);
+        dl->AddCircleFilled(ImVec2(c.x + d.x * rr, c.y + d.y * rr), lineW * 0.55f,
+                            hot ? IM_COL32(255, 255, 255, 255) : accent);
+    } else { // Davies
+        dl->AddCircleFilled(ImVec2(c.x, c.y + 1.4f), R, IM_COL32(0, 0, 0, 90)); // shadow
+        dl->AddCircleFilled(c, R, IM_COL32(0xc8, 0xcc, 0xd2, 255));       // chrome skirt
+        dl->AddCircle(c, R - 0.8f, IM_COL32(255, 255, 255, 60), 0, 1.2f); // bevel highlight
+        const float faceR = R - std::max(2.5f, R * 0.12f);
+        const ImU32 face = mixCol(gPalette.frame, IM_COL32(0, 0, 0, 255), 0.30f);
+        dl->AddCircleFilled(c, faceR, face);                            // dished dark face
+        dl->AddCircleFilled(ImVec2(c.x, c.y - faceR * 0.30f), faceR * 0.42f,
+                            IM_COL32(255, 255, 255, 15));               // top sheen
+        dl->AddCircle(c, faceR, IM_COL32(10, 10, 10, 255), 0, 1.0f);    // inner edge
+        dl->AddCircle(c, R, IM_COL32(0x19, 0x1b, 0x1e, 255), 0, 1.0f);  // outer edge
+        for (int i = 0; i < 11; ++i) {                                  // tick ring
+            const ImVec2 d = dirAt(knobAngle((float)i / 10.0f));
+            dl->AddLine(ImVec2(c.x + d.x * faceR * 0.74f, c.y + d.y * faceR * 0.74f),
+                        ImVec2(c.x + d.x * faceR * 0.92f, c.y + d.y * faceR * 0.92f),
+                        withAlpha(gPalette.text, 0x40), 1.3f);
+        }
+        const ImVec2 d = dirAt(valAng); // pointer
+        const ImU32 ptr = IM_COL32(0xee, 0xf1, 0xf5, 255);
+        dl->AddLine(ImVec2(c.x + d.x * faceR * 0.12f, c.y + d.y * faceR * 0.12f),
+                    ImVec2(c.x + d.x * faceR * 0.80f, c.y + d.y * faceR * 0.80f), ptr, 2.4f);
+        dl->AddCircleFilled(ImVec2(c.x + d.x * faceR * 0.80f, c.y + d.y * faceR * 0.80f),
+                            1.2f, ptr);
+        dl->AddCircleFilled(c, 2.0f, ptr); // hub
+        if (hot)
+            dl->AddCircle(c, R + 1.5f, withAlpha(accent, 0x66), 0, 1.5f);
+    }
+
+    ImFont* font = ImGui::GetFont();
+    if (hasLabel) {
+        const float w = font->CalcTextSizeA(fs * 0.90f, FLT_MAX, 0.0f, label, labelEnd).x;
+        dl->AddText(font, fs * 0.90f, ImVec2(c.x - w * 0.5f, p.y + size + 2.0f),
+                    gPalette.text, label, labelEnd);
+    }
+    if (format) {
+        char vbuf[32];
+        std::snprintf(vbuf, sizeof vbuf, format, *value);
+        const float w = font->CalcTextSizeA(fs * 0.80f, FLT_MAX, 0.0f, vbuf).x;
+        dl->AddText(font, fs * 0.80f, ImVec2(c.x - w * 0.5f, p.y + size + labelH),
+                    gPalette.textDim, vbuf);
+    }
     return changed;
 }
 
