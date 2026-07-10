@@ -573,14 +573,23 @@ drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
 wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
 animated modes read the render-time clock.
 
-Five house skins ship as presets (`paint::GraphSkin`: `TechSquare`,
-`ClassicRounded`, `Blueprint`, `Console`, `Studio`).
+Six house skins ship as presets (`paint::GraphSkin`: `TechSquare`,
+`ClassicRounded`, `Blueprint`, `Console`, `Studio`, and `Neo` — a dark neon
+look with a conic pink→purple→blue rim that spins while a node is selected,
+purple→blue gradient cables, and a dual blue/pink glow).
 `paint::graphSkinStyle(skin)` returns the full node/pin/wire
 `GraphSurfaceStyle` and `paint::graphSkinName(skin)` its menu label; the
 backdrop is an independent choice, so pick a `Backdrop` mode and pair it with
 `paint::graphBackdropFill(mode)` / `graphBackdropName(mode)`. Building a
 skin/background picker is a loop over `paint::kGraphSkinCount` and the modes —
 consumers should not re-transcribe colour tables.
+
+Neo's effects are plain `GraphSurfaceStyle` fields any skin can opt into, all
+inert at 0: `rimA/rimB/rimC` + `rimSpinSeconds` (conic border sweep, replaces
+`border`/`selectedBorder`; selection spins it — the spin reads the
+`timeSeconds` argument on `drawModuleBox`, which the graph surface feeds from
+the render clock), `wireGradientStart/wireGradientEnd` (per-segment cable
+lerp), and `glowA/glowB` (soft offset halos behind the node body).
 
 Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
 `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an

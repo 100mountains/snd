@@ -2239,6 +2239,7 @@ const char* graphSkinName(GraphSkin skin)
     case GraphSkin::Blueprint: return "Blueprint";
     case GraphSkin::Console: return "Console";
     case GraphSkin::Studio: return "Studio";
+    case GraphSkin::Neo: return "Neo";
     }
     return "Tech Square";
 }
@@ -2296,6 +2297,28 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         s.text = IM_COL32(0xf4, 0xed, 0xe0, 0xff);
         s.accent = IM_COL32(0xd9, 0x5f, 0x43, 0xff);
         s.corner = 3.0f;
+        break;
+    case GraphSkin::Neo:
+        // schema-ui-web "Turbo" (bob2/SKIN.md): near-black slab, conic
+        // pink→purple→blue rim that spins while selected, purple→blue wires
+        // at 75%, dual blue/pink halo. Pins keep the murk kind colours but go
+        // round to suit the look.
+        s.node = IM_COL32(0x11, 0x11, 0x11, 0xff);
+        s.header = IM_COL32(0x16, 0x16, 0x16, 0xff);
+        s.border = IM_COL32(0xa8, 0x53, 0xba, 0xff); // fallback if rim cleared
+        s.text = IM_COL32(0xf3, 0xf4, 0xf6, 0xff);
+        s.accent = IM_COL32(0xa8, 0x53, 0xba, 0xff);
+        s.selectedBorder = IM_COL32(0x2a, 0x8a, 0xf6, 0xff);
+        s.corner = 10.0f;
+        s.squarePins = false;
+        s.rimA = IM_COL32(0xe9, 0x2a, 0x67, 0xff);
+        s.rimB = IM_COL32(0xa8, 0x53, 0xba, 0xff);
+        s.rimC = IM_COL32(0x2a, 0x8a, 0xf6, 0xff);
+        s.rimSpinSeconds = 4.0f; // Turbo: 4s linear infinite
+        s.wireGradientStart = IM_COL32(0xae, 0x53, 0xba, 0xbf); // 75% opacity
+        s.wireGradientEnd = IM_COL32(0x2a, 0x8a, 0xf6, 0xbf);
+        s.glowA = IM_COL32(0x2a, 0x8a, 0xf6, 0x4d); // rgba(42,138,246,.3)
+        s.glowB = IM_COL32(0xe9, 0x2a, 0x67, 0x4d); // rgba(233,42,103,.3)
         break;
     }
     return s;
@@ -2473,6 +2496,98 @@ void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   ImGui::GetTime());
 }
 
+namespace {
+
+// 3-stop looped angular palette: u 0..1 sweeps A→B→C→A (wraps).
+ImU32 conicStop3(ImU32 a, ImU32 b, ImU32 c, float u)
+{
+    u = u - std::floor(u);
+    const float seg = u * 3.0f;
+    if (seg < 1.0f)
+        return mix(a, b, seg);
+    if (seg < 2.0f)
+        return mix(b, c, seg - 1.0f);
+    return mix(c, a, seg - 2.0f);
+}
+
+// Stroke a rounded-rect outline as a conic 3-stop gradient about the rect
+// centre; phase rotates the sweep (1 = one revolution).
+void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
+                    float corner, ImU32 ca, ImU32 cb, ImU32 cc, float phase,
+                    float thickness)
+{
+    const float w = b.x - a.x;
+    const float h = b.y - a.y;
+    if (w <= 0.0f || h <= 0.0f)
+        return;
+    const float r = std::clamp(corner, 0.0f, std::min(w, h) * 0.5f);
+    constexpr float kPi = 3.14159265f;
+    constexpr int kEdge = 8; // segments per side (gradient resolution)
+    constexpr int kArc = 4;  // segments per corner
+    draw::Vec2 pts[4 * (kEdge + kArc) + 1];
+    int n = 0;
+    const auto edge = [&](draw::Vec2 p0, draw::Vec2 p1) {
+        for (int i = 0; i < kEdge; ++i) {
+            const float t = (float)i / kEdge;
+            pts[n++] = {p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t};
+        }
+    };
+    const auto arc = [&](draw::Vec2 centre, float a0, float a1) {
+        for (int i = 0; i < kArc; ++i) {
+            const float t = a0 + (a1 - a0) * (float)i / kArc;
+            pts[n++] = {centre.x + std::cos(t) * r, centre.y + std::sin(t) * r};
+        }
+    };
+    edge({a.x + r, a.y}, {b.x - r, a.y}); // clockwise from top-left
+    arc({b.x - r, a.y + r}, -kPi * 0.5f, 0.0f);
+    edge({b.x, a.y + r}, {b.x, b.y - r});
+    arc({b.x - r, b.y - r}, 0.0f, kPi * 0.5f);
+    edge({b.x - r, b.y}, {a.x + r, b.y});
+    arc({a.x + r, b.y - r}, kPi * 0.5f, kPi);
+    edge({a.x, b.y - r}, {a.x, a.y + r});
+    arc({a.x + r, a.y + r}, kPi, kPi * 1.5f);
+    pts[n] = pts[0];
+    const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+    for (int i = 0; i < n; ++i) {
+        const float dx = pts[i + 1].x - pts[i].x;
+        const float dy = pts[i + 1].y - pts[i].y;
+        if (dx * dx + dy * dy < 0.01f) // corner arcs collapse at r = 0
+            continue;
+        const draw::Vec2 m{(pts[i].x + pts[i + 1].x) * 0.5f,
+                           (pts[i].y + pts[i + 1].y) * 0.5f};
+        const float u =
+            std::atan2(m.y - c.y, m.x - c.x) / (2.0f * kPi) - phase;
+        surface.line(pts[i], pts[i + 1], conicStop3(ca, cb, cc, u), thickness);
+    }
+}
+
+// Layered soft halo behind a node body, one tint per side (A left, B right);
+// each colour's own alpha is the peak.
+void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
+                  float corner, ImU32 glowA, ImU32 glowB)
+{
+    constexpr int kLayers = 5;
+    const auto halo = [&](ImU32 colour, float dx) {
+        if ((colour & 0xFF000000u) == 0)
+            return;
+        const float peak = (float)(colour >> 24);
+        for (int i = 1; i <= kLayers; ++i) {
+            const float t = (float)i / (kLayers + 1);
+            const float e = (float)i * 2.0f;
+            const auto alpha =
+                (uint32_t)(peak * (1.0f - t) * (1.0f - t) * 0.55f);
+            if (alpha == 0)
+                continue;
+            surface.strokeRect({a.x - e + dx, a.y - e}, {b.x + e + dx, b.y + e},
+                               withAlpha(colour, alpha), corner + e, 2.4f);
+        }
+    };
+    halo(glowA, -2.5f);
+    halo(glowB, 2.5f);
+}
+
+} // namespace
+
 void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
                const Palette& pal, const ControlState& state,
                ImU32 color, float thickness, const GraphSurfaceStyle& style)
@@ -2491,6 +2606,32 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
     const float lineW =
         thickness > 0.0f ? thickness
                          : style.wireThickness > 0.0f ? style.wireThickness : 2.0f;
+    if ((style.wireGradientEnd & 0xFF000000u) != 0) {
+        // Gradient wire (Neo-class): sample the same cubic and lerp colour
+        // along it, start→end.
+        ImU32 g0 = color; // already disabled-dimmed above
+        if ((style.wireGradientStart & 0xFF000000u) != 0)
+            g0 = state.disabled
+                     ? mix(style.wireGradientStart, pal.frameBright, 0.70f)
+                     : style.wireGradientStart;
+        ImU32 g1 = state.disabled
+                       ? mix(style.wireGradientEnd, pal.frameBright, 0.70f)
+                       : style.wireGradientEnd;
+        constexpr int kSegs = 24;
+        draw::Vec2 prev = from;
+        for (int i = 1; i <= kSegs; ++i) {
+            const float t = (float)i / kSegs;
+            const float it = 1.0f - t;
+            const draw::Vec2 p{it * it * it * from.x + 3 * it * it * t * c1.x +
+                                   3 * it * t * t * c2.x + t * t * t * to.x,
+                               it * it * it * from.y + 3 * it * it * t * c1.y +
+                                   3 * it * t * t * c2.y + t * t * t * to.y};
+            const float mid = (t + (float)(i - 1) / kSegs) * 0.5f;
+            surface.line(prev, p, mix(g0, g1, mid), lineW);
+            prev = p;
+        }
+        return;
+    }
     surface.bezierCubic(from, c1, c2, to, color, lineW, 24);
 }
 
@@ -2509,7 +2650,8 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                    draw::Vec2 topLeft, draw::Vec2 size, const char* title,
                    const Palette& pal,
                    const ControlState& state, bool bypassed, bool error,
-                   const GraphSurfaceStyle& style, float headerH)
+                   const GraphSurfaceStyle& style, float headerH,
+                   double timeSeconds)
 {
     // murk NodeBox::paint, exact (GraphEditorPanel.cpp:411-467). Fallback
     // colours are murk's Tech Square skin so the box reads murk even with an
@@ -2531,6 +2673,8 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     const float corner = std::max(0.0f, style.corner);
     const float hh = std::min(std::max(0.0f, headerH), b.y - a.y);
 
+    if (((style.glowA | style.glowB) & 0xFF000000u) != 0 && !bypassed)
+        drawNodeGlow(surface, a, b, corner, style.glowA, style.glowB);
     surface.fillRect(a, b, nodeCol, corner);
 
     // header bar + 3px accent stripe + bold title (murk rounds the header
@@ -2550,9 +2694,20 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     surface.fillRect({a.x, hMax.y}, {b.x, hMax.y + 1.0f},
                      IM_COL32(0, 0, 0, 107), 0.0f);
 
-    // border last so it sits over the header edges; selected = murk amber 2px
-    surface.strokeRect(a, b, state.selected ? selectedCol : borderCol, corner,
-                       state.selected ? 2.0f : 1.0f);
+    // border last so it sits over the header edges; selected = murk amber 2px.
+    // A conic rim (Neo-class skins) replaces both border and selectedBorder;
+    // selection spins it instead of recolouring.
+    if ((style.rimA & 0xFF000000u) != 0) {
+        float phase = 0.0f;
+        if (state.selected && style.rimSpinSeconds > 0.0f)
+            phase = (float)std::fmod(timeSeconds / (double)style.rimSpinSeconds,
+                                     1.0);
+        strokeConicRim(surface, a, b, corner, style.rimA, style.rimB,
+                       style.rimC, phase, state.selected ? 2.0f : 1.5f);
+    } else {
+        surface.strokeRect(a, b, state.selected ? selectedCol : borderCol,
+                           corner, state.selected ? 2.0f : 1.0f);
+    }
 
     if (bypassed) {
         // murk: dim the whole box 0.45 black + bold BYPASS tag in the header
@@ -2586,7 +2741,7 @@ void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     draw::ImGuiSurface surface(dl);
     drawModuleBox(surface, draw::fontRef(font), ImGui::GetFontSize() * 0.90f,
                   draw::toDrawVec2(topLeft), draw::toDrawVec2(size), title,
-                  pal, state, bypassed, error, style, 24.0f);
+                  pal, state, bypassed, error, style, 24.0f, ImGui::GetTime());
 }
 
 void drawSectionHeader(draw::Surface& surface, draw::FontRef font,

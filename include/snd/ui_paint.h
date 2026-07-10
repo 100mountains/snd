@@ -123,18 +123,41 @@ struct GraphSurfaceStyle {
     bool wireDroop = false;
     Backdrop backdrop = Backdrop::Grid;
     ImU32 backdropFill = 0;
+
+    // ── gradient/glow extras (inert at 0, so flat skins pay nothing) ──
+    // Conic rim: when rimA is set, the node outline is stroked as an angular
+    // rimA→rimB→rimC sweep in place of border/selectedBorder. Selected nodes
+    // spin the sweep (rimSpinSeconds per revolution, 0 = static); the spin
+    // reads the timeSeconds passed to drawModuleBox.
+    ImU32 rimA = 0;
+    ImU32 rimB = 0;
+    ImU32 rimC = 0;
+    float rimSpinSeconds = 0.0f;
+    // Gradient cables: when wireGradientEnd is set, every cable is stroked as
+    // a per-segment lerp from wireGradientStart (or the cable's own colour
+    // when 0) to wireGradientEnd.
+    ImU32 wireGradientStart = 0;
+    ImU32 wireGradientEnd = 0;
+    // Soft dual halo behind the node body, one colour per side (A left,
+    // B right); each colour carries its own peak alpha.
+    ImU32 glowA = 0;
+    ImU32 glowB = 0;
 };
 
-// murk's five node skins (Bob GraphEditorPanel::specFor), embedded as house
-// presets so consumers pick by name instead of re-transcribing colour tables.
+// House node skins: murk's five (Bob GraphEditorPanel::specFor) plus Neo, a
+// dark neon look with a conic pink→purple→blue rim that spins on selection,
+// gradient cables, and a dual blue/pink glow (from the schema-ui-web "Turbo"
+// React Flow skin). Embedded as presets so consumers pick by name instead of
+// re-transcribing colour tables.
 enum class GraphSkin {
     TechSquare, // murk default
     ClassicRounded,
     Blueprint,
     Console,
     Studio,
+    Neo, // house default
 };
-inline constexpr int kGraphSkinCount = 5;
+inline constexpr int kGraphSkinCount = 6;
 const char* graphSkinName(GraphSkin skin); // murk's Skin menu label
 // Node/pin/wire style for a skin. Backdrop fields keep their defaults: murk
 // treats the canvas as an independent choice (its Bg menu) — pick a Backdrop
@@ -482,13 +505,14 @@ void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
 // murk NodeBox::paint, exact: body + per-skin corner, selected 0xffffc24a
 // border, 24px header (scale via headerH) with a 3px accent stripe and bold
 // title, 1px black underline, BYPASS veil + tag. Pass headerH pre-scaled by
-// the viewport zoom.
+// the viewport zoom. timeSeconds drives the style's rim spin (only read when
+// the skin animates; pass the render clock).
 void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                    draw::Vec2 topLeft, draw::Vec2 size, const char* title,
                    const Palette& pal, const ControlState& state,
                    bool bypassed = false, bool error = false,
                    const GraphSurfaceStyle& style = {},
-                   float headerH = 24.0f);
+                   float headerH = 24.0f, double timeSeconds = 0.0);
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* title, const Palette& pal,
                    const ControlState& state, bool bypassed = false,

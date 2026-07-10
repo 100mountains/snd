@@ -4770,7 +4770,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                          graphNode.title.c_str(), palette(),
                                          nodeState, graphNode.bypassed,
                                          graphNode.error, graphStyle,
-                                         24.0f * zoomScale);
+                                         24.0f * zoomScale, ImGui::GetTime());
                 }
 
                 auto drawPortList = [&](const std::vector<GraphPort>& ports) {
@@ -4929,7 +4929,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                          topLeftDraw(nodeRect), sizeOfDraw(nodeRect),
                                          graphNode.title.c_str(), palette(), nodeState,
                                          graphNode.bypassed, graphNode.error, graphStyle,
-                                         24.0f * zoomScale);
+                                         24.0f * zoomScale, context.timeSeconds);
 
                     auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                         for (const GraphPort& port : ports) {
