@@ -193,7 +193,17 @@ bool StbFontAtlas::upload()
     if (textureId_ != 0)
         return true;
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+
     glGenTextures(1, &textureId_);
+    if (textureId_ == 0) {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
+        return false;
+    }
     glBindTexture(GL_TEXTURE_2D, textureId_);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -202,14 +212,20 @@ bool StbFontAtlas::upload()
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width_, height_, 0, GL_RED,
                  GL_UNSIGNED_BYTE, alpha_.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
     return textureId_ != 0;
 }
 
 void StbFontAtlas::destroyGl()
 {
     if (textureId_ != 0) {
+        GLint previousTexture = 0;
+        glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+        const GLuint deleted = textureId_;
         glDeleteTextures(1, &textureId_);
+        if ((GLuint)previousTexture == deleted)
+            glBindTexture(GL_TEXTURE_2D, 0);
         textureId_ = 0;
     }
 }
