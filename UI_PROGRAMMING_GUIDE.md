@@ -175,7 +175,9 @@ Composable gradient primitives live alongside the widget painters:
 rect with a vertical gradient (ImDrawList has no rounded multi-colour rect),
 and `paint::drawGradientArc(center, radius, a0, a1, colStart, colEnd,
 thickness, segments)` strokes a two-colour arc sampled per segment — the
-murk-style panel bodies and gradient value arcs custom painters need.
+murk-style panel bodies and gradient value arcs custom painters need. Shared
+paint helpers keep existing `ImDrawList*` overloads and add
+`draw::Surface&` overloads where the body is renderer-neutral.
 
 Widget layers must provide accessibility semantics. Icon-only controls need an
 accessible name and action; sliders/knobs/faders need range, value, value text,
@@ -197,11 +199,19 @@ or plugin state, touch audio-thread state, or own model data. The state passed
 to a body painter has focus suppressed; SND draws the focus ring afterward so a
 custom face cannot remove keyboard visibility.
 
+Painter args now carry both `drawList` and `surface`. Under the ImGui backend
+both are populated, so existing ImDrawList painters keep working. Prefer
+`a.surface` for new draw-only bodies; a painter that uses only
+`snd::ui::draw::Surface` can run on a non-ImGui retained renderer later. The
+default knob, button, toggle, LED, meter, fader, XY pad, pattern-grid, menu,
+row, graph, focus, and gradient helpers use the surface path when one is
+supplied.
+
 Immediate example:
 
 ```cpp
 snd::ui::button("Generate", {110.0f, 52.0f}, [](const snd::ui::paint::ButtonPaintArgs& a) {
-    snd::ui::paint::drawDefaultButton(a); // Or draw your own body with a.drawList.
+    snd::ui::paint::drawDefaultButton(a); // Or draw your own body with a.surface.
 });
 
 snd::ui::knob("Tone", &tone, 0.0f, 1.0f, [](const snd::ui::paint::KnobPaintArgs& a) {
@@ -582,6 +592,13 @@ r::Tree tree(std::move(root));
 // Each UI frame:
 r::drawImGui(tree, renderer, {360.0f, 160.0f});
 ```
+
+Use `VisualStyle::CanvasSurfaceDraw` or the `widgets::canvas(...)` overload
+taking `draw::Surface&` for new retained custom regions that should render
+without ImGui. `PaintRenderer::render(tree, surface, frameContext)` is the
+headless/non-ImGui render path; callers provide font refs, font size, time,
+and pointer through `draw::FrameContext`. Old ImDrawList canvas callbacks stay
+valid on the ImGui backend.
 
 ## Widget reference
 

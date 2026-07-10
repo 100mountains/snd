@@ -23,7 +23,16 @@ namespace {
 ImVec2 topLeft(Rect r) { return ImVec2(r.x, r.y); }
 ImVec2 sizeOf(Rect r) { return ImVec2(r.w, r.h); }
 ImVec2 bottomRight(Rect r) { return ImVec2(r.x + r.w, r.y + r.h); }
+draw::Vec2 topLeftDraw(Rect r) { return {r.x, r.y}; }
+draw::Vec2 sizeOfDraw(Rect r) { return {r.w, r.h}; }
+draw::Vec2 bottomRightDraw(Rect r) { return {r.x + r.w, r.y + r.h}; }
 Rect offset(Rect r, const ImVec2& origin)
+{
+    r.x += origin.x;
+    r.y += origin.y;
+    return r;
+}
+Rect offset(Rect r, draw::Vec2 origin)
 {
     r.x += origin.x;
     r.y += origin.y;
@@ -158,6 +167,26 @@ paint::ControlState controlState(const Node& node, const SemanticNode* sem,
     return state;
 }
 
+paint::ControlState controlState(const Node& node, const SemanticNode* sem,
+                                 draw::Vec2 origin,
+                                 const draw::FrameContext& context)
+{
+    const SemanticStates states = sem ? sem->states : node.semantics().states;
+    paint::ControlState state;
+    state.disabled = !node.enabled() || hasState(states, SemanticState::Disabled);
+    state.focused = hasState(states, SemanticState::FocusVisible);
+    state.active = hasState(states, SemanticState::Pressed);
+    state.selected = hasState(states, SemanticState::Checked) ||
+                     hasState(states, SemanticState::Selected);
+
+    const Rect b = offset(node.bounds(), origin);
+    state.hovered = !state.disabled && context.pointerValid &&
+                    context.pointer.x >= b.x && context.pointer.y >= b.y &&
+                    context.pointer.x <= b.x + b.w &&
+                    context.pointer.y <= b.y + b.h;
+    return state;
+}
+
 ImFont* iconFont(IconFont font)
 {
     switch (font) {
@@ -168,6 +197,18 @@ ImFont* iconFont(IconFont font)
     case IconFont::Material:
     default:
         return iconFontMaterial();
+    }
+}
+
+draw::FontRef iconFontRef(IconFont font, const draw::FrameContext& context)
+{
+    switch (font) {
+    case IconFont::Lucide:
+        return context.iconFontLucide.handle ? context.iconFontLucide : context.font;
+    case IconFont::Text:
+    case IconFont::Material:
+    default:
+        return context.font;
     }
 }
 
@@ -466,6 +507,23 @@ void drawText(ImDrawList* dl, ImFont* font, Rect bounds, const std::string& text
         x += std::max(0.0f, bounds.w - ts.x);
     const float y = bounds.y + std::max(0.0f, bounds.h - ts.y) * 0.5f;
     dl->AddText(font, fs, ImVec2(x, y), color, text.c_str());
+}
+
+void drawText(draw::Surface& surface, draw::FontRef font, float baseFontSize,
+              Rect bounds, const std::string& text, float scale, ImU32 color,
+              Align align = Align::Center)
+{
+    if (text.empty() || baseFontSize <= 0.0f)
+        return;
+    const float fs = baseFontSize * scale;
+    draw::Vec2 ts = surface.measureText(font, fs, text.c_str());
+    float x = bounds.x;
+    if (align == Align::Center)
+        x += std::max(0.0f, bounds.w - ts.x) * 0.5f;
+    else if (align == Align::End)
+        x += std::max(0.0f, bounds.w - ts.x);
+    const float y = bounds.y + std::max(0.0f, bounds.h - ts.y) * 0.5f;
+    surface.text(font, fs, {x, y}, color, text.c_str());
 }
 
 Semantics named(Role role, const std::string& name)
@@ -1387,6 +1445,23 @@ void PaintRenderer::render(const Node& root, const ImVec2& origin,
     renderNode(root, nullptr, origin, drawList ? drawList : ImGui::GetWindowDrawList());
 }
 
+void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
+                           const draw::FrameContext& context,
+                           draw::Vec2 origin) const
+{
+    SemanticMap semMap;
+    for (const SemanticNode& node : tree.semanticSnapshot())
+        semMap[node.id] = node;
+    renderNode(tree.root(), &semMap, origin, surface, context);
+}
+
+void PaintRenderer::render(const Node& root, draw::Surface& surface,
+                           const draw::FrameContext& context,
+                           draw::Vec2 origin) const
+{
+    renderNode(root, nullptr, origin, surface, context);
+}
+
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                const ImVec2& origin,
                                ImDrawList* drawList) const
@@ -1612,6 +1687,260 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
 
     for (const auto& child : node.children())
         renderNode(*child, semantics, origin, drawList);
+}
+
+void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
+                               draw::Vec2 origin, draw::Surface& surface,
+                               const draw::FrameContext& context) const
+{
+    if (!node.visible())
+        return;
+
+    const auto semIt = semantics ? semantics->find(node.id()) : SemanticMap::const_iterator{};
+    const SemanticNode* sem = semantics && semIt != semantics->end() ? &semIt->second : nullptr;
+    const VisualStyle style = resolvedStyle(node);
+    const Palette& pal = palette();
+    const Rect bounds = offset(node.bounds(), origin);
+    paint::ControlState state = controlState(node, sem, origin, context);
+    if (style.popupState && !style.popupState->open)
+        return;
+
+    const draw::FontRef font = context.font;
+    const float fontSize = context.fontSizePx;
+
+    switch (style.kind) {
+    case VisualKind::Panel:
+        if (style.panelFill)
+            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame, 4.0f);
+        if (style.panelBorder)
+            surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                               pal.frameBright, 4.0f);
+        break;
+    case VisualKind::Text:
+        drawText(surface, font, fontSize, bounds, nodeName(node, sem),
+                 style.fontScale > 0.0f ? style.fontScale : 1.0f, pal.text,
+                 Align::Start);
+        break;
+    case VisualKind::SectionHeader:
+        paint::drawSectionHeader(surface, font, topLeftDraw(bounds),
+                                 nodeName(node, sem).c_str(),
+                                 fontSize * (style.fontScale > 0.0f
+                                                 ? style.fontScale * 0.80f
+                                                 : 0.80f),
+                                 bounds.w, pal);
+        break;
+    case VisualKind::Badge:
+        paint::drawBadge(surface, font, topLeftDraw(bounds),
+                         nodeName(node, sem).c_str(),
+                         fontSize * (style.fontScale > 0.0f
+                                         ? style.fontScale * 0.78f
+                                         : 0.78f),
+                         style.accent, pal);
+        break;
+    case VisualKind::ListItem:
+        paint::drawListItem(surface, font,
+                            fontSize * (style.fontScale > 0.0f ? style.fontScale : 0.90f),
+                            topLeftDraw(bounds), sizeOfDraw(bounds),
+                            nodeName(node, sem).c_str(), pal, state);
+        break;
+    case VisualKind::MenuItem: {
+        MenuItem item = style.menuItem;
+        if (item.label.empty())
+            item.label = nodeName(node, sem);
+        if (hasState(sem ? sem->states : node.semantics().states,
+                     SemanticState::Checked))
+            item.checked = true;
+        item.enabled = !state.disabled;
+        paint::drawMenuItem(surface, font, iconFontRef(style.iconFont, context),
+                            fontSize * (style.fontScale > 0.0f ? style.fontScale : 0.90f),
+                            topLeftDraw(bounds), sizeOfDraw(bounds), item, pal, state);
+        break;
+    }
+    case VisualKind::ValueRow: {
+        const std::string name = nodeName(node, sem);
+        const std::string valueText = nodeValueText(node, sem);
+        paint::drawValueRow(surface, font,
+                            fontSize * (style.fontScale > 0.0f ? style.fontScale : 0.90f),
+                            topLeftDraw(bounds), sizeOfDraw(bounds),
+                            name.c_str(), valueText.c_str(), pal, state,
+                            node.role() == Role::Slider);
+        break;
+    }
+    case VisualKind::Canvas:
+        if (style.panelFill)
+            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame, 3.0f);
+        if (style.canvasSurfaceDraw) {
+            if (style.canvasClip)
+                surface.pushClip(topLeftDraw(bounds), bottomRightDraw(bounds), true);
+            style.canvasSurfaceDraw(surface, node, bounds, state, context);
+            if (style.canvasClip)
+                surface.popClip();
+        }
+        if (style.panelBorder)
+            surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                               pal.frameBright, 3.0f);
+        if (state.focused && !state.disabled)
+            paint::drawFocusRing(surface, topLeftDraw(bounds), bottomRightDraw(bounds),
+                                 pal, 3.0f);
+        break;
+    case VisualKind::Button: {
+        const std::string name = nodeName(node, sem);
+        if (style.buttonPainter) {
+            paint::ButtonPaintArgs args;
+            args.topLeft = topLeft(bounds);
+            args.size = sizeOf(bounds);
+            args.text = name.c_str();
+            args.face = style.face;
+            args.palette = &pal;
+            args.state = &state;
+            args.fontScale = style.fontScale > 0.0f ? style.fontScale : 0.90f;
+            args.surface = &surface;
+            paint::drawButtonWithPainter(args, style.buttonPainter);
+        } else {
+            paint::drawButton(surface, font,
+                              fontSize * (style.fontScale > 0.0f
+                                              ? style.fontScale
+                                              : 0.90f),
+                              topLeftDraw(bounds), sizeOfDraw(bounds), name.c_str(),
+                              pal, state);
+        }
+        break;
+    }
+    case VisualKind::OutlineButton: {
+        const std::string name = nodeName(node, sem);
+        const float scale = style.outlineButtonStyle.fontScale > 0.0f
+                                ? style.outlineButtonStyle.fontScale
+                                : 0.90f;
+        paint::drawOutlineButton(surface, font, fontSize * scale,
+                                 topLeftDraw(bounds), sizeOfDraw(bounds),
+                                 name.c_str(), pal, state,
+                                 style.outlineButtonStyle);
+        break;
+    }
+    case VisualKind::IconButton: {
+        const bool down = state.active || state.selected || checked(node, sem);
+        paint::drawTactileIconButton(surface, iconFontRef(style.iconFont, context),
+                                     topLeftDraw(bounds), sizeOfDraw(bounds),
+                                     style.glyph.c_str(), pal, state, down,
+                                     style.face);
+        break;
+    }
+    case VisualKind::VectorIconButton:
+        paint::drawVectorIconButton(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                                    style.vectorIcon, style.accent, pal, state,
+                                    style.lit);
+        break;
+    case VisualKind::Segmented: {
+        const int count = (int)style.segments.size();
+        std::vector<const char*> labels;
+        labels.reserve(style.segments.size());
+        for (const std::string& s : style.segments)
+            labels.push_back(s.c_str());
+        const int selected = std::clamp((int)std::lround(valueOf(node, sem)),
+                                        0, std::max(0, count - 1));
+        int hoverIdx = -1;
+        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f &&
+            context.pointerValid) {
+            const float lx = context.pointer.x - bounds.x;
+            if (lx >= 0.0f && lx <= bounds.w)
+                hoverIdx = std::clamp((int)(lx / (bounds.w / (float)count)),
+                                      0, count - 1);
+        }
+        paint::drawSegmented(surface, font,
+                             fontSize * (style.fontScale > 0.0f
+                                             ? style.fontScale * 0.90f
+                                             : 0.90f),
+                             topLeftDraw(bounds), sizeOfDraw(bounds), labels.data(),
+                             count, selected, hoverIdx, pal, state);
+        break;
+    }
+    case VisualKind::CycleButton: {
+        const int count = (int)style.segments.size();
+        const int index = std::clamp((int)std::lround(valueOf(node, sem)),
+                                     0, std::max(0, count - 1));
+        std::string text = nodeValueText(node, sem);
+        if (text.empty() && index < count)
+            text = style.segments[(size_t)index];
+        paint::drawCycleButton(surface, font,
+                               fontSize * (style.fontScale > 0.0f
+                                               ? style.fontScale * 0.90f
+                                               : 0.90f),
+                               topLeftDraw(bounds), sizeOfDraw(bounds),
+                               text.c_str(), index, count, pal, state);
+        break;
+    }
+    case VisualKind::LedButton: {
+        const bool on = checked(node, sem);
+        float level = on ? 1.0f : 0.0f;
+        if (on && style.ledBlink)
+            level = 0.35f + 0.65f *
+                                (0.5f + 0.5f * std::sin((float)context.timeSeconds * 6.0f));
+        const bool down = state.active || on;
+        paint::drawLedButton(surface, iconFontRef(style.iconFont, context),
+                             topLeftDraw(bounds), sizeOfDraw(bounds),
+                             style.glyph.c_str(), level, pal, state, down,
+                             style.accent, style.face);
+        break;
+    }
+    case VisualKind::Toggle:
+        paint::drawToggle(surface, topLeftDraw(bounds), bounds.w, bounds.h,
+                          checked(node, sem) ? 1.0f : 0.0f, pal, state);
+        if (!nodeName(node, sem).empty()) {
+            Rect textBounds = bounds;
+            textBounds.x += bounds.w + 6.0f;
+            textBounds.w = 160.0f;
+            drawText(surface, font, fontSize, textBounds, nodeName(node, sem), 1.0f,
+                     state.disabled ? pal.textDim : pal.text, Align::Start);
+        }
+        break;
+    case VisualKind::Knob: {
+        const float d = std::min(bounds.w, bounds.h);
+        const draw::Vec2 p{bounds.x + (bounds.w - d) * 0.5f, bounds.y};
+        paint::KnobPaintArgs args;
+        args.topLeft = ImVec2(p.x, p.y);
+        args.size = d;
+        args.rawValue = (float)valueOf(node, sem);
+        args.normalizedValue = (float)normalizedValue(node, sem);
+        args.style = style.knobStyle;
+        args.bipolar = style.bipolar;
+        args.accent = style.accent;
+        args.palette = &pal;
+        args.state = &state;
+        args.surface = &surface;
+        if (style.knobMod)
+            args.mod = style.knobMod();
+        paint::drawKnobWithPainter(args, style.knobPainter);
+        const std::string name = nodeName(node, sem);
+        if (!name.empty()) {
+            Rect labelBounds{bounds.x, bounds.y + d + 2.0f, bounds.w,
+                             fontSize + 2.0f};
+            drawText(surface, font, fontSize, labelBounds, name, 0.90f, pal.text);
+        }
+        break;
+    }
+    case VisualKind::Led:
+        paint::drawLed(surface,
+                       {bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f},
+                       style.ledRadius > 0.0f ? style.ledRadius : 5.0f,
+                       checked(node, sem), pal, state, style.accent);
+        break;
+    case VisualKind::Meter:
+        paint::drawMeter(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                         (float)normalizedValue(node, sem),
+                         (float)normalizedValue(node, sem),
+                         style.meterFloorDb, pal);
+        break;
+    case VisualKind::Fader:
+        paint::drawFader(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                         (float)normalizedValue(node, sem), pal, state);
+        break;
+    case VisualKind::Auto:
+    default:
+        break;
+    }
+
+    for (const auto& child : node.children())
+        renderNode(*child, semantics, origin, surface, context);
 }
 
 bool dispatchImGuiInput(Tree& tree, const ImVec2& origin)
@@ -2697,6 +3026,46 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
     }
 }
 
+void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
+                   const paint::ControlState& state,
+                   const GraphSurfaceStyle& style)
+{
+    const Palette& pal = palette();
+    const draw::Vec2 c{bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f};
+    ImU32 col = port.invalidDrop ? pal.meterHot
+                : port.connected ? graphPortColor(port, style, pal)
+                                 : pal.frameBright;
+    if (!port.enabled)
+        col = paint::mix(col, pal.textDim, 0.65f);
+    if (state.hovered || state.selected) {
+        if (style.squarePins)
+            surface.strokeRect({bounds.x - 2.0f, bounds.y - 2.0f},
+                               {bounds.x + bounds.w + 2.0f,
+                                bounds.y + bounds.h + 2.0f},
+                               state.selected ? pal.text : pal.accent,
+                               0.0f, 1.4f);
+        else
+            surface.strokeCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
+                                 state.selected ? pal.text : pal.accent, 0, 1.4f);
+    }
+    if (style.squarePins) {
+        surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), col);
+        surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                           paint::withAlpha(IM_COL32(0, 0, 0, 255), 0x73));
+        surface.strokeRect({bounds.x + 1.0f, bounds.y + 1.0f},
+                           {bounds.x + bounds.w - 1.0f,
+                            bounds.y + bounds.h - 1.0f},
+                           paint::withAlpha(IM_COL32(255, 255, 255, 255), 0x2E));
+    } else {
+        surface.fillCircle(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
+                           col, 16);
+    }
+    if (port.direction == GraphPortDirection::Output) {
+        surface.line({c.x - 2.5f, c.y}, {c.x + 2.5f, c.y},
+                     paint::withAlpha(pal.text, 0xB0), 1.0f);
+    }
+}
+
 void drawGraphPart(ImDrawList& dl, ImFont* font, Rect bounds,
                    const GraphNodePart& part, const paint::ControlState& state)
 {
@@ -2733,6 +3102,48 @@ void drawGraphPart(ImDrawList& dl, ImFont* font, Rect bounds,
     }
     paint::drawValueRow(&dl, font, p, s, part.label.c_str(), part.valueText.c_str(),
                         pal, inner, 0.78f, false);
+}
+
+void drawGraphPart(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                   Rect bounds, const GraphNodePart& part,
+                   const paint::ControlState& state)
+{
+    const Palette& pal = palette();
+    paint::ControlState inner = state;
+    inner.disabled = inner.disabled || !part.enabled;
+    inner.selected = inner.selected || part.selected || part.checked;
+    const draw::Vec2 p = topLeftDraw(bounds);
+    const draw::Vec2 s = sizeOfDraw(bounds);
+    if (part.kind == GraphNodePartKind::Meter) {
+        paint::drawMeter(surface, p, s, (float)std::clamp(part.value, 0.0, 1.0),
+                         (float)std::clamp(part.value, 0.0, 1.0), -48.0f, pal);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Toggle) {
+        paint::drawToggle(surface, p, s.x, s.y,
+                          part.checked ? 1.0f : 0.0f, pal, inner);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Action) {
+        paint::OutlineButtonStyle style;
+        style.hoverBorder = pal.accent;
+        style.activeFill = paint::withAlpha(pal.accent, 0x28);
+        paint::drawOutlineButton(surface, font, fontSizePx,
+                                 p, s,
+                                 part.label.empty() ? "..." : part.label.c_str(),
+                                 pal, inner, style);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::Status) {
+        paint::drawBadge(surface, font, p,
+                         part.label.empty() ? part.valueText.c_str() : part.label.c_str(),
+                         fontSizePx * 0.72f,
+                         part.checked ? pal.accent : 0, pal);
+        return;
+    }
+    paint::drawValueRow(surface, font, fontSizePx * 0.78f, p, s,
+                        part.label.c_str(), part.valueText.c_str(),
+                        pal, inner, false);
 }
 
 } // namespace
@@ -2897,6 +3308,15 @@ Node::Ptr gradientPanel(NodeId id, Vec2 size,
                                ImDrawList& dl, const Node&, Rect bounds,
                                const paint::ControlState&) {
             paint::drawGradientPanel(&dl, topLeft(bounds), sizeOf(bounds),
+                                     topLeftColor, topRightColor,
+                                     bottomRightColor, bottomLeftColor);
+        };
+        style.canvasSurfaceDraw = [topLeftColor, topRightColor,
+                                   bottomRightColor, bottomLeftColor](
+                                      draw::Surface& surface, const Node&,
+                                      Rect bounds, const paint::ControlState&,
+                                      const draw::FrameContext&) {
+            paint::drawGradientPanel(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
                                      topLeftColor, topRightColor,
                                      bottomRightColor, bottomLeftColor);
         };
@@ -3130,6 +3550,56 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
     return node;
 }
 
+Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
+                            PopupMenuState& state,
+                            std::function<void(Node&, Vec2)> onOpen,
+                            PaintRenderer* renderer,
+                            VisualStyle::CanvasSurfaceDraw draw,
+                            bool focusable, Role semanticRole)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), semanticRole);
+    node->setIntrinsicSize(intrinsicSize);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(focusable);
+    Semantics sem = named(semanticRole, name);
+    sem.actions.push_back(Action::OpenMenu);
+    node->setSemantics(sem);
+    node->setOnEvent([&state, onOpen](Node& n, const Event& event) {
+        if (event.type != EventType::ContextMenu)
+            return false;
+        state.open = true;
+        state.anchorToPosition = true;
+        state.highlightedIndex = -1;
+        state.position = ImVec2(event.position.x, event.position.y);
+        if (onOpen)
+            onOpen(n, event.position);
+        return true;
+    });
+    node->setOnAction([&state, onOpen](Node& n, Action action, double) {
+        if (action != Action::OpenMenu)
+            return false;
+        state.open = true;
+        state.anchorToPosition = true;
+        state.highlightedIndex = -1;
+        const Rect b = n.bounds();
+        Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
+        state.position = ImVec2(pos.x, pos.y);
+        if (onOpen)
+            onOpen(n, pos);
+        return true;
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.panelBorder = !draw;
+        style.canvasSurfaceDraw = std::move(draw);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,
                       PaintRenderer* renderer, Vec2 size,
                       std::function<int()> playheadStep,
@@ -3166,6 +3636,7 @@ Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int st
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
+        paint::PatternCellPainter surfaceCellPainter = cellPainter;
         style.canvasDraw = [binding, cellPainter = std::move(cellPainter)](
                                ImDrawList& dl, const Node&, Rect bounds,
                                const paint::ControlState& state) {
@@ -3176,6 +3647,17 @@ Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int st
                                    patternPlayhead(*binding), palette(), inner,
                                    cellPainter);
         };
+        style.canvasSurfaceDraw =
+            [binding, cellPainter = std::move(surfaceCellPainter)](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState& state, const draw::FrameContext&) {
+                paint::ControlState inner = state;
+                inner.focused = false;
+                paint::drawPatternGrid(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                                       binding->cells, binding->rows, binding->steps,
+                                       patternPlayhead(*binding), palette(), inner,
+                                       cellPainter);
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3214,6 +3696,7 @@ Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
+        paint::XYPadPainter surfacePainter = painter;
         style.canvasDraw = [bindings, painter = std::move(painter)](
                                ImDrawList& dl, const Node&, Rect bounds,
                                const paint::ControlState& state) {
@@ -3229,6 +3712,22 @@ Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
             args.state = &inner;
             paint::drawXYPadWithPainter(args, painter);
         };
+        style.canvasSurfaceDraw =
+            [bindings, painter = std::move(surfacePainter)](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState& state, const draw::FrameContext&) {
+                paint::ControlState inner = state;
+                inner.focused = false;
+                paint::XYPadPaintArgs args;
+                args.topLeft = topLeft(bounds);
+                args.size = sizeOf(bounds);
+                args.x = (float)readBinding(bindings->x);
+                args.y = (float)readBinding(bindings->y);
+                args.palette = &palette();
+                args.state = &inner;
+                args.surface = &surface;
+                paint::drawXYPadWithPainter(args, painter);
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3289,6 +3788,16 @@ Node::Ptr keyboard(NodeId id, std::string name, int firstNote, int octaves,
                                 binding->mouseNote, binding->lit,
                                 palette(), inner);
         };
+        style.canvasSurfaceDraw =
+            [binding](draw::Surface& surface, const Node&, Rect bounds,
+                      const paint::ControlState& state, const draw::FrameContext&) {
+                paint::ControlState inner = state;
+                inner.focused = false;
+                paint::drawKeyboard(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                                    binding->firstNote, binding->octaves,
+                                    binding->mouseNote, binding->lit,
+                                    palette(), inner);
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3344,6 +3853,29 @@ Node::Ptr envelopeEditor(NodeId id, std::string name,
                                 hotSegment, binding->activeSegment,
                                 palette(), inner);
         };
+        style.canvasSurfaceDraw =
+            [binding](draw::Surface& surface, const Node&, Rect bounds,
+                      const paint::ControlState& state,
+                      const draw::FrameContext& context) {
+                ensureEnvelopePoints(*binding);
+                if (!binding->points)
+                    return;
+                const Vec2 pointer{context.pointer.x, context.pointer.y};
+                paint::ControlState inner = state;
+                inner.focused = false;
+                const int hotPoint = state.hovered && context.pointerValid
+                                         ? envelopeHotPoint(*binding, bounds, pointer)
+                                         : -1;
+                const int hotSegment = state.hovered && context.pointerValid &&
+                                               hotPoint < 0
+                                           ? envelopeHotSegment(*binding, bounds, pointer)
+                                           : -1;
+                paint::drawEnvelope(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                                    *binding->points, binding->tensions,
+                                    hotPoint, binding->activePoint,
+                                    hotSegment, binding->activeSegment,
+                                    palette(), inner);
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3445,6 +3977,29 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                                      sizeOf(bounds), valueText.c_str(), palette(),
                                      inner, fieldStyle);
         };
+        style.canvasSurfaceDraw =
+            [binding, fieldStyle](draw::Surface& surface, const Node& node,
+                                  Rect bounds, const paint::ControlState& state,
+                                  const draw::FrameContext& context) mutable {
+                paint::ControlState inner = state;
+                const NodeId& id = node.id();
+                std::string valueText;
+                if (valueFieldEditing(id)) {
+                    ValueFieldBuffer& buf = valueFieldBuffers()[id];
+                    valueText = buf.data();
+                } else {
+                    valueText = nodeValueText(node, nullptr);
+                }
+                const float scale = fieldStyle.fontScale > 0.0f
+                                        ? fieldStyle.fontScale
+                                        : 0.90f;
+                paint::drawOutlineButton(surface, context.font,
+                                         context.fontSizePx * scale,
+                                         topLeftDraw(bounds), sizeOfDraw(bounds),
+                                         valueText.c_str(), palette(), inner,
+                                         fieldStyle);
+                (void)binding;
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3467,6 +4022,28 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
         style.kind = VisualKind::Canvas;
         style.panelBorder = true;
         style.canvasDraw = std::move(draw);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
+                 VisualStyle::CanvasSurfaceDraw draw,
+                 PaintRenderer* renderer, bool focusable, Role semanticRole)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Canvas);
+    node->setIntrinsicSize(intrinsicSize);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(focusable);
+    node->setSemantics(named(semanticRole, name));
+    if (name.empty())
+        node->semantics().hidden = true;
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.panelBorder = true;
+        style.canvasSurfaceDraw = std::move(draw);
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3855,6 +4432,158 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                            paint::withAlpha(palette().accent, 0xB0), 2.0f);
             }
         };
+        style.canvasSurfaceDraw =
+            [&state, &nodes, &cables, graphStyle](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState& cs, const draw::FrameContext& context) {
+                paint::drawGraphGrid(surface, topLeftDraw(bounds), sizeOfDraw(bounds),
+                                     {state.viewport.pan.x, state.viewport.pan.y},
+                                     state.viewport.zoom, palette(), cs, graphStyle,
+                                     context.timeSeconds);
+
+                for (const GraphCable& cable : cables) {
+                    Vec2 fromGraph;
+                    Vec2 toGraph;
+                    if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, fromGraph) ||
+                        !portCenterGraph(nodes, cable.toNode, cable.toPort, toGraph))
+                        continue;
+                    const Vec2 fromLocal = graphToScreen(state.viewport, fromGraph);
+                    const Vec2 toLocal = graphToScreen(state.viewport, toGraph);
+                    paint::ControlState cableState;
+                    cableState.selected = cable.selected ||
+                                          (state.hovered.kind == GraphHitKind::Cable &&
+                                           state.hovered.cableId == cable.id) ||
+                                          (state.hovered.kind == GraphHitKind::CableEndpoint &&
+                                           state.hovered.cableId == cable.id);
+                    GraphHit cableHit = makeGraphHit(GraphHitKind::Cable,
+                                                     {(fromGraph.x + toGraph.x) * 0.5f,
+                                                      (fromGraph.y + toGraph.y) * 0.5f});
+                    cableHit.cableId = cable.id;
+                    cableState.focused = sameGraphHit(state.focused, cableHit);
+                    cableState.hovered = cableState.selected;
+                    cableState.disabled = cable.muted || cable.invalid;
+                    paint::drawCable(surface,
+                                     {bounds.x + fromLocal.x, bounds.y + fromLocal.y},
+                                     {bounds.x + toLocal.x, bounds.y + toLocal.y},
+                                     palette(), cableState,
+                                     cable.invalid ? palette().meterHot : cable.color,
+                                     graphStyle.wireThickness, graphStyle);
+                }
+
+                if (state.cablePreviewActive) {
+                    const Vec2 fromGraph = graphPortAnchor(nodes, state.cablePreviewStart);
+                    const Vec2 toGraph = state.cablePreviewValid
+                                             ? graphPortAnchor(nodes, state.cablePreviewTarget)
+                                             : state.cablePreviewPosition;
+                    const Vec2 fromLocal = graphToScreen(state.viewport, fromGraph);
+                    const Vec2 toLocal = graphToScreen(state.viewport, toGraph);
+                    paint::ControlState previewState;
+                    previewState.hovered = true;
+                    previewState.selected = state.cablePreviewValid;
+                    previewState.disabled = !state.cablePreviewValid;
+                    paint::drawCable(surface,
+                                     {bounds.x + fromLocal.x, bounds.y + fromLocal.y},
+                                     {bounds.x + toLocal.x, bounds.y + toLocal.y},
+                                     palette(), previewState,
+                                     state.cablePreviewValid ? graphStyle.accent
+                                                             : palette().meterHot,
+                                     graphStyle.wireThickness, graphStyle);
+                }
+
+                for (const GraphNode& graphNode : nodes) {
+                    const Rect localRect = graphToScreen(state.viewport, graphNode.bounds);
+                    const Rect nodeRect{bounds.x + localRect.x, bounds.y + localRect.y,
+                                        localRect.w, localRect.h};
+                    GraphHit nodeHit = makeGraphHit(GraphHitKind::NodeBody,
+                                                    rectCenter(graphNode.bounds));
+                    nodeHit.nodeId = graphNode.id;
+                    paint::ControlState nodeState;
+                    nodeState.selected = graphNode.selected ||
+                                         state.hovered.nodeId == graphNode.id ||
+                                         sameGraphHit(state.focused, nodeHit);
+                    nodeState.hovered = state.hovered.nodeId == graphNode.id;
+                    nodeState.focused = sameGraphHit(state.focused, nodeHit);
+                    nodeState.disabled = graphNode.disabled;
+                    paint::drawModuleBox(surface, context.font,
+                                         context.fontSizePx * 0.90f,
+                                         topLeftDraw(nodeRect), sizeOfDraw(nodeRect),
+                                         graphNode.title.c_str(), palette(), nodeState,
+                                         graphNode.bypassed, graphNode.error, graphStyle);
+
+                    auto drawPortList = [&](const std::vector<GraphPort>& ports) {
+                        for (const GraphPort& port : ports) {
+                            Rect pr = graphToScreen(state.viewport,
+                                                    nodeLocalRect(graphNode, port.bounds));
+                            pr.x += bounds.x;
+                            pr.y += bounds.y;
+                            paint::ControlState portState;
+                            portState.hovered = state.hovered.kind == GraphHitKind::Port &&
+                                                state.hovered.nodeId == graphNode.id &&
+                                                state.hovered.portId == port.id;
+                            GraphHit portHit = makeGraphHit(GraphHitKind::Port,
+                                                            add({graphNode.bounds.x,
+                                                                 graphNode.bounds.y},
+                                                                rectCenter(port.bounds)));
+                            portHit.nodeId = graphNode.id;
+                            portHit.portId = port.id;
+                            portHit.output = port.direction == GraphPortDirection::Output;
+                            portState.focused = sameGraphHit(state.focused, portHit);
+                            portState.selected = portState.hovered || portState.focused ||
+                                                 (state.cablePreviewActive &&
+                                                  sameGraphHit(state.cablePreviewStart, portHit)) ||
+                                                 (state.cablePreviewValid &&
+                                                  sameGraphHit(state.cablePreviewTarget, portHit));
+                            drawGraphPort(surface, pr, port, portState, graphStyle);
+                        }
+                    };
+                    drawPortList(graphNode.inputs);
+                    drawPortList(graphNode.outputs);
+
+                    for (const GraphNodePart& part : graphNode.parts) {
+                        if (part.kind == GraphNodePartKind::Title)
+                            continue;
+                        Rect partRect = graphToScreen(state.viewport,
+                                                      nodeLocalRect(graphNode, part.bounds));
+                        partRect.x += bounds.x;
+                        partRect.y += bounds.y;
+                        paint::ControlState partState;
+                        partState.hovered = state.hovered.kind == GraphHitKind::NodePart &&
+                                            state.hovered.nodeId == graphNode.id &&
+                                            state.hovered.partId == part.id;
+                        partState.active = state.active.kind == GraphHitKind::NodePart &&
+                                           state.active.nodeId == graphNode.id &&
+                                           state.active.partId == part.id;
+                        GraphHit partHit = makeGraphHit(GraphHitKind::NodePart,
+                                                        add({graphNode.bounds.x,
+                                                             graphNode.bounds.y},
+                                                            rectCenter(part.bounds)));
+                        partHit.nodeId = graphNode.id;
+                        partHit.partId = part.id;
+                        partState.focused = sameGraphHit(state.focused, partHit);
+                        partState.selected = partState.focused;
+                        drawGraphPart(surface, context.font, context.fontSizePx,
+                                      partRect, part, partState);
+                    }
+                }
+
+                if (state.marqueeActive) {
+                    Rect r = graphToScreen(state.viewport, state.marquee);
+                    if (r.w < 0.0f) {
+                        r.x += r.w;
+                        r.w = -r.w;
+                    }
+                    if (r.h < 0.0f) {
+                        r.y += r.h;
+                        r.h = -r.h;
+                    }
+                    r.x += bounds.x;
+                    r.y += bounds.y;
+                    surface.fillRect(topLeftDraw(r), bottomRightDraw(r),
+                                     paint::withAlpha(palette().accent, 0x22), 2.0f);
+                    surface.strokeRect(topLeftDraw(r), bottomRightDraw(r),
+                                       paint::withAlpha(palette().accent, 0xB0), 2.0f);
+                }
+            };
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3924,6 +4653,20 @@ Node::Ptr animatedButton(NodeId id, std::string name,
                                       sizeOf(bounds), label.c_str(), top, bottom,
                                       palette(), state, pulse);
         };
+        style.canvasSurfaceDraw =
+            [label = node->semantics().name, top, bottom, animate](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState& state, const draw::FrameContext& context) {
+                const float pulse = animate
+                                        ? 0.5f + 0.5f *
+                                                       std::sin((float)context.timeSeconds * 3.6f)
+                                        : 0.0f;
+                paint::drawAnimatedButton(surface, context.font,
+                                          context.fontSizePx * 0.90f,
+                                          topLeftDraw(bounds), sizeOfDraw(bounds),
+                                          label.c_str(), top, bottom,
+                                          palette(), state, pulse);
+            };
         renderer->setStyle(sid, style);
     }
     return node;

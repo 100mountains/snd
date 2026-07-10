@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "snd/ui.h"
+#include "snd/ui_draw.h"
 
 namespace snd::ui::paint {
 
@@ -33,6 +34,7 @@ struct KnobPaintArgs {
     const Palette* palette = nullptr;
     const ControlState* state = nullptr;
     KnobMod mod; // depth 0 + value < 0 = no modulation overlay
+    draw::Surface* surface = nullptr;
 };
 
 struct ButtonPaintArgs {
@@ -45,6 +47,7 @@ struct ButtonPaintArgs {
     const Palette* palette = nullptr;
     const ControlState* state = nullptr;
     float fontScale = 0.90f;
+    draw::Surface* surface = nullptr;
 };
 
 struct XYPadPaintArgs {
@@ -55,6 +58,7 @@ struct XYPadPaintArgs {
     float y = 0.0f; // normalized 0..1, 0 = bottom
     const Palette* palette = nullptr;
     const ControlState* state = nullptr;
+    draw::Surface* surface = nullptr;
 };
 
 // One call per cell, after SND draws the grid backdrop/playhead tint and
@@ -75,6 +79,7 @@ struct PatternCellPaintArgs {
     int playheadStep = -1;
     const Palette* palette = nullptr;
     const ControlState* state = nullptr;
+    draw::Surface* surface = nullptr;
 };
 
 struct OutlineButtonStyle {
@@ -134,9 +139,15 @@ ImVec2 dirAt(float angle);
 // Draw the SND focus treatment outside a control rect. Retained widgets should
 // use the same ring for keyboard focus; immediate widgets call it when ImGui
 // reports item focus.
+void drawFocusRing(draw::Surface& surface, draw::Vec2 min, draw::Vec2 max,
+                   const Palette& pal, float rounding, float expand = 2.0f);
 void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                    const Palette& pal, float rounding, float expand = 2.0f);
 
+void drawGradientPanel(draw::Surface& surface, draw::Vec2 topLeft,
+                       draw::Vec2 size, ImU32 topLeftColor,
+                       ImU32 topRightColor, ImU32 bottomRightColor,
+                       ImU32 bottomLeftColor);
 void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
                        const ImVec2& size, ImU32 topLeftColor,
                        ImU32 topRightColor, ImU32 bottomRightColor,
@@ -145,11 +156,16 @@ void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
 // Rounded rect filled with a vertical top->bottom gradient (ImDrawList has
 // no rounded multi-colour rect; the corner caps are 1px strips following the
 // corner circle, the straight body is one exact gradient quad).
+void drawGradientRect(draw::Surface& surface, draw::Vec2 min, draw::Vec2 max,
+                      ImU32 top, ImU32 bottom, float rounding = 0.0f);
 void drawGradientRect(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                       ImU32 top, ImU32 bottom, float rounding = 0.0f);
 
 // Arc stroked with a colour gradient from a0 to a1, sampled per segment
 // (murk-style two-colour value arcs).
+void drawGradientArc(draw::Surface& surface, draw::Vec2 center, float radius,
+                     float a0, float a1, ImU32 colStart, ImU32 colEnd,
+                     float thickness, int segments = 32);
 void drawGradientArc(ImDrawList* dl, const ImVec2& center, float radius,
                      float a0, float a1, ImU32 colStart, ImU32 colEnd,
                      float thickness, int segments = 32);
@@ -159,13 +175,24 @@ void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                         ImU32 bottom, const Palette& pal,
                         const ControlState& state, float pulse = 0.0f,
                         float fontScale = 0.90f);
+void drawAnimatedButton(draw::Surface& surface, draw::FontRef font,
+                        float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                        const char* text, ImU32 top, ImU32 bottom,
+                        const Palette& pal, const ControlState& state,
+                        float pulse = 0.0f);
 
+void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac,
+              KnobStyle style, const Palette& pal, const ControlState& state,
+              bool bipolar = false, ImU32 accent = 0);
 void drawKnob(ImDrawList* dl, const ImVec2& topLeft, float size, float frac,
               KnobStyle style, const Palette& pal, const ControlState& state,
               bool bipolar = false, ImU32 accent = 0);
 // Modulation overlay: depth arc from the value angle + live position dot at
 // the knob rim. SND owns this overlay (drawKnobWithPainter applies it after
 // the body, before the focus ring) so custom faces keep the shared mod look.
+void drawKnobModRing(draw::Surface& surface, draw::Vec2 topLeft, float size,
+                     float frac, const KnobMod& mod, const Palette& pal,
+                     ImU32 accent = 0);
 void drawKnobModRing(ImDrawList* dl, const ImVec2& topLeft, float size,
                      float frac, const KnobMod& mod, const Palette& pal,
                      ImU32 accent = 0);
@@ -190,6 +217,10 @@ struct KnobWindow {
 // while locked. Call after the knob body with the same topLeft/size.
 // accent 0 = palette accent (the fence dims itself when locked); lockColor 0
 // = pal.meterHot; uiScale scales the fixed paddings for zoomed UIs.
+void drawKnobWindow(draw::Surface& surface, draw::Vec2 topLeft, float size,
+                    const KnobWindow& win, const Palette& pal,
+                    ImU32 accent = 0, ImU32 lockColor = 0,
+                    float uiScale = 1.0f);
 void drawKnobWindow(ImDrawList* dl, const ImVec2& topLeft, float size,
                     const KnobWindow& win, const Palette& pal,
                     ImU32 accent = 0, ImU32 lockColor = 0, float uiScale = 1.0f);
@@ -202,6 +233,10 @@ int knobWindowHitEnd(const ImVec2& topLeft, float size, const KnobWindow& win,
                      const ImVec2& pressPos, float uiScale = 1.0f);
 
 // The same window as an index bracket along a combo/dropdown's bottom edge.
+void drawComboWindow(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     const KnobWindow& win, const Palette& pal,
+                     ImU32 accent = 0, ImU32 lockColor = 0,
+                     float uiScale = 1.0f);
 void drawComboWindow(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const KnobWindow& win, const Palette& pal,
                      ImU32 accent = 0, ImU32 lockColor = 0, float uiScale = 1.0f);
@@ -214,23 +249,43 @@ int comboWindowHitEnd(const ImVec2& topLeft, const ImVec2& size,
 
 // Small padlock glyph filling mn..mx (the lock treatment the window overlays
 // use; also usable standalone on locked toggles or rows).
+void drawPadlock(draw::Surface& surface, draw::Vec2 mn, draw::Vec2 mx,
+                 ImU32 color);
 void drawPadlock(ImDrawList* dl, const ImVec2& mn, const ImVec2& mx, ImU32 color);
 
+void drawToggle(draw::Surface& surface, draw::Vec2 topLeft, float width,
+                float height, float anim, const Palette& pal,
+                const ControlState& state);
 void drawToggle(ImDrawList* dl, const ImVec2& topLeft, float width, float height,
                 float anim, const Palette& pal, const ControlState& state);
 
+void drawLed(draw::Surface& surface, draw::Vec2 center, float radius, bool on,
+             const Palette& pal, const ControlState& state, ImU32 onColor = 0);
 void drawLed(ImDrawList* dl, const ImVec2& center, float radius, bool on,
              const Palette& pal, const ControlState& state, ImU32 onColor = 0);
 
+void drawMeter(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+               float shownLevel, float peakLevel, float floorDb,
+               const Palette& pal);
 void drawMeter(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float shownLevel, float peakLevel, float floorDb, const Palette& pal);
 
+void drawFader(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+               float value, const Palette& pal, const ControlState& state);
 void drawFader(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float value, const Palette& pal, const ControlState& state);
 
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
+void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
+               const char* text, float fontSize, ImU32 fill,
+               const Palette& pal);
 
+void drawTactileIconButton(draw::Surface& surface, draw::FontRef font,
+                           draw::Vec2 topLeft, draw::Vec2 size,
+                           const char* glyph, const Palette& pal,
+                           const ControlState& state, bool down,
+                           ImU32 face = 0);
 void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                            const ImVec2& size, const char* glyph,
                            const Palette& pal, const ControlState& state,
@@ -238,11 +293,21 @@ void drawTactileIconButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 
 // Tactile key plus an integrated status LED ring inset at the face edge.
 // ledLevel 0 = unlit, 1 = fully lit (widgets animate it for arm-blink).
+void drawLedButton(draw::Surface& surface, draw::FontRef font,
+                   draw::Vec2 topLeft, draw::Vec2 size, const char* glyph,
+                   float ledLevel, const Palette& pal,
+                   const ControlState& state, bool down,
+                   ImU32 ledColor = 0, ImU32 face = 0);
 void drawLedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* glyph, float ledLevel,
                    const Palette& pal, const ControlState& state, bool down,
                    ImU32 ledColor = 0, ImU32 face = 0);
 
+void drawVectorIconButton(draw::Surface& surface, draw::Vec2 topLeft,
+                          draw::Vec2 size, Icon icon, ImU32 accent,
+                          const Palette& pal, const ControlState& state,
+                          bool active = false, ImU32 bgColor = 0,
+                          ImU32 textColor = 0);
 void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
                           const ImVec2& size, Icon icon, ImU32 accent,
                           const Palette& pal, const ControlState& state,
@@ -251,6 +316,9 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,
                 const ControlState& state, float fontScale = 0.90f);
+void drawButton(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                draw::Vec2 topLeft, draw::Vec2 size, const char* text,
+                const Palette& pal, const ControlState& state);
 
 // Pill group of mutually exclusive segments. `selected` is the current
 // option, `hovered` the segment under the pointer (-1 = none); the pressed
@@ -259,6 +327,11 @@ void drawSegmented(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* const* labels, int count,
                    int selected, int hovered, const Palette& pal,
                    const ControlState& state, float fontScale = 0.90f);
+void drawSegmented(draw::Surface& surface, draw::FontRef font,
+                   float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                   const char* const* labels, int count, int selected,
+                   int hovered, const Palette& pal,
+                   const ControlState& state);
 
 // Multi-state value button body: flat button face with the current option
 // label and a pip row marking `index` within `count` states.
@@ -266,6 +339,15 @@ void drawCycleButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                      const ImVec2& size, const char* text, int index, int count,
                      const Palette& pal, const ControlState& state,
                      float fontScale = 0.90f);
+void drawCycleButton(draw::Surface& surface, draw::FontRef font,
+                     float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                     const char* text, int index, int count,
+                     const Palette& pal, const ControlState& state);
+void drawOutlineButton(draw::Surface& surface, draw::FontRef font,
+                       float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                       const char* text, const Palette& pal,
+                       const ControlState& state,
+                       const OutlineButtonStyle& style = {});
 void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const ImVec2& size, const char* text,
                        const Palette& pal, const ControlState& state,
@@ -276,15 +358,29 @@ void drawButtonWithPainter(const ButtonPaintArgs& args,
 
 void drawMenuPanel(ImDrawList* dl, const ImVec2& topLeft,
                    const ImVec2& size, const Palette& pal);
+void drawMenuPanel(draw::Surface& surface, draw::Vec2 topLeft,
+                   draw::Vec2 size, const Palette& pal);
+void drawMenuItem(draw::Surface& surface, draw::FontRef font,
+                  draw::FontRef iconFont, float fontSizePx,
+                  draw::Vec2 topLeft, draw::Vec2 size,
+                  const MenuItem& item, const Palette& pal,
+                  const ControlState& state);
 void drawMenuItem(ImDrawList* dl, ImFont* font, ImFont* iconFont,
                   const ImVec2& topLeft, const ImVec2& size,
                   const MenuItem& item, const Palette& pal,
                   const ControlState& state, float fontScale = 0.90f);
 
+void drawListItem(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                  draw::Vec2 topLeft, draw::Vec2 size, const char* text,
+                  const Palette& pal, const ControlState& state);
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   const ImVec2& size, const char* text, const Palette& pal,
                   const ControlState& state, float fontScale = 0.90f);
 
+void drawValueRow(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                  draw::Vec2 topLeft, draw::Vec2 size, const char* label,
+                  const char* valueText, const Palette& pal,
+                  const ControlState& state, bool draggable = false);
 void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   const ImVec2& size, const char* label, const char* valueText,
                   const Palette& pal, const ControlState& state,
@@ -293,13 +389,22 @@ void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
                      const Palette& pal, const ControlState& state);
+void drawPatternGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     const bool* cells, int rows, int steps, int playheadStep,
+                     const Palette& pal, const ControlState& state);
 // Grid with custom cell bodies: SND draws backdrop, playhead tint, border,
 // and focus; `cellPainter` draws each cell from PatternCellPaintArgs.
+void drawPatternGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     const bool* cells, int rows, int steps, int playheadStep,
+                     const Palette& pal, const ControlState& state,
+                     const PatternCellPainter& cellPainter);
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
                      const Palette& pal, const ControlState& state,
                      const PatternCellPainter& cellPainter);
 
+void drawXYPad(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+               float x, float y, const Palette& pal, const ControlState& state);
 void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float x, float y, const Palette& pal, const ControlState& state);
 void drawDefaultXYPad(const XYPadPaintArgs& args);
@@ -310,6 +415,9 @@ void drawXYPadWithPainter(const XYPadPaintArgs& args,
                           const XYPadPainter& painter = {});
 
 void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  int firstNote, int octaves, int mouseNote, const bool* lit,
+                  const Palette& pal, const ControlState& state);
+void drawKeyboard(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
                   int firstNote, int octaves, int mouseNote, const bool* lit,
                   const Palette& pal, const ControlState& state);
 
@@ -323,23 +431,45 @@ void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   int hotPoint, int activePoint,
                   int hotSegment, int activeSegment,
                   const Palette& pal, const ControlState& state);
+void drawEnvelope(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                  const std::vector<EnvPoint>& points,
+                  const std::vector<float>* tensions,
+                  int hotPoint, int activePoint,
+                  int hotSegment, int activeSegment,
+                  const Palette& pal, const ControlState& state);
 
+void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                   draw::Vec2 pan, float zoom, const Palette& pal,
+                   const ControlState& state,
+                   const GraphSurfaceStyle& style = {}, double timeSeconds = 0.0);
 void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                    const ImVec2& pan, float zoom, const Palette& pal,
                    const ControlState& state,
                    const GraphSurfaceStyle& style = {});
+void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
+               const Palette& pal, const ControlState& state,
+               ImU32 color = 0, float thickness = 2.6f,
+               const GraphSurfaceStyle& style = {});
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const Palette& pal, const ControlState& state,
                ImU32 color = 0, float thickness = 2.6f,
                const GraphSurfaceStyle& style = {});
 // Draws module chrome only. GraphNode/ModuleBox internals such as meters,
 // readouts, toggles, actions, and ports remain structured UI parts.
+void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                   draw::Vec2 topLeft, draw::Vec2 size, const char* title,
+                   const Palette& pal, const ControlState& state,
+                   bool bypassed = false, bool error = false,
+                   const GraphSurfaceStyle& style = {});
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* title, const Palette& pal,
                    const ControlState& state, bool bypassed = false,
                    bool error = false,
                    const GraphSurfaceStyle& style = {});
 
+void drawSectionHeader(draw::Surface& surface, draw::FontRef font,
+                       draw::Vec2 topLeft, const char* text, float fontSize,
+                       float width, const Palette& pal);
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const char* text, float fontSize, float width,
                        const Palette& pal);

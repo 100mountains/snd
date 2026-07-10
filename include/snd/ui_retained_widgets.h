@@ -1,4 +1,4 @@
-// Retained widgets and ImDrawList renderer.
+// Retained widgets and shared paint renderers.
 //
 // The technical namespace stays snd::ui::retained. This layer is intentionally
 // separate from the retained core: it creates common audio/UI nodes and renders
@@ -48,6 +48,9 @@ enum class IconFont {
 struct VisualStyle {
     using CanvasDraw = std::function<void(ImDrawList&, const Node&, Rect,
                                           const paint::ControlState&)>;
+    using CanvasSurfaceDraw = std::function<void(draw::Surface&, const Node&, Rect,
+                                                 const paint::ControlState&,
+                                                 const draw::FrameContext&)>;
 
     VisualKind kind = VisualKind::Auto;
     KnobStyle knobStyle = KnobStyle::Ring;
@@ -73,6 +76,7 @@ struct VisualStyle {
     bool ledBlink = false;             // LedButton: pulse the lit ring
     std::function<KnobMod()> knobMod;  // Knob: live modulation ring source
     CanvasDraw canvasDraw;
+    CanvasSurfaceDraw canvasSurfaceDraw;
 };
 
 class PaintRenderer {
@@ -96,6 +100,12 @@ public:
     void render(const Node& root, ImDrawList* drawList = nullptr) const;
     void render(const Node& root, const ImVec2& origin,
                 ImDrawList* drawList = nullptr) const;
+    void render(const Tree& tree, draw::Surface& surface,
+                const draw::FrameContext& context = {},
+                draw::Vec2 origin = {}) const;
+    void render(const Node& root, draw::Surface& surface,
+                const draw::FrameContext& context = {},
+                draw::Vec2 origin = {}) const;
 
 private:
     using SemanticMap = std::unordered_map<NodeId, SemanticNode>;
@@ -103,6 +113,9 @@ private:
     void renderNode(const Node& node, const SemanticMap* semantics,
                     const ImVec2& origin,
                     ImDrawList* drawList) const;
+    void renderNode(const Node& node, const SemanticMap* semantics,
+                    draw::Vec2 origin, draw::Surface& surface,
+                    const draw::FrameContext& context) const;
     VisualStyle resolvedStyle(const Node& node) const;
 
     std::unordered_map<NodeId, VisualStyle> styles_;
@@ -300,6 +313,13 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
                             VisualStyle::CanvasDraw draw = {},
                             bool focusable = true,
                             Role semanticRole = Role::Canvas);
+Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
+                            PopupMenuState& state,
+                            std::function<void(Node&, Vec2)> onOpen,
+                            PaintRenderer* renderer,
+                            VisualStyle::CanvasSurfaceDraw draw,
+                            bool focusable = true,
+                            Role semanticRole = Role::Canvas);
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {240.0f, 96.0f},
@@ -334,6 +354,10 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                      double dragSpeed = 0.2);
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
+                 PaintRenderer* renderer = nullptr, bool focusable = false,
+                 Role semanticRole = Role::Canvas);
+Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
+                 VisualStyle::CanvasSurfaceDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
                  Role semanticRole = Role::Canvas);
 Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,

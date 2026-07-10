@@ -1,7 +1,6 @@
 # Gooey Renderer Independence: The Draw-Surface Brief
 
-Status: architect-reviewed action plan; implementation HELD until the owner
-schedules it against bob2 parity rounds.
+Status: approved action plan; implementation active under owner direction.
 Author: Iris, UI Specialist (second thread).
 Inspected baseline: working tree, 2026-07-10 (post Round-3 landings).
 Reviewers: Calder (Software Architect), Lumen (Project Lead), owner.
@@ -148,21 +147,27 @@ documented, matching what ImGui provides today.
 
 ## Staged plan (each stage: tree green, pixels identical, bob2 unbroken)
 
-1. **S1 — the seam.** Add `draw::` types + Surface + ImGuiSurface. Port
+1. **S1A — surface proof (implemented).** Add `draw::` types + Surface, private
+   ImGuiSurface adapter, RecordingSurface, painter-args `surface` fields, and
+   headless recording/custom-painter proof tests. Keep public ImDrawList paint
+   signatures intact.
+2. **S1B — paint migration (implemented for SND-owned paint helpers and
+   retained renderer surface traversal).** Port
    `paint::` internals toward `Surface&` (mechanical, ~1,300 lines) while
    preserving existing public ImDrawList helper signatures as forwarding
-   wrappers. Painter args carry both `surface` and `drawList`. Immediate
-   widgets and PaintRenderer construct ImGuiSurface. Palette stays
-   `ImU32`-layout (`draw::Color`).
-2. **S2 — context purge.** `FrameContext` threads font/size/time/pointer
+   wrappers. Immediate widgets and PaintRenderer construct/use ImGuiSurface
+   on the ImGui backend; PaintRenderer also has a `draw::Surface` render
+   overload for headless/non-ImGui painting. Palette stays `ImU32`-layout
+   (`draw::Color`).
+3. **S2 — context purge.** `FrameContext` threads font/size/time/pointer
    through PaintRenderer::render and paint helpers; delete the render-time
    `ImGui::Get*` reads. `drawImGui` fills FrameContext from ImGui; a pure
    caller fills it from GLFW/clock.
-3. **S3 — text input.** `EventType::TextInput`, SND-owned valueField editor.
-4. **S4 — pure backend.** GL surface + stb_truetype atlas (dependency
+4. **S3 — text input.** `EventType::TextInput`, SND-owned valueField editor.
+5. **S4 — pure backend.** GL surface + stb_truetype atlas (dependency
    decision point), Gooey window shell without an ImGui context, GLFW input
    adapter.
-5. **S5 — proof.** Retained selftest runs the recording surface headless and
+6. **S5 — proof.** Retained selftest runs the recording surface headless and
    at least one example runs the pure GL backend end-to-end.
 
 ## Guardrails
@@ -213,9 +218,10 @@ documented, matching what ImGui provides today.
 
 ## Sequencing
 
-Implementation is HELD until the owner schedules it. S1 is the large diff and
-should land in a quiet window between bob2 parity rounds, coordinated through
-Lumen, with bob2 warned before paint-header seam changes even though their
-painters keep compiling via the compatibility contract.
+Implementation is active. Coordinate by file ownership: UI owns paint/widget
+migration and visual parity; Architecture owns the public draw contract,
+backend boundary, dependency decisions, and acceptance review. Warn downstream
+workers before paint-header seam changes even though their painters keep
+compiling via the compatibility contract.
 
 — Iris

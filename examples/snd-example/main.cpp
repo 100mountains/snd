@@ -17,6 +17,8 @@
 #include "snd/state.h"
 #include "snd/icons.h"
 #include "snd/ui.h"
+#include "snd/ui_draw_recording.h"
+#include "snd/ui_paint.h"
 #include "snd/ui_retained.h"
 #include "snd/ui_retained_widgets.h"
 
@@ -438,6 +440,214 @@ static bool selftestRetainedUi()
         return node && std::find(node->actions.begin(), node->actions.end(), action) !=
                            node->actions.end();
     };
+    auto closeEnough = [](float a, float b) {
+        return std::abs(a - b) < 0.0001f;
+    };
+
+    snd::ui::draw::RecordingSurface recording;
+    recording.fillRect({1.0f, 2.0f}, {3.0f, 4.0f}, 0x01020304u, 2.0f);
+    recording.line({0.0f, 0.0f}, {4.0f, 5.0f}, 0xAABBCCDDu, 1.5f);
+    const char* textSample = "abc";
+    recording.text({}, 12.0f, {1.0f, 1.0f}, 0x10111213u,
+                   textSample, textSample + 2);
+    const snd::ui::draw::Vec2 pl[] = {{1.0f, 1.0f}, {2.0f, 3.0f}, {4.0f, 5.0f}};
+    recording.polyline(pl, 3, 0x0BADBEEFu, true, 2.0f);
+    snd::ui::Palette recPal;
+    recPal.text = 0x00112233u;
+    recPal.accent = 0x00445566u;
+    snd::ui::paint::drawFocusRing(recording, {10.0f, 20.0f}, {30.0f, 40.0f},
+                                  recPal, 3.0f, 2.0f);
+    snd::ui::paint::drawGradientPanel(recording, {2.0f, 3.0f}, {4.0f, 5.0f},
+                                      0x01000001u, 0x02000002u,
+                                      0x03000003u, 0x04000004u);
+    const auto measured = recording.measureText({}, 12.0f, "abc", nullptr);
+
+    snd::ui::draw::RecordingSurface helperRecording;
+    snd::ui::paint::ControlState helperState;
+    helperState.hovered = true;
+    snd::ui::paint::drawGradientRect(helperRecording, {0.0f, 0.0f},
+                                     {4.0f, 4.0f}, 0x11111111u,
+                                     0x22222222u, 0.0f);
+    snd::ui::paint::drawGradientArc(helperRecording, {5.0f, 6.0f}, 3.0f,
+                                    0.0f, 1.0f, 0x33333333u, 0x44444444u,
+                                    2.0f, 2);
+    snd::ui::paint::drawXYPad(helperRecording, {0.0f, 0.0f}, {10.0f, 10.0f},
+                              0.5f, 0.25f, recPal, helperState);
+    const bool helperCells[] = {true, false};
+    snd::ui::draw::RecordingSurface gridRecording;
+    snd::ui::paint::drawPatternGrid(gridRecording, {1.0f, 2.0f}, {20.0f, 10.0f},
+                                    helperCells, 1, 2, 1, recPal, {});
+    snd::ui::draw::RecordingSurface bodyRecording;
+    snd::ui::KnobMod bodyMod;
+    bodyMod.depth = 0.10f;
+    bodyMod.value = 0.70f;
+    snd::ui::paint::drawKnob(bodyRecording, {0.0f, 0.0f}, 20.0f, 0.50f,
+                             snd::ui::KnobStyle::Ring, recPal, helperState);
+    snd::ui::paint::drawKnobModRing(bodyRecording, {0.0f, 0.0f}, 20.0f,
+                                    0.50f, bodyMod, recPal);
+    snd::ui::paint::drawButton(bodyRecording, {}, 12.0f, {0.0f, 24.0f},
+                               {28.0f, 16.0f}, "OK", recPal, helperState);
+    snd::ui::draw::RecordingSurface controlRecording;
+    snd::ui::paint::drawToggle(controlRecording, {0.0f, 0.0f}, 24.0f,
+                               12.0f, 0.75f, recPal, helperState);
+    snd::ui::paint::drawLed(controlRecording, {8.0f, 20.0f}, 3.0f, true,
+                            recPal, helperState);
+    snd::ui::paint::drawMeter(controlRecording, {0.0f, 28.0f},
+                              {30.0f, 5.0f}, 1.0f, 0.5f, -48.0f, recPal);
+    snd::ui::paint::drawFader(controlRecording, {0.0f, 40.0f},
+                              {18.0f, 50.0f}, 0.65f, recPal, helperState);
+
+    snd::ui::draw::RecordingSurface bridgeRecording;
+    snd::ui::paint::ControlState bridgeState;
+    snd::ui::paint::ButtonPaintArgs bridgeArgs;
+    bridgeArgs.drawList = nullptr;
+    bridgeArgs.topLeft = ImVec2(1.0f, 2.0f);
+    bridgeArgs.size = ImVec2(11.0f, 13.0f);
+    bridgeArgs.palette = &recPal;
+    bridgeArgs.state = &bridgeState;
+    bridgeArgs.surface = &bridgeRecording;
+    bool bridgePainterSawSurface = false;
+    snd::ui::paint::drawButtonWithPainter(
+        bridgeArgs, [&](const snd::ui::paint::ButtonPaintArgs& args) {
+            bridgePainterSawSurface = args.drawList == nullptr && args.surface != nullptr;
+            if (args.surface)
+                args.surface->fillRect({args.topLeft.x, args.topLeft.y},
+                                       {args.topLeft.x + args.size.x,
+                                        args.topLeft.y + args.size.y},
+                                       0x55667788u, 2.5f);
+        });
+    const auto& helperOps = helperRecording.ops();
+    const auto& gridOps = gridRecording.ops();
+    const auto& bodyOps = bodyRecording.ops();
+    const auto& controlOps = controlRecording.ops();
+    const auto& bridgeOps = bridgeRecording.ops();
+
+    r::PaintRenderer surfaceRenderer;
+    auto surfaceRoot = w::column("surface.root", 3.0f, r::Insets::all(2.0f));
+    surfaceRoot->setSemantics(named(r::Role::Group, "Surface render proof"));
+    surfaceRoot->addChild(w::button("surface.button", "Go", {}, &surfaceRenderer));
+    bool surfaceCells[] = {true, false, false, true};
+    surfaceRoot->addChild(w::patternGrid("surface.pattern", "Pattern",
+                                         surfaceCells, 2, 2, &surfaceRenderer,
+                                         {64.0f, 30.0f}));
+    double surfaceX = 0.25;
+    double surfaceY = 0.75;
+    r::ValueBinding xBinding;
+    xBinding.get = [&] { return surfaceX; };
+    xBinding.set = [&](double value) { surfaceX = value; };
+    xBinding.min = 0.0;
+    xBinding.max = 1.0;
+    r::ValueBinding yBinding;
+    yBinding.get = [&] { return surfaceY; };
+    yBinding.set = [&](double value) { surfaceY = value; };
+    yBinding.min = 0.0;
+    yBinding.max = 1.0;
+    surfaceRoot->addChild(w::xyPad("surface.xy", "XY", std::move(xBinding),
+                                   std::move(yBinding), &surfaceRenderer,
+                                   {40.0f, 40.0f}));
+    surfaceRoot->addChild(w::animatedButton("surface.anim", "Render", {},
+                                            &surfaceRenderer, {72.0f, 24.0f},
+                                            0xAA332211u, 0xAA554433u, false));
+    r::Tree surfaceTree(std::move(surfaceRoot));
+    surfaceTree.layout({120.0f, 132.0f});
+    snd::ui::draw::RecordingSurface retainedRecording;
+    snd::ui::draw::FrameContext frameContext;
+    frameContext.fontSizePx = 12.0f;
+    frameContext.timeSeconds = 1.25;
+    frameContext.pointer = {8.0f, 8.0f};
+    frameContext.pointerValid = true;
+    surfaceRenderer.render(surfaceTree, retainedRecording, frameContext);
+    const auto& retainedOps = retainedRecording.ops();
+    auto hasRetainedOp = [&](const char* name) {
+        return std::find_if(retainedOps.begin(), retainedOps.end(),
+                            [&](const snd::ui::draw::RecordedOp& op) {
+                                return op.name == name;
+                            }) != retainedOps.end();
+    };
+    auto hasRetainedText = [&](const char* text) {
+        return std::find_if(retainedOps.begin(), retainedOps.end(),
+                            [&](const snd::ui::draw::RecordedOp& op) {
+                                return op.name == "text" && op.text == text;
+                            }) != retainedOps.end();
+    };
+
+    const auto& ops = recording.ops();
+    bool recordingOk = ops.size() == 7 &&
+        ops[0].name == "fillRect" && ops[0].colors[0] == 0x01020304u &&
+        closeEnough(ops[0].points[0].x, 1.0f) &&
+        closeEnough(ops[0].points[1].y, 4.0f) &&
+        closeEnough(ops[0].a, 2.0f) &&
+        ops[1].name == "line" && ops[1].colors[0] == 0xAABBCCDDu &&
+        closeEnough(ops[1].a, 1.5f) &&
+        ops[2].name == "text" && ops[2].text == "ab" &&
+        ops[3].name == "polyline" && ops[3].points.size() == 3 &&
+        ops[3].flag && closeEnough(ops[3].a, 2.0f) &&
+        ops[4].name == "strokeRect" && ops[4].colors[0] == 0xD8112233u &&
+        closeEnough(ops[4].points[0].x, 8.0f) &&
+        closeEnough(ops[4].points[1].y, 42.0f) &&
+        closeEnough(ops[4].a, 5.0f) && closeEnough(ops[4].b, 1.5f) &&
+        ops[5].name == "strokeRect" && ops[5].colors[0] == 0xB0445566u &&
+        closeEnough(ops[5].points[0].x, 6.5f) &&
+        closeEnough(ops[5].points[1].y, 43.5f) &&
+        closeEnough(ops[5].a, 6.5f) && closeEnough(ops[5].b, 1.0f) &&
+        ops[6].name == "fillRectMultiColor" &&
+        ops[6].colors.size() == 4 && ops[6].colors[2] == 0x03000003u &&
+        closeEnough(ops[6].points[0].x, 2.0f) &&
+        closeEnough(ops[6].points[1].x, 6.0f) &&
+        closeEnough(measured.x, 18.0f) && closeEnough(measured.y, 12.0f) &&
+        helperOps.size() == 10 &&
+        helperOps[0].name == "fillRectMultiColor" &&
+        helperOps[1].name == "line" && helperOps[2].name == "line" &&
+        helperOps[3].name == "fillRect" &&
+        helperOps[4].name == "line" && helperOps[5].name == "line" &&
+        helperOps[6].name == "fillCircle" &&
+        helperOps[7].name == "fillCircle" &&
+        helperOps[8].name == "strokeCircle" &&
+        helperOps[9].name == "strokeRect" &&
+        helperOps[9].colors[0] == recPal.frameBright &&
+        closeEnough(helperOps[6].points[0].x, 5.0f) &&
+        closeEnough(helperOps[6].points[0].y, 7.5f) &&
+        gridOps.size() == 5 &&
+        gridOps[0].name == "fillRect" &&
+        gridOps[1].name == "fillRect" &&
+        gridOps[2].name == "fillRect" &&
+        gridOps[3].name == "fillRect" &&
+        gridOps[4].name == "strokeRect" &&
+        closeEnough(gridOps[4].points[1].x, 21.0f) &&
+        bodyOps.size() == 11 &&
+        bodyOps[0].name == "pathArcTo" &&
+        bodyOps[1].name == "pathStroke" &&
+        bodyOps[4].name == "fillCircle" &&
+        bodyOps[5].name == "pathArcTo" &&
+        bodyOps[7].name == "fillCircle" &&
+        bodyOps[8].name == "fillRect" &&
+        bodyOps[9].name == "strokeRect" &&
+        bodyOps[10].name == "text" &&
+        bodyOps[10].text == "OK" &&
+        controlOps.size() == 20 &&
+        controlOps[0].name == "fillRect" &&
+        controlOps[1].name == "strokeRect" &&
+        controlOps[2].name == "fillCircle" &&
+        controlOps[3].name == "fillCircle" &&
+        controlOps[7].name == "strokeCircle" &&
+        controlOps[8].name == "fillRect" &&
+        controlOps[12].name == "line" &&
+        controlOps[13].name == "strokeRect" &&
+        controlOps[14].name == "fillRect" &&
+        controlOps[19].name == "line" &&
+        bridgePainterSawSurface && bridgeOps.size() == 1 &&
+        bridgeOps[0].name == "fillRect" &&
+        bridgeOps[0].colors[0] == 0x55667788u &&
+        closeEnough(bridgeOps[0].points[0].x, 1.0f) &&
+        closeEnough(bridgeOps[0].points[1].x, 12.0f) &&
+        closeEnough(bridgeOps[0].points[1].y, 15.0f) &&
+        closeEnough(bridgeOps[0].a, 2.5f) &&
+        retainedOps.size() >= 20 &&
+        hasRetainedOp("fillRect") &&
+        hasRetainedOp("strokeRect") &&
+        hasRetainedOp("fillCircle") &&
+        hasRetainedText("Go") &&
+        hasRetainedText("Render");
 
     auto root = r::Node::make("root", r::Role::Group);
     r::Layout rootLayout;
@@ -596,7 +806,7 @@ static bool selftestRetainedUi()
 
     r::Tree tree(std::move(root));
     tree.layout({200.0f, 120.0f});
-    bool ok = tree.validate().empty();
+    bool ok = recordingOk && tree.validate().empty();
 
     const auto* playNode = tree.find("transport.play");
     const auto* sliderNode = tree.find("mixer.gain");
@@ -1442,12 +1652,13 @@ static bool selftestRetainedUi()
         printf("FAIL (activated=%d gain=%.3f custom=%d right=%d dbl=%d "
                "wheel=%d ctx=%d outline=%d menu=%d dropdown=%d context=%d "
                "graphSel=%d graphAct=%d graphCtx=%d graphView=%d "
-               "graphPreview=%d graphConnect=%d graphChecks=%d semantics=%zu)\n",
+               "graphPreview=%d graphConnect=%d graphChecks=%d recording=%d "
+               "semantics=%zu)\n",
                activated, gain, customEvents, rightClickEvents,
                doubleClickEvents, wheelEvents, contextEvents, outlineActivated,
                menuActivated, dropdownActivated, contextOpens,
                graphSelects, graphActivates, graphContexts, graphViewportChanges,
-               graphPreviews, graphConnects, graphConnectionChecks,
+               graphPreviews, graphConnects, graphConnectionChecks, recordingOk,
                semantics.size());
     return ok;
 }
