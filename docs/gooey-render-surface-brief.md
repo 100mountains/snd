@@ -168,7 +168,9 @@ documented, matching what ImGui provides today.
    `FrameContext` per render pass).** `FrameContext` threads
    font/size/time/pointer through PaintRenderer::render and paint helpers;
    delete the remaining render-time `ImGui::Get*` reads. `drawImGui` fills
-   FrameContext from ImGui; a pure caller fills it from GLFW/clock.
+   FrameContext from ImGui; a pure caller fills it from GLFW/clock. Empty
+   surface-render contexts are normalized to SND's 13 px reference text size
+   so diagnostic/headless renders do not silently drop labels.
 4. **S3 — text input (implemented for retained events and valueField).**
    `EventType::TextInput` carries UTF-8 committed text, navigation/editing
    keys cover Backspace/Delete/Home/End, and `valueField` owns a retained edit

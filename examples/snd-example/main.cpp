@@ -591,7 +591,10 @@ static bool selftestRetainedUi()
     frameContext.pointer = {8.0f, 8.0f};
     frameContext.pointerValid = true;
     surfaceRenderer.render(surfaceTree, retainedRecording, frameContext);
+    snd::ui::draw::RecordingSurface defaultContextRecording;
+    surfaceRenderer.render(surfaceTree, defaultContextRecording);
     const auto& retainedOps = retainedRecording.ops();
+    const auto& defaultContextOps = defaultContextRecording.ops();
     auto hasRetainedOp = [&](const char* name) {
         return std::find_if(retainedOps.begin(), retainedOps.end(),
                             [&](const snd::ui::draw::RecordedOp& op) {
@@ -603,6 +606,13 @@ static bool selftestRetainedUi()
                             [&](const snd::ui::draw::RecordedOp& op) {
                                 return op.name == "text" && op.text == text;
                             }) != retainedOps.end();
+    };
+    auto hasDefaultContextText = [&](const char* text) {
+        return std::find_if(defaultContextOps.begin(), defaultContextOps.end(),
+                            [&](const snd::ui::draw::RecordedOp& op) {
+                                return op.name == "text" && op.text == text &&
+                                       closeEnough(op.a, 13.0f * 0.90f);
+                            }) != defaultContextOps.end();
     };
 
     const auto& ops = recording.ops();
@@ -697,7 +707,8 @@ static bool selftestRetainedUi()
         hasRetainedOp("strokeRect") &&
         hasRetainedOp("fillCircle") &&
         hasRetainedText("Go") &&
-        hasRetainedText("Render");
+        hasRetainedText("Render") &&
+        hasDefaultContextText("Go");
 
     auto root = r::Node::make("root", r::Role::Group);
     r::Layout rootLayout;

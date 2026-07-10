@@ -228,6 +228,13 @@ draw::FrameContext imGuiFrameContext()
     return context;
 }
 
+draw::FrameContext normalizedFrameContext(draw::FrameContext context)
+{
+    if (context.fontSizePx <= 0.0f)
+        context.fontSizePx = 13.0f;
+    return context;
+}
+
 bool focusableMenuChild(const Node* node)
 {
     return node && node->visible() && node->enabled() && node->focusable() &&
@@ -1632,14 +1639,15 @@ void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
-    renderNode(tree.root(), &semMap, origin, surface, context);
+    renderNode(tree.root(), &semMap, origin, surface,
+               normalizedFrameContext(context));
 }
 
 void PaintRenderer::render(const Node& root, draw::Surface& surface,
                            const draw::FrameContext& context,
                            draw::Vec2 origin) const
 {
-    renderNode(root, nullptr, origin, surface, context);
+    renderNode(root, nullptr, origin, surface, normalizedFrameContext(context));
 }
 
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
