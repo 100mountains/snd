@@ -2682,7 +2682,10 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     const draw::Vec2 a{topLeft.x + 1.0f, topLeft.y + 1.0f};
     const draw::Vec2 b{topLeft.x + size.x - 1.0f, topLeft.y + size.y - 1.0f};
     const float corner = std::max(0.0f, style.corner);
-    const float hh = std::min(std::max(0.0f, headerH), b.y - a.y);
+    // whole-pixel header height: a fractional zoomed header puts the
+    // separator (and the title centring) on subpixels, which shimmers
+    const float hh =
+        std::round(std::min(std::max(0.0f, headerH), b.y - a.y));
 
     if (((style.glowA | style.glowB) & 0xFF000000u) != 0 && !bypassed)
         drawNodeGlow(surface, a, b, corner, style.glowA, style.glowB);
@@ -2701,10 +2704,14 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                          withAlpha(accentCol, 0xD1), 0.0f);
     }
     if (title && title[0] && fontSizePx >= 1.0f) { // sub-1px: skip, not assert
-        const draw::Vec2 ts = surface.measureText(font, fontSizePx, title);
+        // half-pixel-quantized size + whole-pixel position: continuous zoom
+        // otherwise re-centres the title every frame and the text wobbles
+        const float titlePx = std::max(1.0f, std::round(fontSizePx * 2.0f) * 0.5f);
+        const draw::Vec2 ts = surface.measureText(font, titlePx, title);
         surface.pushClip({a.x + 12.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
-        surface.text(font, fontSizePx,
-                     {a.x + 12.0f, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
+        surface.text(font, titlePx,
+                     {std::round(a.x + 12.0f),
+                      std::round(a.y + std::max(0.0f, hh - ts.y) * 0.5f)},
                      textCol, title);
         surface.popClip();
     }
@@ -2731,11 +2738,12 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         // murk: dim the whole box 0.45 black + bold BYPASS tag in the header
         surface.fillRect(a, b, IM_COL32(0, 0, 0, 115), corner);
         const char* tag = "BYPASS";
-        const float tagSize = fontSizePx * 0.75f;
+        const float tagSize = std::round(fontSizePx * 0.75f * 2.0f) * 0.5f;
         if (tagSize >= 1.0f) {
             const draw::Vec2 ts = surface.measureText(font, tagSize, tag);
             surface.text(font, tagSize,
-                         {b.x - 8.0f - ts.x, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
+                         {std::round(b.x - 8.0f - ts.x),
+                          std::round(a.y + std::max(0.0f, hh - ts.y) * 0.5f)},
                          IM_COL32(0xff, 0x9e, 0x3d, 255), tag);
         }
     }

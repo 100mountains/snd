@@ -4845,28 +4845,17 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         }
 
         // Viewport navigation (owner keys): cmd+wheel zooms at the cursor,
-        // plain wheel scrolls (shift turns vertical into horizontal),
         // cmd+arrows step-scroll, cmd/alt+left-drag or middle-drag pans.
-        if (event.type == EventType::MouseWheel &&
-            (event.wheelDelta.y != 0.0f || event.wheelDelta.x != 0.0f)) {
-            if (event.super && event.wheelDelta.y != 0.0f) {
-                const Vec2 before = screenToGraph(state.viewport, local);
-                const float prevZoom = std::max(0.05f, state.viewport.zoom);
-                const float factor = std::pow(1.12f, event.wheelDelta.y);
-                state.viewport.zoom = std::clamp(prevZoom * factor, 0.20f, 4.0f);
-                state.viewport.pan.x = local.x - before.x * state.viewport.zoom;
-                state.viewport.pan.y = local.y - before.y * state.viewport.zoom;
-            } else if (!event.super) {
-                const float step = 30.0f;
-                float dx = event.wheelDelta.x;
-                float dy = event.wheelDelta.y;
-                if (event.shift && dx == 0.0f) {
-                    dx = dy;
-                    dy = 0.0f;
-                }
-                state.viewport.pan.x += dx * step;
-                state.viewport.pan.y += dy * step;
-            }
+        // PLAIN wheel deliberately does nothing -- bare scrolling shoved the
+        // whole canvas around (owner).
+        if (event.type == EventType::MouseWheel && event.super &&
+            event.wheelDelta.y != 0.0f) {
+            const Vec2 before = screenToGraph(state.viewport, local);
+            const float prevZoom = std::max(0.05f, state.viewport.zoom);
+            const float factor = std::pow(1.12f, event.wheelDelta.y);
+            state.viewport.zoom = std::clamp(prevZoom * factor, 0.20f, 4.0f);
+            state.viewport.pan.x = local.x - before.x * state.viewport.zoom;
+            state.viewport.pan.y = local.y - before.y * state.viewport.zoom;
             if (callbacks.onViewportChanged)
                 callbacks.onViewportChanged(state.viewport);
             return true;
@@ -5086,7 +5075,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
 
             for (const GraphNode& graphNode : nodes) {
                 const Rect localRect = graphToScreen(state.viewport, graphNode.bounds);
-                const Rect nodeRect{bounds.x + localRect.x, bounds.y + localRect.y,
+                const Rect nodeRect{std::round(bounds.x + localRect.x),
+                                    std::round(bounds.y + localRect.y),
                                     localRect.w, localRect.h};
                 GraphHit nodeHit = makeGraphHit(GraphHitKind::NodeBody,
                                                 rectCenter(graphNode.bounds));
@@ -5119,8 +5109,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     for (const GraphPort& port : ports) {
                         Rect pr = graphToScreen(state.viewport,
                                                 nodeLocalRect(graphNode, port.bounds));
-                        pr.x += bounds.x;
-                        pr.y += bounds.y;
+                        pr.x = std::round(pr.x + bounds.x);
+                        pr.y = std::round(pr.y + bounds.y);
                         paint::ControlState portState;
                         portState.hovered = state.hovered.kind == GraphHitKind::Port &&
                                             state.hovered.nodeId == graphNode.id &&
@@ -5150,8 +5140,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                         continue;
                     Rect partRect = graphToScreen(state.viewport,
                                                   nodeLocalRect(graphNode, part.bounds));
-                    partRect.x += bounds.x;
-                    partRect.y += bounds.y;
+                    partRect.x = std::round(partRect.x + bounds.x);
+                    partRect.y = std::round(partRect.y + bounds.y);
                     paint::ControlState partState;
                     partState.hovered = state.hovered.kind == GraphHitKind::NodePart &&
                                         state.hovered.nodeId == graphNode.id &&
@@ -5256,7 +5246,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
 
                 for (const GraphNode& graphNode : nodes) {
                     const Rect localRect = graphToScreen(state.viewport, graphNode.bounds);
-                    const Rect nodeRect{bounds.x + localRect.x, bounds.y + localRect.y,
+                    const Rect nodeRect{std::round(bounds.x + localRect.x),
+                                    std::round(bounds.y + localRect.y),
                                         localRect.w, localRect.h};
                     GraphHit nodeHit = makeGraphHit(GraphHitKind::NodeBody,
                                                     rectCenter(graphNode.bounds));
@@ -5280,8 +5271,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                         for (const GraphPort& port : ports) {
                             Rect pr = graphToScreen(state.viewport,
                                                     nodeLocalRect(graphNode, port.bounds));
-                            pr.x += bounds.x;
-                            pr.y += bounds.y;
+                            pr.x = std::round(pr.x + bounds.x);
+                            pr.y = std::round(pr.y + bounds.y);
                             paint::ControlState portState;
                             portState.hovered = state.hovered.kind == GraphHitKind::Port &&
                                                 state.hovered.nodeId == graphNode.id &&
@@ -5305,14 +5296,18 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                 port.direction == GraphPortDirection::Output &&
                                 !port.label.empty()) {
                                 // murk: name control-out sockets, 9px right-aligned
-                                const float ls = context.fontSizePx * 0.75f * zoomScale;
+                                const float ls = std::round(context.fontSizePx *
+                                                            0.75f * zoomScale *
+                                                            2.0f) *
+                                                 0.5f;
                                 if (ls < 1.0f)
                                     continue;
                                 const draw::Vec2 ts = surface.measureText(
                                     context.font, ls, port.label.c_str());
                                 surface.text(context.font, ls,
-                                             {pr.x - 3.0f - ts.x,
-                                              pr.y + (pr.h - ts.y) * 0.5f},
+                                             {std::round(pr.x - 3.0f - ts.x),
+                                              std::round(pr.y +
+                                                         (pr.h - ts.y) * 0.5f)},
                                              paint::withAlpha(
                                                  (graphStyle.text & 0xFF000000u)
                                                      ? graphStyle.text
@@ -5330,8 +5325,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                             continue;
                         Rect partRect = graphToScreen(state.viewport,
                                                       nodeLocalRect(graphNode, part.bounds));
-                        partRect.x += bounds.x;
-                        partRect.y += bounds.y;
+                        partRect.x = std::round(partRect.x + bounds.x);
+                        partRect.y = std::round(partRect.y + bounds.y);
                         paint::ControlState partState;
                         partState.hovered = state.hovered.kind == GraphHitKind::NodePart &&
                                             state.hovered.nodeId == graphNode.id &&
