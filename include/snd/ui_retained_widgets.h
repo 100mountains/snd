@@ -71,7 +71,7 @@ struct VisualStyle {
     PopupMenuState* popupState = nullptr;
     bool panelFill = false;
     bool panelBorder = false;
-    float panelRounding = 4.0f;
+    float panelRounding = 0.0f; // house style: square (owner directive)
     bool canvasClip = true;
     bool lit = false;
     std::vector<std::string> segments; // Segmented / CycleButton option labels

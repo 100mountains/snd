@@ -1578,7 +1578,7 @@ void drawValueRow(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                   const ControlState& state, bool draggable)
 {
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
-    const float r = 3.0f;
+    const float r = 0.0f; // house style: square
     ImU32 fill = state.active ? mix(pal.frame, pal.accent, 0.24f) : pal.frame;
     if (state.hovered && !state.active && !state.disabled)
         fill = mix(fill, pal.frameBright, 0.55f);

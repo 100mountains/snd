@@ -1911,8 +1911,12 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
     case VisualKind::Canvas:
+        // square by default (panelRounding), like the rest of the house --
+        // the hardcoded 3px here kept putting rounded rings/fills around
+        // clickable canvases (the bar readout, value fields)
         if (style.panelFill)
-            drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame, 3.0f);
+            drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame,
+                                    style.panelRounding);
         if (style.canvasDraw) {
             if (style.canvasClip)
                 drawList->PushClipRect(topLeft(bounds), bottomRight(bounds), true);
@@ -1927,9 +1931,11 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                 surface.popClip();
         }
         if (style.panelBorder)
-            drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright, 3.0f);
+            drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright,
+                              style.panelRounding);
         if (state.focused && !state.disabled)
-            paint::drawFocusRing(drawList, topLeft(bounds), bottomRight(bounds), pal, 3.0f);
+            paint::drawFocusRing(drawList, topLeft(bounds), bottomRight(bounds),
+                                 pal, style.panelRounding);
         break;
     case VisualKind::Button:
     {
@@ -2180,7 +2186,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     }
     case VisualKind::Canvas:
         if (style.panelFill)
-            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame, 3.0f);
+            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame,
+                             style.panelRounding);
         if (style.canvasSurfaceDraw) {
             if (style.canvasClip)
                 surface.pushClip(topLeftDraw(bounds), bottomRightDraw(bounds), true);
@@ -2190,10 +2197,11 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         }
         if (style.panelBorder)
             surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
-                               pal.frameBright, 3.0f);
+                               pal.frameBright,
+                               style.panelRounding);
         if (state.focused && !state.disabled)
             paint::drawFocusRing(surface, topLeftDraw(bounds), bottomRightDraw(bounds),
-                                 pal, 3.0f);
+                                 pal, style.panelRounding);
         break;
     case VisualKind::Button: {
         const std::string name = nodeName(node, sem);
