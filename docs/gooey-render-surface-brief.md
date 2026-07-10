@@ -164,10 +164,11 @@ documented, matching what ImGui provides today.
    on the ImGui backend; PaintRenderer also has a `draw::Surface` render
    overload for headless/non-ImGui painting. Palette stays `ImU32`-layout
    (`draw::Color`).
-3. **S2 — context purge.** `FrameContext` threads font/size/time/pointer
-   through PaintRenderer::render and paint helpers; delete the render-time
-   `ImGui::Get*` reads. `drawImGui` fills FrameContext from ImGui; a pure
-   caller fills it from GLFW/clock.
+3. **S2 — context purge (active; retained ImGui renderer now captures one
+   `FrameContext` per render pass).** `FrameContext` threads
+   font/size/time/pointer through PaintRenderer::render and paint helpers;
+   delete the remaining render-time `ImGui::Get*` reads. `drawImGui` fills
+   FrameContext from ImGui; a pure caller fills it from GLFW/clock.
 4. **S3 — text input.** `EventType::TextInput`, SND-owned valueField editor.
 5. **S4 — pure backend.** GL surface + stb_truetype atlas (dependency
    decision point), Gooey window shell without an ImGui context, GLFW input

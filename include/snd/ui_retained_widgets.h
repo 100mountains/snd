@@ -112,7 +112,8 @@ private:
 
     void renderNode(const Node& node, const SemanticMap* semantics,
                     const ImVec2& origin,
-                    ImDrawList* drawList) const;
+                    ImDrawList* drawList,
+                    const draw::FrameContext& context) const;
     void renderNode(const Node& node, const SemanticMap* semantics,
                     draw::Vec2 origin, draw::Surface& surface,
                     const draw::FrameContext& context) const;

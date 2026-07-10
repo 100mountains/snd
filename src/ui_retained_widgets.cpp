@@ -214,6 +214,19 @@ draw::FontRef iconFontRef(IconFont font, const draw::FrameContext& context)
     }
 }
 
+draw::FrameContext imGuiFrameContext()
+{
+    draw::FrameContext context;
+    context.font = draw::fontRef(ImGui::GetFont());
+    context.iconFontLucide = draw::fontRef(iconFontLucide());
+    context.fontSizePx = ImGui::GetFontSize();
+    context.timeSeconds = ImGui::GetTime();
+    const ImGuiIO& io = ImGui::GetIO();
+    context.pointer = {io.MousePos.x, io.MousePos.y};
+    context.pointerValid = true;
+    return context;
+}
+
 bool focusableMenuChild(const Node* node)
 {
     return node && node->visible() && node->enabled() && node->focusable() &&
@@ -1433,7 +1446,9 @@ void PaintRenderer::render(const Tree& tree, const ImVec2& origin,
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
-    renderNode(tree.root(), &semMap, origin, drawList ? drawList : ImGui::GetWindowDrawList());
+    renderNode(tree.root(), &semMap, origin,
+               drawList ? drawList : ImGui::GetWindowDrawList(),
+               imGuiFrameContext());
 }
 
 void PaintRenderer::render(const Node& root, ImDrawList* drawList) const
@@ -1444,7 +1459,9 @@ void PaintRenderer::render(const Node& root, ImDrawList* drawList) const
 void PaintRenderer::render(const Node& root, const ImVec2& origin,
                            ImDrawList* drawList) const
 {
-    renderNode(root, nullptr, origin, drawList ? drawList : ImGui::GetWindowDrawList());
+    renderNode(root, nullptr, origin,
+               drawList ? drawList : ImGui::GetWindowDrawList(),
+               imGuiFrameContext());
 }
 
 void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
@@ -1466,7 +1483,8 @@ void PaintRenderer::render(const Node& root, draw::Surface& surface,
 
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                const ImVec2& origin,
-                               ImDrawList* drawList) const
+                               ImDrawList* drawList,
+                               const draw::FrameContext& context) const
 {
     if (!node.visible())
         return;
@@ -1476,8 +1494,11 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     const VisualStyle style = resolvedStyle(node);
     const Palette& pal = palette();
     const Rect bounds = offset(node.bounds(), origin);
-    paint::ControlState state = controlState(node, sem, origin);
     draw::ImGuiSurface surface(drawList);
+    ImFont* font = draw::imFont(context.font);
+    const float fontSize = context.fontSizePx;
+    paint::ControlState state =
+        controlState(node, sem, {origin.x, origin.y}, context);
     if (style.popupState && !style.popupState->open)
         return;
 
@@ -1489,25 +1510,25 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright, 4.0f);
         break;
     case VisualKind::Text:
-        drawText(drawList, ImGui::GetFont(), bounds, nodeName(node, sem),
+        drawText(drawList, font, bounds, nodeName(node, sem),
                  style.fontScale > 0.0f ? style.fontScale : 1.0f, pal.text, Align::Start);
         break;
     case VisualKind::SectionHeader:
-        paint::drawSectionHeader(drawList, ImGui::GetFont(), topLeft(bounds),
+        paint::drawSectionHeader(drawList, font, topLeft(bounds),
                                  nodeName(node, sem).c_str(),
-                                 ImGui::GetFontSize() *
+                                 fontSize *
                                      (style.fontScale > 0.0f ? style.fontScale * 0.80f : 0.80f),
                                  bounds.w, pal);
         break;
     case VisualKind::Badge:
-        paint::drawBadge(drawList, ImGui::GetFont(), topLeft(bounds),
+        paint::drawBadge(drawList, font, topLeft(bounds),
                          nodeName(node, sem).c_str(),
-                         ImGui::GetFontSize() *
+                         fontSize *
                              (style.fontScale > 0.0f ? style.fontScale * 0.78f : 0.78f),
                          style.accent, pal);
         break;
     case VisualKind::ListItem:
-        paint::drawListItem(drawList, ImGui::GetFont(), topLeft(bounds), sizeOf(bounds),
+        paint::drawListItem(drawList, font, topLeft(bounds), sizeOf(bounds),
                             nodeName(node, sem).c_str(), pal, state,
                             style.fontScale > 0.0f ? style.fontScale : 0.90f);
         break;
@@ -1519,7 +1540,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                      SemanticState::Checked))
             item.checked = true;
         item.enabled = !state.disabled;
-        paint::drawMenuItem(drawList, ImGui::GetFont(), iconFont(style.iconFont),
+        paint::drawMenuItem(drawList, font, iconFont(style.iconFont),
                             topLeft(bounds), sizeOf(bounds), item, pal, state,
                             style.fontScale > 0.0f ? style.fontScale : 0.90f);
         break;
@@ -1527,7 +1548,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     case VisualKind::ValueRow: {
         const std::string name = nodeName(node, sem);
         const std::string valueText = nodeValueText(node, sem);
-        paint::drawValueRow(drawList, ImGui::GetFont(), topLeft(bounds), sizeOf(bounds),
+        paint::drawValueRow(drawList, font, topLeft(bounds), sizeOf(bounds),
                             name.c_str(), valueText.c_str(), pal, state,
                             style.fontScale > 0.0f ? style.fontScale : 0.90f,
                             node.role() == Role::Slider);
@@ -1543,14 +1564,6 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             if (style.canvasClip)
                 drawList->PopClipRect();
         } else if (style.canvasSurfaceDraw) {
-            draw::FrameContext context;
-            context.font = draw::fontRef(ImGui::GetFont());
-            context.iconFontLucide = draw::fontRef(iconFont(style.iconFont));
-            context.fontSizePx = ImGui::GetFontSize();
-            context.timeSeconds = ImGui::GetTime();
-            const ImVec2 mouse = ImGui::GetIO().MousePos;
-            context.pointer = {mouse.x, mouse.y};
-            context.pointerValid = true;
             if (style.canvasClip)
                 surface.pushClip(topLeftDraw(bounds), bottomRightDraw(bounds), true);
             style.canvasSurfaceDraw(surface, node, bounds, state, context);
@@ -1567,7 +1580,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         const std::string name = nodeName(node, sem);
         paint::ButtonPaintArgs args;
         args.drawList = drawList;
-        args.font = ImGui::GetFont();
+        args.font = font;
         args.topLeft = topLeft(bounds);
         args.size = sizeOf(bounds);
         args.text = name.c_str();
@@ -1575,15 +1588,15 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         args.palette = &pal;
         args.state = &state;
         args.fontScale = style.fontScale > 0.0f ? style.fontScale : 0.90f;
-        args.fontRef = draw::fontRef(args.font);
-        args.fontSizePx = ImGui::GetFontSize() * args.fontScale;
+        args.fontRef = context.font;
+        args.fontSizePx = fontSize * args.fontScale;
         args.surface = &surface;
         paint::drawButtonWithPainter(args, style.buttonPainter);
         break;
     }
     case VisualKind::OutlineButton: {
         const std::string name = nodeName(node, sem);
-        paint::drawOutlineButton(drawList, ImGui::GetFont(), topLeft(bounds),
+        paint::drawOutlineButton(drawList, font, topLeft(bounds),
                                  sizeOf(bounds), name.c_str(), pal, state,
                                  style.outlineButtonStyle);
         break;
@@ -1609,13 +1622,14 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         const int selected = std::clamp((int)std::lround(valueOf(node, sem)),
                                         0, std::max(0, count - 1));
         int hoverIdx = -1;
-        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f) {
-            const float lx = ImGui::GetIO().MousePos.x - bounds.x;
+        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f &&
+            context.pointerValid) {
+            const float lx = context.pointer.x - bounds.x;
             if (lx >= 0.0f && lx <= bounds.w)
                 hoverIdx = std::clamp((int)(lx / (bounds.w / (float)count)),
                                       0, count - 1);
         }
-        paint::drawSegmented(drawList, ImGui::GetFont(), topLeft(bounds),
+        paint::drawSegmented(drawList, font, topLeft(bounds),
                              sizeOf(bounds), labels.data(), count, selected,
                              hoverIdx, pal, state,
                              style.fontScale > 0.0f ? style.fontScale * 0.90f
@@ -1629,7 +1643,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         std::string text = nodeValueText(node, sem);
         if (text.empty() && index < count)
             text = style.segments[(size_t)index];
-        paint::drawCycleButton(drawList, ImGui::GetFont(), topLeft(bounds),
+        paint::drawCycleButton(drawList, font, topLeft(bounds),
                                sizeOf(bounds), text.c_str(), index, count, pal,
                                state,
                                style.fontScale > 0.0f ? style.fontScale * 0.90f
@@ -1641,7 +1655,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         float level = on ? 1.0f : 0.0f;
         if (on && style.ledBlink) // arm-blink for pending states
             level = 0.35f + 0.65f * (0.5f + 0.5f *
-                                     std::sin((float)ImGui::GetTime() * 6.0f));
+                                     std::sin((float)context.timeSeconds * 6.0f));
         const bool down = state.active || on;
         paint::drawLedButton(drawList, iconFont(style.iconFont), topLeft(bounds),
                              sizeOf(bounds), style.glyph.c_str(), level, pal,
@@ -1655,7 +1669,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             Rect textBounds = bounds;
             textBounds.x += bounds.w + 6.0f;
             textBounds.w = 160.0f;
-            drawText(drawList, ImGui::GetFont(), textBounds, nodeName(node, sem), 1.0f,
+            drawText(drawList, font, textBounds, nodeName(node, sem), 1.0f,
                      state.disabled ? pal.textDim : pal.text, Align::Start);
         }
         break;
@@ -1680,8 +1694,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         const std::string name = nodeName(node, sem);
         if (!name.empty()) {
             Rect labelBounds{bounds.x, bounds.y + d + 2.0f, bounds.w,
-                             ImGui::GetFontSize() + 2.0f};
-            drawText(drawList, ImGui::GetFont(), labelBounds, name, 0.90f, pal.text);
+                             fontSize + 2.0f};
+            drawText(drawList, font, labelBounds, name, 0.90f, pal.text);
         }
         break;
     }
@@ -1707,7 +1721,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     }
 
     for (const auto& child : node.children())
-        renderNode(*child, semantics, origin, drawList);
+        renderNode(*child, semantics, origin, drawList, context);
 }
 
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,

@@ -603,8 +603,9 @@ Use `VisualStyle::CanvasSurfaceDraw` or the `widgets::canvas(...)` overload
 taking `draw::Surface&` for new retained custom regions that should render
 without ImGui. `PaintRenderer::render(tree, surface, frameContext)` is the
 headless/non-ImGui render path; callers provide font refs, font size, time,
-and pointer through `draw::FrameContext`. Old ImDrawList canvas callbacks stay
-valid on the ImGui backend.
+and pointer through `draw::FrameContext`. The ImGui retained adapter captures
+the same frame context once per render pass. Old ImDrawList canvas callbacks
+stay valid on the ImGui backend.
 
 ## Widget reference
 
