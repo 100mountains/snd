@@ -349,6 +349,11 @@ meters, bypass/options/delete controls, status chips, and ports. Those parts
 have stable IDs, hit regions, and virtual semantic children even though the
 first renderer draws them in one canvas pass. See
 `docs/graph-surface-ui-brief.md`.
+Cable creation is modeled as a retained port-drag preview: `canConnect`
+validates the current target, `onCablePreview` observes the preview position,
+and `onConnect` is called only for a validated drop. Keyboard arrows move the
+surface's virtual graph focus across modules, ports, actionable parts, and
+cables; Enter/Space activates the focused graph item.
 
 Envelope and curve drawing is shared in `paint::drawEnvelope(...)`.
 The immediate and retained envelope editors use the same curve, point, segment,
@@ -516,10 +521,11 @@ Shift drags 10× slower.
 - `widgets::graphSurface(id, name, state, nodes, cables, callbacks, &renderer,
   size, &menuState, style={})` — retained graph surface with pan/zoom, grid,
   typed hit-testing, cable drawing, module chrome, module child-part regions,
-  marquee, anchored context-menu support, and virtual semantic children for
-  modules, ports, child parts, and cables. `GraphSurfaceStyle` skins backdrop,
-  module chrome, square/round pins, and wire droop/thickness. `GraphSurfaceState`,
-  nodes, cables, and graph mutations stay caller-owned.
+  marquee, cable preview/drop callbacks, arrow-key traversal, anchored
+  context-menu support, and virtual semantic children for modules, ports, child
+  parts, and cables. `GraphSurfaceStyle` skins backdrop, module chrome,
+  square/round pins, and wire droop/thickness. `GraphSurfaceState`, nodes,
+  cables, and graph mutations stay caller-owned.
 
 ### Lists and files
 

@@ -2104,6 +2104,172 @@ GraphHit makeGraphHit(GraphHitKind kind, Vec2 graphPosition)
     return hit;
 }
 
+bool sameGraphHit(const GraphHit& a, const GraphHit& b)
+{
+    return a.kind == b.kind &&
+           a.nodeId == b.nodeId &&
+           a.partId == b.partId &&
+           a.portId == b.portId &&
+           a.cableId == b.cableId &&
+           a.output == b.output;
+}
+
+bool graphPortHit(const GraphHit& hit)
+{
+    return hit.kind == GraphHitKind::Port && !hit.nodeId.empty() && !hit.portId.empty();
+}
+
+bool defaultGraphConnectionAllowed(const GraphHit& from, const GraphHit& to)
+{
+    if (!graphPortHit(from) || !graphPortHit(to))
+        return false;
+    if (from.nodeId == to.nodeId && from.portId == to.portId)
+        return false;
+    return from.output != to.output;
+}
+
+bool graphConnectionAllowed(const GraphHit& from, const GraphHit& to,
+                            const GraphSurfaceCallbacks& callbacks)
+{
+    if (!defaultGraphConnectionAllowed(from, to))
+        return false;
+    return callbacks.canConnect ? callbacks.canConnect(from, to) : true;
+}
+
+Vec2 graphPortAnchor(const std::vector<GraphNode>& nodes, const GraphHit& hit)
+{
+    Vec2 out = hit.graphPosition;
+    if (graphPortHit(hit))
+        portCenterGraph(nodes, hit.nodeId, hit.portId, out);
+    return out;
+}
+
+void clearGraphCablePreview(GraphSurfaceState& state)
+{
+    state.cablePreviewActive = false;
+    state.cablePreviewStart = {};
+    state.cablePreviewTarget = {};
+    state.cablePreviewPosition = {};
+    state.cablePreviewValid = false;
+}
+
+void updateGraphCablePreview(GraphSurfaceState& state,
+                             const std::vector<GraphNode>& nodes,
+                             const std::vector<GraphCable>& cables,
+                             Vec2 localPosition,
+                             const GraphSurfaceStyle& style,
+                             const GraphSurfaceCallbacks& callbacks)
+{
+    if (!state.cablePreviewActive)
+        return;
+    state.cablePreviewPosition = screenToGraph(state.viewport, localPosition);
+    GraphHit target = hitTestGraph(state.viewport, nodes, cables, localPosition, style);
+    if (!graphPortHit(target) ||
+        !graphConnectionAllowed(state.cablePreviewStart, target, callbacks)) {
+        state.cablePreviewTarget = {};
+        state.cablePreviewValid = false;
+    } else {
+        state.cablePreviewTarget = target;
+        state.cablePreviewValid = true;
+    }
+    if (callbacks.onCablePreview)
+        callbacks.onCablePreview(state.cablePreviewStart, state.cablePreviewPosition);
+}
+
+std::vector<GraphHit> graphKeyboardHits(const std::vector<GraphNode>& nodes,
+                                        const std::vector<GraphCable>& cables)
+{
+    std::vector<GraphHit> out;
+    for (const GraphNode& node : nodes) {
+        GraphHit module = makeGraphHit(GraphHitKind::NodeBody, rectCenter(node.bounds));
+        module.nodeId = node.id;
+        out.push_back(module);
+
+        auto appendPort = [&](const GraphPort& port, bool output) {
+            Vec2 center = add({node.bounds.x, node.bounds.y}, rectCenter(port.bounds));
+            GraphHit hit = makeGraphHit(GraphHitKind::Port, center);
+            hit.nodeId = node.id;
+            hit.portId = port.id;
+            hit.output = output;
+            out.push_back(hit);
+        };
+        for (const GraphPort& port : node.inputs)
+            appendPort(port, false);
+        for (const GraphPort& port : node.outputs)
+            appendPort(port, true);
+
+        for (const GraphNodePart& part : node.parts) {
+            if (part.kind != GraphNodePartKind::Toggle &&
+                part.kind != GraphNodePartKind::Action)
+                continue;
+            GraphHit hit = makeGraphHit(GraphHitKind::NodePart,
+                                        add({node.bounds.x, node.bounds.y},
+                                            rectCenter(part.bounds)));
+            hit.nodeId = node.id;
+            hit.partId = part.id;
+            out.push_back(hit);
+        }
+    }
+
+    for (const GraphCable& cable : cables) {
+        Vec2 from;
+        Vec2 to;
+        if (!portCenterGraph(nodes, cable.fromNode, cable.fromPort, from) ||
+            !portCenterGraph(nodes, cable.toNode, cable.toPort, to))
+            continue;
+        GraphHit hit = makeGraphHit(GraphHitKind::Cable,
+                                    {(from.x + to.x) * 0.5f,
+                                     (from.y + to.y) * 0.5f});
+        hit.cableId = cable.id;
+        out.push_back(hit);
+    }
+    return out;
+}
+
+int graphKeyboardIndex(const std::vector<GraphHit>& hits, const GraphHit& current)
+{
+    if (!current.valid())
+        return -1;
+    for (int i = 0; i < (int)hits.size(); ++i)
+        if (sameGraphHit(hits[(std::size_t)i], current))
+            return i;
+    return -1;
+}
+
+bool moveGraphKeyboardFocus(GraphSurfaceState& state,
+                            const std::vector<GraphNode>& nodes,
+                            const std::vector<GraphCable>& cables,
+                            int direction)
+{
+    std::vector<GraphHit> hits = graphKeyboardHits(nodes, cables);
+    if (hits.empty())
+        return false;
+
+    GraphHit current = state.focused.valid() ? state.focused
+                     : state.active.valid()  ? state.active
+                     : state.hovered;
+    int index = graphKeyboardIndex(hits, current);
+    if (index < 0)
+        index = direction < 0 ? 0 : -1;
+    index += direction;
+    if (index < 0)
+        index = (int)hits.size() - 1;
+    else if (index >= (int)hits.size())
+        index = 0;
+
+    state.focused = hits[(std::size_t)index];
+    state.hovered = state.focused;
+    state.active = state.focused;
+    return true;
+}
+
+void applyGraphFocusState(SemanticNode& sem, const GraphHit& current,
+                          const GraphHit& hit)
+{
+    if (sameGraphHit(current, hit))
+        sem.states |= SemanticState::Focused;
+}
+
 bool partKindInPass(GraphNodePartKind kind, int pass)
 {
     if (pass == 0)
@@ -2265,6 +2431,10 @@ void appendGraphSemanticChildren(const Node& surface,
         module.name = graphNode.title.empty() ? graphNode.id : graphNode.title;
         module.description = "Graph module";
         module.states |= SemanticState::Focusable;
+        GraphHit moduleHit = makeGraphHit(GraphHitKind::NodeBody,
+                                          rectCenter(graphNode.bounds));
+        moduleHit.nodeId = graphNode.id;
+        applyGraphFocusState(module, state.focused, moduleHit);
         if (graphNode.selected)
             module.states |= SemanticState::Selected;
         if (graphNode.disabled)
@@ -2296,6 +2466,14 @@ void appendGraphSemanticChildren(const Node& surface,
                        (port.label.empty() ? port.id : port.label);
             sem.description = graphPortKindText(port.kind) + " port";
             sem.states |= SemanticState::Focusable;
+            GraphHit portHit = makeGraphHit(GraphHitKind::Port,
+                                            add({graphNode.bounds.x,
+                                                 graphNode.bounds.y},
+                                                rectCenter(port.bounds)));
+            portHit.nodeId = graphNode.id;
+            portHit.portId = port.id;
+            portHit.output = output;
+            applyGraphFocusState(sem, state.focused, portHit);
             if (!port.enabled)
                 sem.states |= SemanticState::Disabled;
             if (port.connected)
@@ -2320,6 +2498,15 @@ void appendGraphSemanticChildren(const Node& surface,
             sem.role = graphPartRole(part.kind);
             sem.name = graphPartName(graphNode, part);
             sem.description = "Graph module part";
+            GraphHit partHit = makeGraphHit(part.kind == GraphNodePartKind::Title
+                                                ? GraphHitKind::NodeTitle
+                                                : GraphHitKind::NodePart,
+                                            add({graphNode.bounds.x,
+                                                 graphNode.bounds.y},
+                                                rectCenter(part.bounds)));
+            partHit.nodeId = graphNode.id;
+            partHit.partId = part.id;
+            applyGraphFocusState(sem, state.focused, partHit);
             if (!part.enabled)
                 sem.states |= SemanticState::Disabled;
             if (part.checked)
@@ -2363,6 +2550,11 @@ void appendGraphSemanticChildren(const Node& surface,
                           cable.fromPort + " to " + cable.toNode + "." +
                           cable.toPort;
         sem.states |= SemanticState::Focusable;
+        GraphHit cableHit = makeGraphHit(GraphHitKind::Cable,
+                                         {(from.x + to.x) * 0.5f,
+                                          (from.y + to.y) * 0.5f});
+        cableHit.cableId = cable.id;
+        applyGraphFocusState(sem, state.focused, cableHit);
         if (cable.selected)
             sem.states |= SemanticState::Selected;
         if (cable.muted || cable.invalid)
@@ -3299,10 +3491,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             return false;
         state.hovered = hit;
         if (action == Action::Focus) {
+            state.focused = hit;
             state.active = hit;
             return true;
         }
         if (action == Action::OpenMenu) {
+            state.focused = hit;
             const Vec2 anchor = graphHitTreeAnchor(n, state, hit);
             if (contextMenu) {
                 contextMenu->open = true;
@@ -3315,6 +3509,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             return true;
         }
         if (action == Action::Activate) {
+            state.focused = hit;
             if (callbacks.onActivate)
                 callbacks.onActivate(hit);
             return true;
@@ -3329,6 +3524,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         const Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
         const Vec2 local{pos.x - b.x, pos.y - b.y};
         state.hovered = hitTestGraph(state.viewport, nodes, cables, local, graphStyle);
+        state.focused = state.hovered;
         if (contextMenu) {
             contextMenu->open = true;
             contextMenu->anchorToPosition = true;
@@ -3349,6 +3545,11 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         };
 
         if (event.type == EventType::MouseMove) {
+            if (state.cablePreviewActive) {
+                updateGraphCablePreview(state, nodes, cables, local, graphStyle,
+                                        callbacks);
+                return true;
+            }
             if (state.panning) {
                 state.viewport.pan.x += event.delta.x;
                 state.viewport.pan.y += event.delta.y;
@@ -3399,6 +3600,17 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
 
         if (event.type == EventType::MouseDown && event.button == MouseButton::Left) {
             state.active = updateHover();
+            state.focused = state.active;
+            if (graphPortHit(state.active)) {
+                state.cablePreviewActive = true;
+                state.cablePreviewStart = state.active;
+                state.cablePreviewPosition = state.active.graphPosition;
+                state.cablePreviewTarget = {};
+                state.cablePreviewValid = false;
+                if (callbacks.onCablePreview)
+                    callbacks.onCablePreview(state.cablePreviewStart,
+                                             state.cablePreviewPosition);
+            }
             if (state.active.kind == GraphHitKind::Surface ||
                 state.active.kind == GraphHitKind::None) {
                 state.marqueeActive = true;
@@ -3416,6 +3628,15 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 return true;
             }
             if (event.button == MouseButton::Left) {
+                if (state.cablePreviewActive) {
+                    updateGraphCablePreview(state, nodes, cables, local, graphStyle,
+                                            callbacks);
+                    if (state.cablePreviewValid && callbacks.onConnect)
+                        callbacks.onConnect(state.cablePreviewStart,
+                                            state.cablePreviewTarget);
+                    clearGraphCablePreview(state);
+                    return true;
+                }
                 const bool wasPanning = state.panning;
                 const bool wasMarquee = state.marqueeActive;
                 state.panning = false;
@@ -3429,6 +3650,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
 
         if (event.type == EventType::ContextMenu) {
             state.hovered = updateHover();
+            state.focused = state.hovered;
             if (contextMenu) {
                 contextMenu->open = true;
                 contextMenu->anchorToPosition = true;
@@ -3441,11 +3663,30 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         }
 
         if (event.type == EventType::KeyDown && event.key == Key::Escape) {
-            const bool changed = state.panning || state.marqueeActive || state.active.valid();
+            const bool changed = state.panning || state.marqueeActive ||
+                                 state.active.valid() || state.cablePreviewActive;
             state.panning = false;
             state.marqueeActive = false;
             state.active = {};
+            clearGraphCablePreview(state);
             return changed;
+        }
+
+        if (event.type == EventType::KeyDown &&
+            (event.key == Key::Down || event.key == Key::Right ||
+             event.key == Key::Up || event.key == Key::Left)) {
+            const int direction = (event.key == Key::Down || event.key == Key::Right)
+                                      ? 1
+                                      : -1;
+            return moveGraphKeyboardFocus(state, nodes, cables, direction);
+        }
+
+        if (event.type == EventType::KeyDown &&
+            (event.key == Key::Enter || event.key == Key::Space) &&
+            state.focused.valid()) {
+            if (callbacks.onActivate)
+                callbacks.onActivate(state.focused);
+            return true;
         }
 
         return false;
@@ -3476,6 +3717,11 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                        state.hovered.cableId == cable.id) ||
                                       (state.hovered.kind == GraphHitKind::CableEndpoint &&
                                        state.hovered.cableId == cable.id);
+                GraphHit cableHit = makeGraphHit(GraphHitKind::Cable,
+                                                 {(fromGraph.x + toGraph.x) * 0.5f,
+                                                  (fromGraph.y + toGraph.y) * 0.5f});
+                cableHit.cableId = cable.id;
+                cableState.focused = sameGraphHit(state.focused, cableHit);
                 cableState.hovered = cableState.selected;
                 cableState.disabled = cable.muted || cable.invalid;
                 paint::drawCable(&dl, ImVec2(bounds.x + fromLocal.x,
@@ -3486,14 +3732,40 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                  graphStyle.wireThickness, graphStyle);
             }
 
+            if (state.cablePreviewActive) {
+                const Vec2 fromGraph = graphPortAnchor(nodes, state.cablePreviewStart);
+                const Vec2 toGraph = state.cablePreviewValid
+                                         ? graphPortAnchor(nodes, state.cablePreviewTarget)
+                                         : state.cablePreviewPosition;
+                const Vec2 fromLocal = graphToScreen(state.viewport, fromGraph);
+                const Vec2 toLocal = graphToScreen(state.viewport, toGraph);
+                paint::ControlState previewState;
+                previewState.hovered = true;
+                previewState.selected = state.cablePreviewValid;
+                previewState.disabled = !state.cablePreviewValid;
+                paint::drawCable(&dl, ImVec2(bounds.x + fromLocal.x,
+                                             bounds.y + fromLocal.y),
+                                 ImVec2(bounds.x + toLocal.x,
+                                        bounds.y + toLocal.y), palette(),
+                                 previewState,
+                                 state.cablePreviewValid ? graphStyle.accent
+                                                         : palette().meterHot,
+                                 graphStyle.wireThickness, graphStyle);
+            }
+
             for (const GraphNode& graphNode : nodes) {
                 const Rect localRect = graphToScreen(state.viewport, graphNode.bounds);
                 const Rect nodeRect{bounds.x + localRect.x, bounds.y + localRect.y,
                                     localRect.w, localRect.h};
+                GraphHit nodeHit = makeGraphHit(GraphHitKind::NodeBody,
+                                                rectCenter(graphNode.bounds));
+                nodeHit.nodeId = graphNode.id;
                 paint::ControlState nodeState;
                 nodeState.selected = graphNode.selected ||
-                                     state.hovered.nodeId == graphNode.id;
+                                     state.hovered.nodeId == graphNode.id ||
+                                     sameGraphHit(state.focused, nodeHit);
                 nodeState.hovered = state.hovered.nodeId == graphNode.id;
+                nodeState.focused = sameGraphHit(state.focused, nodeHit);
                 nodeState.disabled = graphNode.disabled;
                 paint::drawModuleBox(&dl, ImGui::GetFont(), topLeft(nodeRect),
                                      sizeOf(nodeRect), graphNode.title.c_str(),
@@ -3510,7 +3782,19 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                         portState.hovered = state.hovered.kind == GraphHitKind::Port &&
                                             state.hovered.nodeId == graphNode.id &&
                                             state.hovered.portId == port.id;
-                        portState.selected = portState.hovered;
+                        GraphHit portHit = makeGraphHit(GraphHitKind::Port,
+                                                        add({graphNode.bounds.x,
+                                                             graphNode.bounds.y},
+                                                            rectCenter(port.bounds)));
+                        portHit.nodeId = graphNode.id;
+                        portHit.portId = port.id;
+                        portHit.output = port.direction == GraphPortDirection::Output;
+                        portState.focused = sameGraphHit(state.focused, portHit);
+                        portState.selected = portState.hovered || portState.focused ||
+                                             (state.cablePreviewActive &&
+                                              sameGraphHit(state.cablePreviewStart, portHit)) ||
+                                             (state.cablePreviewValid &&
+                                              sameGraphHit(state.cablePreviewTarget, portHit));
                         drawGraphPort(dl, pr, port, portState, graphStyle);
                     }
                 };
@@ -3531,6 +3815,14 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     partState.active = state.active.kind == GraphHitKind::NodePart &&
                                        state.active.nodeId == graphNode.id &&
                                        state.active.partId == part.id;
+                    GraphHit partHit = makeGraphHit(GraphHitKind::NodePart,
+                                                    add({graphNode.bounds.x,
+                                                         graphNode.bounds.y},
+                                                        rectCenter(part.bounds)));
+                    partHit.nodeId = graphNode.id;
+                    partHit.partId = part.id;
+                    partState.focused = sameGraphHit(state.focused, partHit);
+                    partState.selected = partState.focused;
                     drawGraphPart(dl, ImGui::GetFont(), partRect, part, partState);
                 }
             }

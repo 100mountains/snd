@@ -228,11 +228,17 @@ struct GraphHit {
 
 struct GraphSurfaceState {
     GraphViewport viewport;
+    GraphHit focused;
     GraphHit hovered;
     GraphHit active;
     bool panning = false;
     bool marqueeActive = false;
     Rect marquee;
+    bool cablePreviewActive = false;
+    GraphHit cablePreviewStart;
+    GraphHit cablePreviewTarget;
+    Vec2 cablePreviewPosition;
+    bool cablePreviewValid = false;
 };
 
 struct GraphSurfaceCallbacks {
@@ -240,6 +246,9 @@ struct GraphSurfaceCallbacks {
     std::function<void(const GraphHit&)> onActivate;
     std::function<void(const GraphHit&, Vec2 graphPosition)> onContextMenu;
     std::function<void(const GraphHit&, Vec2 graphDelta)> onDrag;
+    std::function<bool(const GraphHit& fromPort, const GraphHit& toPort)> canConnect;
+    std::function<void(const GraphHit& fromPort, const GraphHit& toPort)> onConnect;
+    std::function<void(const GraphHit& fromPort, Vec2 graphPosition)> onCablePreview;
     std::function<void(const GraphViewport&)> onViewportChanged;
 };
 

@@ -1261,8 +1261,13 @@ static bool selftestRetainedUi()
     int graphActivates = 0;
     int graphContexts = 0;
     int graphViewportChanges = 0;
+    int graphConnectionChecks = 0;
+    int graphPreviews = 0;
+    int graphConnects = 0;
     r::GraphHit selectedGraphHit;
     r::GraphHit activatedGraphHit;
+    r::GraphHit connectedGraphFrom;
+    r::GraphHit connectedGraphTo;
     snd::ui::PopupMenuState graphMenuState;
     r::PaintRenderer graphRenderer;
     r::GraphSurfaceCallbacks graphCallbacks;
@@ -1276,6 +1281,20 @@ static bool selftestRetainedUi()
     };
     graphCallbacks.onContextMenu = [&](const r::GraphHit&, r::Vec2) {
         ++graphContexts;
+    };
+    graphCallbacks.canConnect = [&](const r::GraphHit& from,
+                                    const r::GraphHit& to) {
+        ++graphConnectionChecks;
+        return from.output != to.output;
+    };
+    graphCallbacks.onConnect = [&](const r::GraphHit& from,
+                                   const r::GraphHit& to) {
+        ++graphConnects;
+        connectedGraphFrom = from;
+        connectedGraphTo = to;
+    };
+    graphCallbacks.onCablePreview = [&](const r::GraphHit&, r::Vec2) {
+        ++graphPreviews;
     };
     graphCallbacks.onViewportChanged = [&](const r::GraphViewport&) {
         ++graphViewportChanges;
@@ -1344,6 +1363,64 @@ static bool selftestRetainedUi()
     ok = ok && graphTree.dispatch(graphEvent) &&
          graphActivates == graphActivatesBeforeSemantic + 2 &&
          activatedGraphHit.partId == "bypass";
+    const r::Vec2 filterIn = r::graphToScreen(graphState.viewport,
+                                              r::Vec2{222.0f, 74.0f});
+    const int graphSelectsBeforeCable = graphSelects;
+    graphEvent.position = oscOut;
+    graphEvent.delta = {};
+    graphEvent.button = r::MouseButton::Left;
+    graphEvent.type = r::EventType::MouseDown;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         graphSelects == graphSelectsBeforeCable + 1 &&
+         graphState.cablePreviewActive &&
+         graphState.cablePreviewStart.nodeId == "osc" &&
+         graphState.cablePreviewStart.portId == "out";
+    graphEvent.position = filterIn;
+    graphEvent.delta = {filterIn.x - oscOut.x, filterIn.y - oscOut.y};
+    graphEvent.type = r::EventType::MouseMove;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         graphState.cablePreviewValid &&
+         graphState.cablePreviewTarget.nodeId == "filter" &&
+         graphState.cablePreviewTarget.portId == "in" &&
+         graphConnectionChecks > 0 &&
+         graphPreviews >= 2;
+    graphEvent.delta = {};
+    graphEvent.type = r::EventType::MouseUp;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         !graphState.cablePreviewActive &&
+         graphConnects == 1 &&
+         connectedGraphFrom.nodeId == "osc" &&
+         connectedGraphFrom.portId == "out" &&
+         connectedGraphTo.nodeId == "filter" &&
+         connectedGraphTo.portId == "in";
+    graphState.focused = {};
+    graphState.active = {};
+    graphState.hovered = {};
+    const int graphActivatesBeforeKeyboard = graphActivates;
+    r::Event graphKey;
+    graphKey.type = r::EventType::KeyDown;
+    graphKey.key = r::Key::Right;
+    ok = ok && graphTree.focus("graph.surface") &&
+         graphTree.dispatch(graphKey) &&
+         graphState.focused.kind == r::GraphHitKind::NodeBody &&
+         graphState.focused.nodeId == "osc";
+    graphKey.key = r::Key::Right;
+    ok = ok && graphTree.dispatch(graphKey) &&
+         graphState.focused.kind == r::GraphHitKind::Port &&
+         graphState.focused.nodeId == "osc" &&
+         graphState.focused.portId == "out";
+    ok = ok && graphTree.semanticNode("graph.surface.module.osc.port.out",
+                                      graphPortSem) &&
+         r::hasState(graphPortSem.states, r::SemanticState::Focused);
+    graphKey.key = r::Key::Right;
+    ok = ok && graphTree.dispatch(graphKey) &&
+         graphState.focused.kind == r::GraphHitKind::NodePart &&
+         graphState.focused.nodeId == "osc" &&
+         graphState.focused.partId == "bypass";
+    graphKey.key = r::Key::Enter;
+    ok = ok && graphTree.dispatch(graphKey) &&
+         graphActivates == graphActivatesBeforeKeyboard + 1 &&
+         activatedGraphHit.partId == "bypass";
     graphEvent.position = oscOut;
     graphEvent.button = r::MouseButton::Right;
     graphEvent.type = r::EventType::ContextMenu;
@@ -1364,11 +1441,13 @@ static bool selftestRetainedUi()
     else
         printf("FAIL (activated=%d gain=%.3f custom=%d right=%d dbl=%d "
                "wheel=%d ctx=%d outline=%d menu=%d dropdown=%d context=%d "
-               "graphSel=%d graphAct=%d graphCtx=%d graphView=%d semantics=%zu)\n",
+               "graphSel=%d graphAct=%d graphCtx=%d graphView=%d "
+               "graphPreview=%d graphConnect=%d graphChecks=%d semantics=%zu)\n",
                activated, gain, customEvents, rightClickEvents,
                doubleClickEvents, wheelEvents, contextEvents, outlineActivated,
                menuActivated, dropdownActivated, contextOpens,
                graphSelects, graphActivates, graphContexts, graphViewportChanges,
+               graphPreviews, graphConnects, graphConnectionChecks,
                semantics.size());
     return ok;
 }

@@ -1,7 +1,8 @@
 # SND Graph Surface UI Brief
 
 Status: retained `widgets::graphSurface(...)` first pass landed with virtual
-semantic children for modules, ports, child parts, and cables.
+semantic children for modules, ports, child parts, and cables, plus cable
+previews and keyboard traversal across virtual graph items.
 
 Owner-facing goal: SND should provide a professional retained graph surface for
 module/plugin pages: pan/zoom canvas, grid, module boxes, ports, cables,
@@ -22,6 +23,8 @@ Caller-owned state:
 - Node/module list, port list, cable list, selection, and model mutations.
 - `GraphViewport` pan/zoom values.
 - Context menu state and callbacks.
+- Cable preview/drop callbacks. The caller decides whether two ports can
+  connect and owns the actual graph mutation after a validated drop.
 - Optional `GraphSurfaceStyle` for backdrop, module chrome, pin shape/colors,
   and cable curve/thickness.
 - DSP/plugin graph state. UI helpers must not own or mutate audio graph policy.
@@ -34,6 +37,8 @@ GraphSurface-owned UI behavior:
   states, drag affordances, and drop previews through shared paint helpers.
 - Route gestures for panning, zooming, marquee selection, module dragging, port
   cable drags, and context menus.
+- Keep transient cable preview, focused graph item, hover, active, marquee, and
+  pan state in `GraphSurfaceState` without mutating caller-owned graph data.
 - Keep context menus anchored with retained menu placement. A recorded pointer
   coordinate without an actual anchored popup is not acceptable.
 
@@ -159,6 +164,9 @@ the graph painter for those choices.
 - Left click selects the top hit item.
 - Drag on a module body moves selected modules through caller callbacks.
 - Drag from a port starts a cable preview; drop validation is caller-owned.
+  `canConnect` answers whether the current target is valid, `onCablePreview`
+  receives the graph-space preview position, and `onConnect` fires only for a
+  validated port-to-port drop.
 - Click on a module child part performs that part's action or value interaction
   without falling through to module drag.
 - Drag empty surface creates a selection rectangle unless a pan modifier/mode is
@@ -169,6 +177,9 @@ the graph painter for those choices.
   `Action::OpenMenu`, not raw right-button down/up.
 - Escape cancels a drag, cable preview, or marquee before closing higher-level
   UI.
+- Arrow keys move the virtual graph focus through modules, ports, actionable
+  parts, and cables. Enter/Space activates the focused graph item via the same
+  callback path as pointer and semantic activation.
 
 Modifier policy should stay conservative and documented before it becomes shared
 library behavior.
@@ -188,6 +199,9 @@ Required minimum:
 - Ports expose labels, direction/type, and connection state.
 - Context actions have a keyboard/a11y fallback through `Action::OpenMenu`.
 - Keyboard navigation must have a path to modules and their important actions.
+- The current virtual graph focus is reflected in semantic child state so
+  native accessibility adapters can announce the same item the retained graph
+  surface will activate.
 
 Although cables remain draw-only, GraphSurface exposes cable state and context
 actions semantically when a cable is keyboard reachable.
@@ -258,6 +272,53 @@ struct GraphCable {
     bool muted = false;
     bool invalid = false;
 };
+
+enum class GraphHitKind {
+    None,
+    Surface,
+    NodeBody,
+    NodeTitle,
+    NodePart,
+    Port,
+    CableEndpoint,
+    Cable,
+};
+
+struct GraphHit {
+    GraphHitKind kind = GraphHitKind::None;
+    NodeId nodeId;
+    NodeId partId;
+    NodeId portId;
+    NodeId cableId;
+    Vec2 graphPosition;
+    bool output = false;
+};
+
+struct GraphSurfaceState {
+    GraphViewport viewport;
+    GraphHit focused;
+    GraphHit hovered;
+    GraphHit active;
+    bool panning = false;
+    bool marqueeActive = false;
+    Rect marquee;
+    bool cablePreviewActive = false;
+    GraphHit cablePreviewStart;
+    GraphHit cablePreviewTarget;
+    Vec2 cablePreviewPosition;
+    bool cablePreviewValid = false;
+};
+
+struct GraphSurfaceCallbacks {
+    std::function<void(const GraphHit&)> onSelect;
+    std::function<void(const GraphHit&)> onActivate;
+    std::function<void(const GraphHit&, Vec2 graphPosition)> onContextMenu;
+    std::function<void(const GraphHit&, Vec2 graphDelta)> onDrag;
+    std::function<bool(const GraphHit& fromPort, const GraphHit& toPort)> canConnect;
+    std::function<void(const GraphHit& fromPort, const GraphHit& toPort)> onConnect;
+    std::function<void(const GraphHit& fromPort, Vec2 graphPosition)> onCablePreview;
+    std::function<void(const GraphViewport&)> onViewportChanged;
+};
 ```
 
 The painter should receive either transformed screen-space points or one named
@@ -280,6 +341,8 @@ Selftests should cover:
 - Hit-test z order: port beats body, endpoint beats cable, module beats cable.
 - Anchored context menu state and semantic `OpenMenu` fallback.
 - Selection/marquee state without mutating caller-owned model directly.
+- Cable preview/drop validation without mutating caller-owned model directly.
+- Arrow-key traversal and semantic focused state for virtual graph items.
 - Module/port/child-part/cable semantics and validation of missing accessible
   names.
 
