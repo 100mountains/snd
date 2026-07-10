@@ -56,13 +56,16 @@ unsigned int createProgram()
         "}\n";
     const char* fragmentBody =
         "uniform sampler2D Texture;\n"
-        "uniform int UseTexture;\n"
+        "uniform int TextureMode;\n"
         "in vec2 Frag_UV;\n"
         "in vec4 Frag_Color;\n"
         "out vec4 Out_Color;\n"
         "void main() {\n"
-        "  float a = UseTexture != 0 ? texture(Texture, Frag_UV).r : 1.0;\n"
-        "  Out_Color = vec4(Frag_Color.rgb, Frag_Color.a * a);\n"
+        "  vec4 texel = TextureMode != 0 ? texture(Texture, Frag_UV) : vec4(1.0);\n"
+        "  if (TextureMode == 1)\n"
+        "    Out_Color = vec4(Frag_Color.rgb, Frag_Color.a * texel.r);\n"
+        "  else\n"
+        "    Out_Color = Frag_Color * texel;\n"
         "}\n";
     std::string vertexSource = std::string(glslVersion()) + vertexBody;
     std::string fragmentSource = std::string(glslVersion()) + fragmentBody;
@@ -167,7 +170,7 @@ bool OpenGLSurface::init()
     attribColor_ = glGetAttribLocation(program_, "Color");
     uniformTexture_ = glGetUniformLocation(program_, "Texture");
     uniformProjMtx_ = glGetUniformLocation(program_, "ProjMtx");
-    uniformUseTexture_ = glGetUniformLocation(program_, "UseTexture");
+    uniformTextureMode_ = glGetUniformLocation(program_, "TextureMode");
 
     glGenBuffers(1, &vbo_);
     glGenVertexArrays(1, &vao_);
@@ -223,7 +226,7 @@ void OpenGLSurface::endFrame()
 }
 
 void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
-                            bool textured, unsigned int texture)
+                            TextureMode textureMode, unsigned int texture)
 {
     if (program_ == 0 || vao_ == 0 || vbo_ == 0 || count <= 0 || !vertices)
         return;
@@ -241,9 +244,9 @@ void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
 
     glUseProgram(program_);
     glUniform1i(uniformTexture_, 0);
-    glUniform1i(uniformUseTexture_, textured ? 1 : 0);
+    glUniform1i(uniformTextureMode_, (int)textureMode);
     glUniformMatrix4fv(uniformProjMtx_, 1, GL_FALSE, &ortho[0][0]);
-    if (textured) {
+    if (textureMode != TextureMode::None) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture ? texture : fonts_.textureId());
     }
@@ -267,7 +270,7 @@ void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
     glDisableVertexAttribArray((unsigned int)attribColor_);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-    if (textured)
+    if (textureMode != TextureMode::None)
         glBindTexture(GL_TEXTURE_2D, 0);
     glUseProgram(0);
 }
@@ -285,20 +288,21 @@ void OpenGLSurface::image(TextureRef texture, Vec2 mn, Vec2 mx, Color tint,
         {mx.x, mx.y, uvMax.x, uvMax.y, tint},
         {mn.x, mx.y, uvMin.x, uvMax.y, tint},
     };
-    drawRaw(v, 6, (int)sizeof(StbFontAtlas::TextVertex), true,
+    drawRaw(v, 6, (int)sizeof(StbFontAtlas::TextVertex), TextureMode::Rgba,
             (unsigned int)texture);
 }
 
 void OpenGLSurface::drawSolid(const std::vector<Vertex>& vertices)
 {
-    drawRaw(vertices.data(), (int)vertices.size(), (int)sizeof(Vertex), false);
+    drawRaw(vertices.data(), (int)vertices.size(), (int)sizeof(Vertex),
+            TextureMode::None);
 }
 
 void OpenGLSurface::drawTextured(
     const std::vector<StbFontAtlas::TextVertex>& vertices)
 {
     drawRaw(vertices.data(), (int)vertices.size(),
-            (int)sizeof(StbFontAtlas::TextVertex), true);
+            (int)sizeof(StbFontAtlas::TextVertex), TextureMode::AlphaMask);
 }
 
 void OpenGLSurface::applyClip() const

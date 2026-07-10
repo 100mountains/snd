@@ -70,9 +70,16 @@ private:
         float y1 = 0.0f;
     };
 
+    enum class TextureMode {
+        None = 0,
+        AlphaMask = 1,
+        Rgba = 2,
+    };
+
     void drawSolid(const std::vector<Vertex>& vertices);
     void drawTextured(const std::vector<StbFontAtlas::TextVertex>& vertices);
-    void drawRaw(const void* vertices, int count, int stride, bool textured,
+    void drawRaw(const void* vertices, int count, int stride,
+                 TextureMode textureMode,
                  unsigned int texture = 0); // 0 = the font atlas
     void fillConvexPoly(const std::vector<Vec2>& points, Color color);
     void applyClip() const;
@@ -90,7 +97,7 @@ private:
     int attribColor_ = -1;
     int uniformTexture_ = -1;
     int uniformProjMtx_ = -1;
-    int uniformUseTexture_ = -1;
+    int uniformTextureMode_ = -1;
     Vec2 logicalSize_;
     int framebufferWidth_ = 0;
     int framebufferHeight_ = 0;
