@@ -1,6 +1,7 @@
 # Gooey Renderer Independence: The Draw-Surface Brief
 
-Status: approved action plan; implementation active under owner direction.
+Status: approved action plan; renderer surface and pure retained GL backend
+implemented, with visual QA still handled by app consumers.
 Author: Iris, UI Specialist (second thread).
 Inspected baseline: working tree, 2026-07-10 (post Round-3 landings).
 Reviewers: Calder (Software Architect), Lumen (Project Lead), owner.
@@ -99,10 +100,11 @@ independence.
 - **ImGuiSurface** (stage 1): wraps `ImDrawList*` + `ImFont*`. Immediate
   widgets construct it over `GetWindowDrawList()`; the retained
   `PaintRenderer` constructs it in `drawImGui`. Pixels byte-identical.
-- **Pure Gooey backend** (late stage): an OpenGL surface reusing SND's
-  existing GL context handling, with an stb_truetype font atlas over the SAME
-  embedded font data (`src/fonts/*.inc` + the base font). Note: ImGui itself
-  rasterizes through stb_truetype, so glyph metrics can match closely.
+- **Pure Gooey backend**: an OpenGL surface reusing SND's existing GL context
+  handling, with an stb_truetype font atlas over repo-owned TTF assets
+  (`third_party/fonts/ProggyClean.ttf`, Material Icons, and Lucide). Note:
+  ImGui itself rasterizes through stb_truetype, so glyph metrics can match
+  closely without using ImGui's font atlas or private headers.
 - **Recording/null surface** (cheap, high value): records ops for headless
   paint assertions in `--selftest` — pixel-free visual regression checks
   (op counts, rect coords, colours) with no GL at all.
@@ -164,7 +166,7 @@ documented, matching what ImGui provides today.
    on the ImGui backend; PaintRenderer also has a `draw::Surface` render
    overload for headless/non-ImGui painting. Palette stays `ImU32`-layout
    (`draw::Color`).
-3. **S2 — context purge (active; retained ImGui renderer now captures one
+3. **S2 — context purge (implemented; retained ImGui renderer now captures one
    `FrameContext` per render pass).** `FrameContext` threads
    font/size/time/pointer through PaintRenderer::render and paint helpers;
    delete the remaining render-time `ImGui::Get*` reads. `drawImGui` fills
@@ -177,11 +179,13 @@ documented, matching what ImGui provides today.
    buffer for surface/non-ImGui rendering. The ImGui `InputText` callback path
    remains as a compatibility adapter while existing ImDrawList canvas hooks
    are supported.
-5. **S4 — pure backend.** GL surface + stb_truetype atlas (dependency
-   decision point), Gooey window shell without an ImGui context, GLFW input
-   adapter.
-6. **S5 — proof.** Retained selftest runs the recording surface headless and
-   at least one example runs the pure GL backend end-to-end.
+5. **S4 — pure backend (implemented).** Private `OpenGLSurface`, private
+   stb_truetype atlas, public `snd::ui::retained::GlWindow` shell without an
+   ImGui context, and GLFW retained-event adapter.
+6. **S5 — proof (partially implemented).** Retained selftest runs the
+   recording surface headless. Visual/runtime QA for the pure GL backend still
+   needs a consumer example or owner-approved app run; build-only validation
+   covers compilation and linkage.
 
 ## Guardrails
 
@@ -207,8 +211,12 @@ documented, matching what ImGui provides today.
 - A retained tree renders through the ImGui backend byte-identical to today.
 - The same tree renders through the recording surface with no GL/ImGui in
   the process (selftest-provable).
+- The same SND-owned retained widgets can render through `GlWindow` without an
+  ImGui context, provided custom regions use `CanvasSurfaceDraw` /
+  `draw::Surface` painters.
 - bob2 builds unmodified after S1/S2 land.
-- No new dependency enters without the explicit stb vendoring approval.
+- `stb_truetype.h` is vendored unmodified under `third_party/stb` and used
+  only by the pure retained GL text atlas.
 
 ## Non-goals
 

@@ -1,0 +1,13 @@
+ProggyClean.ttf
+
+Author: Tristan Grimmer
+License: MIT
+Source: https://github.com/bluescan/proggyfonts
+
+SND vendors ProggyClean as the base text font for the pure retained OpenGL
+renderer. This matches Dear ImGui's 13 px default bitmap-style face closely
+enough for SND's current UI vocabulary while keeping the non-ImGui path on a
+repo-owned font asset.
+
+Dear ImGui's font documentation records the same provenance:
+"ProggyClean.ttf, by Tristan Grimmer" and "MIT License".

@@ -298,7 +298,8 @@ Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `envelopeEditor`, `canvas`, and `graphSurface`. Value controls use `ValueBinding`; the caller
 still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
 faders, drag numbers, XY pads, pattern grids, keyboards, menus, and envelope
-editors support retained pointer editing through the ImGui input bridge.
+editors support retained pointer editing through the ImGui input bridge or the
+pure retained GL window.
 Meters and LEDs can also use `ValueBinding` so a stable retained tree can
 display changing audio/UI state without recreating nodes. `xyPad` takes
 separate X/Y bindings, while `patternGrid` edits a caller-owned row-major bool
@@ -315,6 +316,28 @@ the tree, reserves the ImGui item rectangle, dispatches current mouse/keyboard
 input, and renders through the shared paint layer. If you wire the pieces
 manually, call `tree.refreshBoundValues()` before rendering or taking semantic
 snapshots whenever caller-owned model values may have changed.
+
+For a retained window with no ImGui context, include `snd/ui_retained_gl.h` and
+use `snd::ui::retained::GlWindow`:
+
+```cpp
+snd::ui::retained::GlWindow window;
+window.create(800, 600, "Retained UI");
+
+while (!window.shouldClose()) {
+    if (!window.beginFrame(tree, renderer))
+        break;
+    window.endFrame();
+}
+```
+
+`GlWindow::beginFrame` pumps GLFW input into retained events, refreshes
+caller-owned bindings, lays out the tree to the current window size, renders
+through `PaintRenderer::render(tree, draw::Surface&, FrameContext)`, and
+swaps in `endFrame`. This path supports SND-owned retained widgets and
+`CanvasSurfaceDraw` painters. Old `CanvasDraw` or custom painters that only
+use `ImDrawList*` remain ImGui-backend-only; give new custom retained regions
+a `draw::Surface&` painter when they should run everywhere.
 
 Use `canvas` for direct-to-screen animated regions such as waveforms, spectra,
 meters, playheads, and other views whose node should own layout, focus,
@@ -605,11 +628,11 @@ Use `VisualStyle::CanvasSurfaceDraw` or the `widgets::canvas(...)` overload
 taking `draw::Surface&` for new retained custom regions that should render
 without ImGui. `PaintRenderer::render(tree, surface, frameContext)` is the
 headless/non-ImGui render path; callers provide font refs, font size, time,
-and pointer through `draw::FrameContext`. The ImGui retained adapter captures
-the same frame context once per render pass. If a caller omits
-`FrameContext::fontSizePx`, retained rendering uses SND's 13 px reference size
-so headless/recording output still includes text. Old ImDrawList canvas
-callbacks stay valid on the ImGui backend.
+and pointer through `draw::FrameContext`. The ImGui retained adapter and
+`GlWindow` both capture the same frame context once per render pass. If a
+caller omits `FrameContext::fontSizePx`, retained rendering uses SND's 13 px
+reference size so headless/recording output still includes text. Old
+ImDrawList canvas callbacks stay valid on the ImGui backend.
 
 ## Widget reference
 
