@@ -60,7 +60,12 @@ prompt).
 the title bar yourself and drive the OS with:
 
 - `getPosition(x,y)` / `setPosition(x,y)` / `setSize(w,h)`
-- `minimize()` / `toggleMaximize()`
+- `minimize()`; `toggleMaximize()` / `isZoomed()` — zoom, not fullscreen:
+  fill the screen's working area keeping the app-drawn title bar (Mac
+  title-bar double-click behaviour), toggling restores the previous frame.
+- `toggleFullscreen()` / `isFullscreen()` — native fullscreen (a macOS
+  Space; monitor fullscreen elsewhere), no title bar while active: the
+  green-glyph behaviour.
 - `beginNativeDrag()` — call once when a mouse press lands on your title-bar
   area; the OS then drags the window (native and smooth on macOS/Windows).
 
@@ -493,7 +498,10 @@ right-click/context actions. Menu rows share one `MenuItem` model: `id`,
 `enabled`, `checked`, `rightText`, `danger`, and optional nested `children`.
 
 `MenuOptions` sets `width`, `itemHeight` (0 = defaults), and `iconFont` for
-the glyph column. The immediate `dropdownMenu` overload taking a
+the glyph column. `MenuItem::image` (a `loadSvgTexture`/`loadImageTexture`
+id, set by name — it is deliberately the last field) puts a texture icon in
+the icon column instead of a glyph, murk add-menu style; the texture must
+outlive the menu. The immediate `dropdownMenu` overload taking a
 `paint::OutlineButtonStyle` styles the combo face (square hardware-style wells,
 custom fills/borders) — the same passthrough the retained
 `widgets::dropdownMenu` offers. `MenuResult` reports `activated`, the row `index`, its
@@ -556,7 +564,25 @@ they do not inflate row/column layout while open.
 Graph UI starts from retained `widgets::graphSurface(...)`: the caller owns
 modules, ports, cables, selection, and DSP/plugin graph state; SND owns shared
 paint, viewport transforms, hit-region conventions, focus treatment, and
-context-menu routing. Use `GraphSurfaceState`, `GraphNode`, `GraphNodePart`,
+context-menu routing.
+
+Backdrops (`GraphSurfaceStyle::Backdrop`): `Flat`, `Grid` (SND's own),
+and the murk graph-page modes — `GreenGrid` (0xff04130b + fixed 38px
+screen-space grid at 0.09 alpha), `Mosaic` (58px drifting HSV facets with the
+diagonal split and 0.40 veil, murk `paintBackdrop` exact), and `Aurora` /
+`AuroraMosaic` (the FieldRenderer displaced-mesh field: 7-stop aurora
+palette, radial wave + noise displacement; AuroraMosaic adds the bright
+wireframe pass). The animated modes read the render-time clock.
+
+Double-click follows murk: on a module (`NodeBody`/`NodeTitle`/`NodePart`)
+fires `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)` (murk opens the
+node's editor); on empty canvas fires `onBackgroundDoubleClick(graphPos)` or
+— when unset — runs `fitGraphViewport(state, nodes, surfaceSize)` (murk
+`centreView`: bounds expanded 160x120, zoom clamped 0.45..1.25, centred),
+also callable directly for a "fit" action. `onContextMenu(hit, graphPos,
+surfacePos)` carries the pointer in surface-local coordinates so a consumer
+popup opens exactly under the cursor; the bound `PopupMenuState` is anchored
+there automatically. Use `GraphSurfaceState`, `GraphNode`, `GraphNodePart`,
 `GraphPort`, `GraphCable`, and optional `GraphSurfaceStyle` as the structured
 model. Cables are draw-only; module boxes are first-class graph items with stable child parts for readouts,
 meters, bypass/options/delete controls, status chips, and ports. Those parts
