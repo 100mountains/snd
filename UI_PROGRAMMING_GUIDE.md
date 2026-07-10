@@ -573,6 +573,15 @@ drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
 wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
 animated modes read the render-time clock.
 
+Five house skins ship as presets (`paint::GraphSkin`: `TechSquare`,
+`ClassicRounded`, `Blueprint`, `Console`, `Studio`).
+`paint::graphSkinStyle(skin)` returns the full node/pin/wire
+`GraphSurfaceStyle` and `paint::graphSkinName(skin)` its menu label; the
+backdrop is an independent choice, so pick a `Backdrop` mode and pair it with
+`paint::graphBackdropFill(mode)` / `graphBackdropName(mode)`. Building a
+skin/background picker is a loop over `paint::kGraphSkinCount` and the modes —
+consumers should not re-transcribe colour tables.
+
 Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
 `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an
 editor or inspector. Double-click on empty canvas fires

@@ -249,7 +249,11 @@ struct MenuOptions {
 struct MenuResult {
     bool activated = false;
     int index = -1;
+    // The activated item's id (its label when it has no id). Match on this.
     std::string id;
+    // Full open path to the item ("parent/child/leaf") — disambiguates equal
+    // ids under different submenus. NOT the item id; prefix checks against
+    // item ids must use `id`.
     std::string targetId;
 };
 

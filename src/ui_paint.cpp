@@ -2231,6 +2231,106 @@ void drawAuroraField(draw::Surface& surface, draw::Vec2 topLeft,
 
 } // namespace
 
+const char* graphSkinName(GraphSkin skin)
+{
+    switch (skin) {
+    case GraphSkin::TechSquare: return "Tech Square";
+    case GraphSkin::ClassicRounded: return "Classic Rounded";
+    case GraphSkin::Blueprint: return "Blueprint";
+    case GraphSkin::Console: return "Console";
+    case GraphSkin::Studio: return "Studio";
+    }
+    return "Tech Square";
+}
+
+GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
+{
+    // murk Bob GraphEditorPanel::specFor, byte-exact. The parts murk keeps
+    // constant across skins (selection amber, pin colours, wire weight) are
+    // set once here.
+    GraphSurfaceStyle s;
+    s.selectedBorder = IM_COL32(0xff, 0xc2, 0x4a, 0xff);
+    s.squarePins = true;
+    s.pinAudio = IM_COL32(0x7f, 0xd1, 0xae, 0xff);
+    s.pinMidi = IM_COL32(0xd9, 0x8a, 0xd9, 0xff);
+    s.pinControl = IM_COL32(0xe0, 0xb0, 0x20, 0xff);
+    s.wireThickness = 2.0f;
+    s.wireDroop = true;
+    switch (skin) {
+    case GraphSkin::TechSquare:
+        s.node = IM_COL32(0x1b, 0x1f, 0x25, 0xff);
+        s.header = IM_COL32(0x25, 0x2b, 0x33, 0xff);
+        s.border = IM_COL32(0x45, 0x4b, 0x55, 0xff);
+        s.text = IM_COL32(0xdf, 0xe6, 0xe2, 0xff);
+        s.accent = IM_COL32(0xff, 0x4d, 0x48, 0xff);
+        s.corner = 0.0f;
+        break;
+    case GraphSkin::ClassicRounded:
+        s.node = IM_COL32(0x24, 0x26, 0x2d, 0xff);
+        s.header = IM_COL32(0x30, 0x34, 0x3d, 0xff);
+        s.border = IM_COL32(0x55, 0x5c, 0x68, 0xff);
+        s.text = IM_COL32(0xf1, 0xf2, 0xee, 0xff);
+        s.accent = IM_COL32(0xff, 0x59, 0x4f, 0xff);
+        s.corner = 6.0f;
+        break;
+    case GraphSkin::Blueprint:
+        s.node = IM_COL32(0x10, 0x18, 0x20, 0xff);
+        s.header = IM_COL32(0x16, 0x29, 0x38, 0xff);
+        s.border = IM_COL32(0x2d, 0x6a, 0x82, 0xff);
+        s.text = IM_COL32(0xd8, 0xf5, 0xff, 0xff);
+        s.accent = IM_COL32(0x80, 0xd8, 0xff, 0xff);
+        s.corner = 0.0f;
+        break;
+    case GraphSkin::Console:
+        s.node = IM_COL32(0x10, 0x13, 0x0f, 0xff);
+        s.header = IM_COL32(0x18, 0x20, 0x16, 0xff);
+        s.border = IM_COL32(0x39, 0x51, 0x34, 0xff);
+        s.text = IM_COL32(0xdc, 0xf5, 0xd2, 0xff);
+        s.accent = IM_COL32(0x9b, 0xe5, 0x64, 0xff);
+        s.corner = 0.0f;
+        break;
+    case GraphSkin::Studio:
+        s.node = IM_COL32(0x20, 0x20, 0x20, 0xff);
+        s.header = IM_COL32(0x2b, 0x29, 0x26, 0xff);
+        s.border = IM_COL32(0x5a, 0x55, 0x4d, 0xff);
+        s.text = IM_COL32(0xf4, 0xed, 0xe0, 0xff);
+        s.accent = IM_COL32(0xd9, 0x5f, 0x43, 0xff);
+        s.corner = 3.0f;
+        break;
+    }
+    return s;
+}
+
+ImU32 graphBackdropFill(GraphSurfaceStyle::Backdrop mode)
+{
+    switch (mode) {
+    case GraphSurfaceStyle::Backdrop::Mosaic:
+    case GraphSurfaceStyle::Backdrop::Aurora:
+    case GraphSurfaceStyle::Backdrop::AuroraMosaic:
+        return IM_COL32(0x09, 0x0b, 0x11, 0xff); // murk mosaic/aurora base
+    case GraphSurfaceStyle::Backdrop::GreenGrid:
+        return IM_COL32(0x04, 0x13, 0x0b, 0xff);
+    case GraphSurfaceStyle::Backdrop::Flat:
+    case GraphSurfaceStyle::Backdrop::Grid:
+        return IM_COL32(0x0d, 0x0f, 0x14, 0xff);
+    }
+    return IM_COL32(0x0d, 0x0f, 0x14, 0xff);
+}
+
+const char* graphBackdropName(GraphSurfaceStyle::Backdrop mode)
+{
+    // murk's Bg menu labels; Grid is SND's own mode, named plainly.
+    switch (mode) {
+    case GraphSurfaceStyle::Backdrop::Aurora: return "Aurora";
+    case GraphSurfaceStyle::Backdrop::Mosaic: return "Mosaic";
+    case GraphSurfaceStyle::Backdrop::AuroraMosaic: return "Aurora Mosaic";
+    case GraphSurfaceStyle::Backdrop::GreenGrid: return "Green Grid (breathing)";
+    case GraphSurfaceStyle::Backdrop::Grid: return "Grid";
+    case GraphSurfaceStyle::Backdrop::Flat: return "Off";
+    }
+    return "Off";
+}
+
 void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
                    draw::Vec2 pan, float zoom, const Palette& pal,
                    const ControlState& state,

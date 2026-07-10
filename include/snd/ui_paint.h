@@ -125,6 +125,25 @@ struct GraphSurfaceStyle {
     ImU32 backdropFill = 0;
 };
 
+// murk's five node skins (Bob GraphEditorPanel::specFor), embedded as house
+// presets so consumers pick by name instead of re-transcribing colour tables.
+enum class GraphSkin {
+    TechSquare, // murk default
+    ClassicRounded,
+    Blueprint,
+    Console,
+    Studio,
+};
+inline constexpr int kGraphSkinCount = 5;
+const char* graphSkinName(GraphSkin skin); // murk's Skin menu label
+// Node/pin/wire style for a skin. Backdrop fields keep their defaults: murk
+// treats the canvas as an independent choice (its Bg menu) — pick a Backdrop
+// mode and pair it with graphBackdropFill().
+GraphSurfaceStyle graphSkinStyle(GraphSkin skin);
+// murk's Bg menu, per backdrop mode: base canvas colour and menu label.
+ImU32 graphBackdropFill(GraphSurfaceStyle::Backdrop mode);
+const char* graphBackdropName(GraphSurfaceStyle::Backdrop mode);
+
 ImU32 withAlpha(ImU32 c, uint32_t a);
 ImU32 mix(ImU32 a, ImU32 b, float t);
 ImVec4 toVec4(ImU32 c);
