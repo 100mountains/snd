@@ -500,8 +500,8 @@ right-click/context actions. Menu rows share one `MenuItem` model: `id`,
 `MenuOptions` sets `width`, `itemHeight` (0 = defaults), and `iconFont` for
 the glyph column. `MenuItem::image` (a `loadSvgTexture`/`loadImageTexture`
 id, set by name — it is deliberately the last field) puts a texture icon in
-the icon column instead of a glyph, murk add-menu style; the texture must
-outlive the menu. The immediate `dropdownMenu` overload taking a
+the icon column instead of a glyph; the texture must outlive the menu. The
+immediate `dropdownMenu` overload taking a
 `paint::OutlineButtonStyle` styles the combo face (square hardware-style wells,
 custom fills/borders) — the same passthrough the retained
 `widgets::dropdownMenu` offers. `MenuResult` reports `activated`, the row `index`, its
@@ -566,24 +566,24 @@ modules, ports, cables, selection, and DSP/plugin graph state; SND owns shared
 paint, viewport transforms, hit-region conventions, focus treatment, and
 context-menu routing.
 
-Backdrops (`GraphSurfaceStyle::Backdrop`): `Flat`, `Grid` (SND's own),
-and the murk graph-page modes — `GreenGrid` (0xff04130b + fixed 38px
-screen-space grid at 0.09 alpha), `Mosaic` (58px drifting HSV facets with the
-diagonal split and 0.40 veil, murk `paintBackdrop` exact), and `Aurora` /
-`AuroraMosaic` (the FieldRenderer displaced-mesh field: 7-stop aurora
-palette, radial wave + noise displacement; AuroraMosaic adds the bright
-wireframe pass). The animated modes read the render-time clock.
+Backdrops (`GraphSurfaceStyle::Backdrop`): `Flat`, `Grid`, `GreenGrid`
+(0xff04130b + fixed 38px screen-space grid at 0.09 alpha), `Mosaic` (58px
+drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
+`AuroraMosaic` (a displaced-mesh field with a 7-stop aurora palette, radial
+wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
+animated modes read the render-time clock.
 
-Double-click follows murk: on a module (`NodeBody`/`NodeTitle`/`NodePart`)
-fires `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)` (murk opens the
-node's editor); on empty canvas fires `onBackgroundDoubleClick(graphPos)` or
-— when unset — runs `fitGraphViewport(state, nodes, surfaceSize)` (murk
-`centreView`: bounds expanded 160x120, zoom clamped 0.45..1.25, centred),
-also callable directly for a "fit" action. `onContextMenu(hit, graphPos,
-surfacePos)` carries the pointer in surface-local coordinates so a consumer
-popup opens exactly under the cursor; the bound `PopupMenuState` is anchored
-there automatically. Use `GraphSurfaceState`, `GraphNode`, `GraphNodePart`,
-`GraphPort`, `GraphCable`, and optional `GraphSurfaceStyle` as the structured
+Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
+`GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an
+editor or inspector. Double-click on empty canvas fires
+`onBackgroundDoubleClick(graphPos)` or, when unset, runs
+`fitGraphViewport(state, nodes, surfaceSize)` with bounds expanded 160x120,
+zoom clamped 0.45..1.25, and centred; call the same helper directly for a
+"fit" action. `onContextMenu(hit, graphPos, surfacePos)` carries the pointer
+in surface-local coordinates so a consumer popup opens exactly under the
+cursor; the bound `PopupMenuState` is anchored there automatically. Use
+`GraphSurfaceState`, `GraphNode`, `GraphNodePart`, `GraphPort`, `GraphCable`,
+and optional `GraphSurfaceStyle` as the structured
 model. Cables are draw-only; module boxes are first-class graph items with stable child parts for readouts,
 meters, bypass/options/delete controls, status chips, and ports. Those parts
 have stable IDs, hit regions, and virtual semantic children even though the
