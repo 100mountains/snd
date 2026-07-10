@@ -481,6 +481,15 @@ bool Window::create(int width, int height, const std::string& title, bool decora
     impl->ctx = ImGui::CreateContext();
     ImGui::SetCurrentContext(impl->ctx);
     loadFonts(); // text + embedded Material/Lucide icon fonts (this context)
+
+    // SND style baseline: keyboard-nav cursor in the palette accent instead
+    // of ImGui's white ring, square popups. Apps can re-theme afterwards.
+    {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.Colors[ImGuiCol_NavCursor] =
+            paint::toVec4(paint::withAlpha(palette().accent, 0x90));
+        style.PopupRounding = 0.0f;
+    }
     ImGui::StyleColorsDark();
     ImGui_ImplGlfw_InitForOpenGL(impl->window, true);
     ImGui_ImplOpenGL3_Init(glslVersion);

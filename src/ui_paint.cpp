@@ -80,13 +80,13 @@ ImVec2 dirAt(float angle) { return ImVec2(std::cos(angle), std::sin(angle)); }
 void drawFocusRing(draw::Surface& surface, draw::Vec2 min, draw::Vec2 max,
                    const Palette& pal, float rounding, float expand)
 {
+    // One accent stroke, nothing else: no white ring, no second border. The
+    // caller's rounding is honoured so circular controls stay circular;
+    // rectangular controls draw square focus.
     const draw::Vec2 a{min.x - expand, min.y - expand};
     const draw::Vec2 b{max.x + expand, max.y + expand};
-    surface.strokeRect(a, b, withAlpha(pal.text, 0xD8), rounding + expand, 1.5f);
-    surface.strokeRect({a.x - 1.5f, a.y - 1.5f},
-                       {b.x + 1.5f, b.y + 1.5f},
-                       withAlpha(pal.accent, 0xB0),
-                       rounding + expand + 1.5f, 1.0f);
+    surface.strokeRect(a, b, withAlpha(pal.accent, 0xE0),
+                       rounding > 0.0f ? rounding + expand : 0.0f, 1.5f);
 }
 
 void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
