@@ -327,9 +327,14 @@ bool GlWindow::create(int width, int height, const std::string& title,
 
     std::string fontError;
     if (!impl_->fonts.build(&fontError))
+    {
+        destroy();
         return false;
-    if (!impl_->surface.init())
+    }
+    if (!impl_->surface.init()) {
+        destroy();
         return false;
+    }
     impl_->fonts.upload();
     return true;
 }
@@ -368,6 +373,26 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
     glfwPollEvents();
     snd::platform::processMainQueue();
     glfwMakeContextCurrent(impl_->window);
+
+    const Vec2 currentPointer = impl_->cursorLocal();
+    const Vec2 pointerDelta = impl_->pointerValid
+                                  ? Vec2{currentPointer.x - impl_->pointer.x,
+                                         currentPointer.y - impl_->pointer.y}
+                                  : Vec2{};
+    const bool hasQueuedMove =
+        std::any_of(impl_->events.begin(), impl_->events.end(),
+                    [](const Event& event) {
+                        return event.type == EventType::MouseMove;
+                    });
+    impl_->pointer = currentPointer;
+    impl_->pointerValid = true;
+    if (!hasQueuedMove) {
+        impl_->events.insert(impl_->events.begin(),
+                             impl_->pointerEvent(EventType::MouseMove,
+                                                 currentPointer, pointerDelta,
+                                                 MouseButton::None,
+                                                 impl_->mods()));
+    }
 
     int windowW = 0;
     int windowH = 0;
