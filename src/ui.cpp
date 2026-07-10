@@ -253,12 +253,17 @@ bool beginMenuPopup(const char* popupId, const std::vector<MenuItem>& items,
     ImGui::SetNextWindowSize(ImVec2(popupSize.x, 0.0f), ImGuiCond_Always);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 4.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+    // SND owns the whole menu look: square corners, exactly one border (the
+    // SND panel paint), and no ImGui keyboard-nav ring on rows.
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_NavCursor, ImVec4(0, 0, 0, 0));
     const bool open = ImGui::BeginPopup(
         popupId, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     if (!open) {
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(4);
     }
     return open;
 }
@@ -266,8 +271,8 @@ bool beginMenuPopup(const char* popupId, const std::vector<MenuItem>& items,
 void endMenuPopup()
 {
     ImGui::EndPopup();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
+    ImGui::PopStyleVar(4);
 }
 
 MenuResult drawMenuContents(const char* popupId, const std::vector<MenuItem>& items,

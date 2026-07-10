@@ -1391,10 +1391,10 @@ void drawMenuPanel(draw::Surface& surface, draw::Vec2 topLeft,
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
     surface.fillRect({topLeft.x + 2.0f, topLeft.y + 3.0f},
                      {mx.x + 2.0f, mx.y + 3.0f},
-                     IM_COL32(0, 0, 0, 110), 4.0f);
+                     IM_COL32(0, 0, 0, 110), 0.0f);
     surface.fillRect(topLeft, mx,
-                     mix(pal.frame, IM_COL32(0, 0, 0, 255), 0.18f), 4.0f);
-    surface.strokeRect(topLeft, mx, pal.frameBright, 4.0f);
+                     mix(pal.frame, IM_COL32(0, 0, 0, 255), 0.18f), 0.0f);
+    surface.strokeRect(topLeft, mx, pal.frameBright, 0.0f); // the one border
 }
 
 void drawMenuPanel(ImDrawList* dl, const ImVec2& topLeft,
@@ -1427,11 +1427,12 @@ void drawMenuItem(draw::Surface& surface, draw::FontRef font,
         fill = mix(visible(fill) ? fill : pal.frame, pal.frameBright, 0.72f);
     if (state.active && !state.disabled)
         fill = mix(visible(fill) ? fill : pal.frameBright, pal.accent, 0.32f);
+    // Keyboard focus reads as a stronger fill, not another border: menu rows
+    // carry exactly one visual (murk's filled highlight bar), square corners.
+    if (state.focused && !state.disabled)
+        fill = mix(visible(fill) ? fill : pal.frame, pal.accent, 0.30f);
     if (visible(fill))
-        surface.fillRect(topLeft, mx, fill, 3.0f);
-
-    if ((state.hovered || state.focused) && !state.disabled)
-        surface.strokeRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright, 3.0f);
+        surface.fillRect(topLeft, mx, fill, 0.0f);
 
     const float centerY = topLeft.y + size.y * 0.5f;
     const ImU32 hotCol = item.danger ? pal.meterHot : pal.accent;
