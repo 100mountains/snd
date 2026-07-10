@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <unordered_set>
@@ -460,6 +461,14 @@ Key mapKey(ImGuiKey key)
         return Key::Down;
     case ImGuiKey_Escape:
         return Key::Escape;
+    case ImGuiKey_Backspace:
+        return Key::Backspace;
+    case ImGuiKey_Delete:
+        return Key::Delete;
+    case ImGuiKey_Home:
+        return Key::Home;
+    case ImGuiKey_End:
+        return Key::End;
     default:
         return Key::Unknown;
     }
@@ -485,6 +494,27 @@ void fillModifiers(Event& event, const ImGuiIO& io)
     event.ctrl = io.KeyCtrl;
     event.alt = io.KeyAlt;
     event.super = io.KeySuper;
+}
+
+void appendUtf8(std::string& out, uint32_t codepoint)
+{
+    if (codepoint <= 0x7Fu) {
+        out.push_back((char)codepoint);
+    } else if (codepoint <= 0x7FFu) {
+        out.push_back((char)(0xC0u | (codepoint >> 6)));
+        out.push_back((char)(0x80u | (codepoint & 0x3Fu)));
+    } else if (codepoint <= 0xFFFFu) {
+        if (codepoint >= 0xD800u && codepoint <= 0xDFFFu)
+            return;
+        out.push_back((char)(0xE0u | (codepoint >> 12)));
+        out.push_back((char)(0x80u | ((codepoint >> 6) & 0x3Fu)));
+        out.push_back((char)(0x80u | (codepoint & 0x3Fu)));
+    } else if (codepoint <= 0x10FFFFu) {
+        out.push_back((char)(0xF0u | (codepoint >> 18)));
+        out.push_back((char)(0x80u | ((codepoint >> 12) & 0x3Fu)));
+        out.push_back((char)(0x80u | ((codepoint >> 6) & 0x3Fu)));
+        out.push_back((char)(0x80u | (codepoint & 0x3Fu)));
+    }
 }
 
 Event keyEvent(ImGuiKey key)
@@ -713,10 +743,21 @@ void installDragNumberPointerBehavior(Node& node, double dragSpeed)
 
 using ValueFieldBuffer = std::array<char, 64>;
 
-std::unordered_map<NodeId, ValueFieldBuffer>& valueFieldBuffers()
+struct ValueFieldEdit {
+    ValueFieldBuffer buffer{};
+    std::size_t cursor = 0;
+    bool selectAll = false;
+};
+
+std::unordered_map<NodeId, ValueFieldEdit>& valueFieldEdits()
 {
-    static std::unordered_map<NodeId, ValueFieldBuffer> buffers;
-    return buffers;
+    static std::unordered_map<NodeId, ValueFieldEdit> edits;
+    return edits;
+}
+
+ValueFieldBuffer& valueFieldBuffer(const NodeId& id)
+{
+    return valueFieldEdits()[id].buffer;
 }
 
 std::unordered_set<NodeId>& activeValueFields()
@@ -731,18 +772,21 @@ std::unordered_set<NodeId>& focusValueFields()
     return focus;
 }
 
-void beginValueFieldEdit(const Node& node)
+void beginValueFieldEdit(Node& node)
 {
-    ValueFieldBuffer& buf = valueFieldBuffers()[node.id()];
-    buf.fill(0);
+    ValueFieldEdit& edit = valueFieldEdits()[node.id()];
+    edit.buffer.fill(0);
     std::string text = nodeValueText(node, nullptr);
     if (text.empty()) {
         if (const ValueBinding* binding = node.valueBinding())
             text = formatBindingValue(*binding, readBinding(*binding));
     }
-    std::snprintf(buf.data(), buf.size(), "%s", text.c_str());
+    std::snprintf(edit.buffer.data(), edit.buffer.size(), "%s", text.c_str());
+    edit.cursor = std::strlen(edit.buffer.data());
+    edit.selectAll = true;
     activeValueFields().insert(node.id());
     focusValueFields().insert(node.id());
+    node.semantics().value.text = edit.buffer.data();
 }
 
 void cancelValueFieldEdit(const NodeId& id)
@@ -753,21 +797,102 @@ void cancelValueFieldEdit(const NodeId& id)
 
 bool commitValueFieldEdit(const NodeId& id, const ValueBinding& binding)
 {
-    auto it = valueFieldBuffers().find(id);
-    if (it == valueFieldBuffers().end())
+    auto it = valueFieldEdits().find(id);
+    if (it == valueFieldEdits().end())
         return false;
     char* end = nullptr;
-    const double parsed = std::strtod(it->second.data(), &end);
+    const double parsed = std::strtod(it->second.buffer.data(), &end);
     activeValueFields().erase(id);
     focusValueFields().erase(id);
-    if (end == it->second.data() || !binding.set)
+    if (end == it->second.buffer.data() || !binding.set)
         return false;
     return writeBinding(binding, parsed);
+}
+
+bool commitValueFieldEdit(Node& node)
+{
+    const ValueBinding* binding = node.valueBinding();
+    if (!binding)
+        return false;
+    const bool changed = commitValueFieldEdit(node.id(), *binding);
+    setBindingSemantics(node.semantics(), *binding);
+    return changed;
 }
 
 bool valueFieldEditing(const NodeId& id)
 {
     return activeValueFields().find(id) != activeValueFields().end();
+}
+
+void writeValueFieldText(const NodeId& id, const std::string& text,
+                         std::size_t cursor, bool selectAll = false)
+{
+    ValueFieldEdit& edit = valueFieldEdits()[id];
+    edit.buffer.fill(0);
+    std::snprintf(edit.buffer.data(), edit.buffer.size(), "%s", text.c_str());
+    edit.cursor = std::min(cursor, std::strlen(edit.buffer.data()));
+    edit.selectAll = selectAll;
+}
+
+bool insertValueFieldText(Node& node, const std::string& inserted)
+{
+    if (inserted.empty())
+        return false;
+    ValueFieldEdit& edit = valueFieldEdits()[node.id()];
+    std::string text = edit.buffer.data();
+    if (edit.selectAll) {
+        text.clear();
+        edit.cursor = 0;
+        edit.selectAll = false;
+    }
+    edit.cursor = std::min(edit.cursor, text.size());
+    const std::size_t capacity = edit.buffer.size() - 1;
+    const std::size_t available = capacity > text.size() ? capacity - text.size() : 0;
+    if (available == 0)
+        return true;
+    const std::string clipped = inserted.substr(0, available);
+    text.insert(edit.cursor, clipped);
+    writeValueFieldText(node.id(), text, edit.cursor + clipped.size());
+    node.semantics().value.text = valueFieldBuffer(node.id()).data();
+    return true;
+}
+
+bool eraseValueFieldSelectionOrChar(Node& node, bool beforeCursor)
+{
+    ValueFieldEdit& edit = valueFieldEdits()[node.id()];
+    std::string text = edit.buffer.data();
+    if (edit.selectAll) {
+        text.clear();
+        writeValueFieldText(node.id(), text, 0);
+        node.semantics().value.text = valueFieldBuffer(node.id()).data();
+        return true;
+    }
+    edit.cursor = std::min(edit.cursor, text.size());
+    if (beforeCursor) {
+        if (edit.cursor == 0)
+            return true;
+        text.erase(edit.cursor - 1, 1);
+        writeValueFieldText(node.id(), text, edit.cursor - 1);
+    } else {
+        if (edit.cursor >= text.size())
+            return true;
+        text.erase(edit.cursor, 1);
+        writeValueFieldText(node.id(), text, edit.cursor);
+    }
+    node.semantics().value.text = valueFieldBuffer(node.id()).data();
+    return true;
+}
+
+bool moveValueFieldCursor(Node& node, int direction)
+{
+    ValueFieldEdit& edit = valueFieldEdits()[node.id()];
+    const std::size_t len = std::strlen(edit.buffer.data());
+    edit.selectAll = false;
+    if (direction < 0)
+        edit.cursor = edit.cursor > 0 ? edit.cursor - 1 : 0;
+    else if (direction > 0)
+        edit.cursor = std::min(len, edit.cursor + 1);
+    return true;
 }
 
 void installValueFieldPointerBehavior(Node& node, double dragSpeed)
@@ -789,11 +914,47 @@ void installValueFieldPointerBehavior(Node& node, double dragSpeed)
             return true;
         }
 
-        if (event.type == EventType::KeyDown &&
-            event.key == Key::Escape && valueFieldEditing(n.id())) {
-            cancelValueFieldEdit(n.id());
-            return true;
+        if (event.type == EventType::KeyDown) {
+            if (valueFieldEditing(n.id())) {
+                if (!event.text.empty())
+                    return insertValueFieldText(n, event.text);
+                switch (event.key) {
+                case Key::Escape:
+                    cancelValueFieldEdit(n.id());
+                    return true;
+                case Key::Enter:
+                    commitValueFieldEdit(n);
+                    return true;
+                case Key::Left:
+                    return moveValueFieldCursor(n, -1);
+                case Key::Right:
+                    return moveValueFieldCursor(n, 1);
+                case Key::Backspace:
+                    return eraseValueFieldSelectionOrChar(n, true);
+                case Key::Delete:
+                    return eraseValueFieldSelectionOrChar(n, false);
+                case Key::Home:
+                    valueFieldEdits()[n.id()].cursor = 0;
+                    valueFieldEdits()[n.id()].selectAll = false;
+                    return true;
+                case Key::End: {
+                    ValueFieldEdit& edit = valueFieldEdits()[n.id()];
+                    edit.cursor = std::strlen(edit.buffer.data());
+                    edit.selectAll = false;
+                    return true;
+                }
+                default:
+                    return true;
+                }
+            }
+            if (event.key == Key::Enter || event.key == Key::Space) {
+                beginValueFieldEdit(n);
+                return true;
+            }
         }
+
+        if (event.type == EventType::TextInput && valueFieldEditing(n.id()))
+            return insertValueFieldText(n, event.text);
 
         if (event.type != EventType::MouseMove || !n.pressed() ||
             valueFieldEditing(n.id()))
@@ -2062,6 +2223,8 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
         ImGuiKey_Tab,        ImGuiKey_Enter,    ImGuiKey_KeypadEnter,
         ImGuiKey_Space,      ImGuiKey_LeftArrow, ImGuiKey_RightArrow,
         ImGuiKey_UpArrow,    ImGuiKey_DownArrow, ImGuiKey_Escape,
+        ImGuiKey_Backspace,  ImGuiKey_Delete,   ImGuiKey_Home,
+        ImGuiKey_End,
     };
     for (ImGuiKey key : keys) {
         if (ImGui::IsKeyPressed(key, false)) {
@@ -2071,12 +2234,14 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
         }
     }
     for (ImWchar ch : io.InputQueueCharacters) {
-        if (ch < 32 || ch > 126 || io.KeyCtrl || io.KeyAlt || io.KeySuper)
+        if (ch < 32 || io.KeyCtrl || io.KeyAlt || io.KeySuper)
             continue;
         Event event;
-        event.type = EventType::KeyDown;
+        event.type = EventType::TextInput;
         fillModifiers(event, io);
-        event.text.push_back((char)ch);
+        appendUtf8(event.text, (uint32_t)ch);
+        if (event.text.empty())
+            continue;
         consumed = tree.dispatch(event) || consumed;
     }
 
@@ -3987,7 +4152,7 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                                                  const paint::ControlState& state) mutable {
             const NodeId& id = node.id();
             if (valueFieldEditing(id)) {
-                ValueFieldBuffer& buf = valueFieldBuffers()[id];
+                ValueFieldBuffer& buf = valueFieldBuffer(id);
                 ImGui::SetCursorScreenPos(ImVec2(bounds.x + 1.0f, bounds.y + 1.0f));
                 ImGui::SetNextItemWidth(std::max(8.0f, bounds.w - 2.0f));
                 ImGui::PushID(id.c_str());
@@ -4022,7 +4187,7 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                 const NodeId& id = node.id();
                 std::string valueText;
                 if (valueFieldEditing(id)) {
-                    ValueFieldBuffer& buf = valueFieldBuffers()[id];
+                    ValueFieldBuffer& buf = valueFieldBuffer(id);
                     valueText = buf.data();
                 } else {
                     valueText = nodeValueText(node, nullptr);

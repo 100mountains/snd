@@ -209,6 +209,7 @@ enum class EventType {
     ContextMenu,
     KeyDown,
     KeyUp,
+    TextInput,
 };
 
 enum class MouseButton {
@@ -228,12 +229,22 @@ enum class Key {
     Up,
     Down,
     Escape,
+    Backspace,
+    Delete,
+    Home,
+    End,
 };
 
 struct Event {
     // Pointer coordinates are tree-local. Use clickCount >= 2 for
-    // double-click style gestures; delta, wheelDelta, and text are
-    // adapter-provided.
+    // double-click style gestures; delta, wheelDelta, key, modifiers, and text
+    // are adapter-provided.
+    //
+    // KeyDown/KeyUp carry physical/navigation key intent in key. TextInput is
+    // delivered separately to the focused node with committed UTF-8 in text;
+    // the string may contain one or more Unicode scalar values from IME or
+    // paste. Existing KeyDown text payloads remain valid for compatibility,
+    // but new backends should prefer TextInput for character insertion.
     EventType type = EventType::MouseMove;
     Vec2 position;
     Vec2 delta;

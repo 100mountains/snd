@@ -347,8 +347,10 @@ compact slider-like value row that edits horizontally; Shift-drag is fine
 adjustment and keyboard/semantic increments use `ValueBinding::step`.
 Use `widgets::valueField(id, name, binding, &renderer, size, style, dragSpeed)`
 for numeric fields that should drag horizontally and enter inline text edit on
-double-click. It owns the temporary UI edit buffer; the caller still owns the
-bound value.
+double-click or Enter/Space while focused. It owns the temporary UI edit
+buffer; the caller still owns the bound value. Text editing uses retained
+`EventType::TextInput` plus `KeyDown` for Enter, Escape, Backspace, Delete,
+Left/Right, Home, and End; non-ImGui hosts should emit the same events.
 Use `widgets::led(..., &renderer, radius, onColor)` when a retained LED needs
 the same radius or accent override as the immediate LED helper.
 Use `widgets::outlineButton(id, name, onActivate, &renderer, size, style,

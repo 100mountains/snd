@@ -1191,6 +1191,29 @@ static bool selftestRetainedUi()
     fieldDrag.type = r::EventType::MouseDown;
     fieldDrag.clickCount = 2;
     ok = ok && fieldTree.dispatch(fieldDrag);
+    r::Event fieldText;
+    fieldText.type = r::EventType::TextInput;
+    fieldText.text = "13";
+    ok = ok && fieldTree.dispatch(fieldText);
+    r::Event fieldKey;
+    fieldKey.type = r::EventType::KeyDown;
+    fieldKey.key = r::Key::Backspace;
+    ok = ok && fieldTree.dispatch(fieldKey);
+    fieldText.text = "35";
+    ok = ok && fieldTree.dispatch(fieldText);
+    fieldKey.key = r::Key::Left;
+    ok = ok && fieldTree.dispatch(fieldKey);
+    fieldKey.key = r::Key::Delete;
+    ok = ok && fieldTree.dispatch(fieldKey);
+    fieldKey.key = r::Key::End;
+    ok = ok && fieldTree.dispatch(fieldKey);
+    fieldText.text = "5";
+    ok = ok && fieldTree.dispatch(fieldText);
+    ok = ok && fieldTree.semanticNode("field.tempo", fieldSem) &&
+         fieldSem.value.text == "135";
+    fieldKey.key = r::Key::Enter;
+    ok = ok && fieldTree.dispatch(fieldKey) &&
+         std::abs(fieldValue - 135.0) < 0.0001;
 
     int externalCount = 2;
     int observedCount = externalCount;

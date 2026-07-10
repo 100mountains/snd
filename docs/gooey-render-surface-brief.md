@@ -169,7 +169,12 @@ documented, matching what ImGui provides today.
    font/size/time/pointer through PaintRenderer::render and paint helpers;
    delete the remaining render-time `ImGui::Get*` reads. `drawImGui` fills
    FrameContext from ImGui; a pure caller fills it from GLFW/clock.
-4. **S3 — text input.** `EventType::TextInput`, SND-owned valueField editor.
+4. **S3 — text input (implemented for retained events and valueField).**
+   `EventType::TextInput` carries UTF-8 committed text, navigation/editing
+   keys cover Backspace/Delete/Home/End, and `valueField` owns a retained edit
+   buffer for surface/non-ImGui rendering. The ImGui `InputText` callback path
+   remains as a compatibility adapter while existing ImDrawList canvas hooks
+   are supported.
 5. **S4 — pure backend.** GL surface + stb_truetype atlas (dependency
    decision point), Gooey window shell without an ImGui context, GLFW input
    adapter.

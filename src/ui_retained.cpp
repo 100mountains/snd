@@ -997,11 +997,16 @@ bool Tree::dispatch(const Event& event)
         return target && isInteractive(*target) && target->handleEvent(event);
     }
 
-    if (event.type != EventType::KeyDown && event.type != EventType::KeyUp)
+    const bool keyOrTextEvent = event.type == EventType::KeyDown ||
+                                event.type == EventType::KeyUp ||
+                                event.type == EventType::TextInput;
+    if (!keyOrTextEvent)
         return false;
 
     if (event.type == EventType::KeyDown && event.key == Key::Tab)
         return focusNext(event.shift);
+    if (event.type == EventType::TextInput && event.text.empty())
+        return false;
 
     Node* current = focused();
     if (!current)
@@ -1009,7 +1014,7 @@ bool Tree::dispatch(const Event& event)
     if (current->handleEvent(event))
         return true;
 
-    if (event.type == EventType::KeyUp)
+    if (event.type != EventType::KeyDown)
         return false;
 
     switch (event.key) {
