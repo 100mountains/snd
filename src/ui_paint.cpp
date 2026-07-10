@@ -2562,7 +2562,9 @@ void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
 }
 
 // Layered soft halo behind a node body, one tint per side (A left, B right);
-// each colour's own alpha is the peak.
+// each colour's own alpha is the peak. FILLED rects largest-first so the
+// overlap accumulates smoothly toward the body — strokes banded into
+// concentric rings (owner: "weird two border thing").
 void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
                   float corner, ImU32 glowA, ImU32 glowB)
 {
@@ -2570,16 +2572,14 @@ void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
     const auto halo = [&](ImU32 colour, float dx) {
         if ((colour & 0xFF000000u) == 0)
             return;
-        const float peak = (float)(colour >> 24);
-        for (int i = 1; i <= kLayers; ++i) {
-            const float t = (float)i / (kLayers + 1);
-            const float e = (float)i * 2.0f;
-            const auto alpha =
-                (uint32_t)(peak * (1.0f - t) * (1.0f - t) * 0.55f);
-            if (alpha == 0)
-                continue;
-            surface.strokeRect({a.x - e + dx, a.y - e}, {b.x + e + dx, b.y + e},
-                               withAlpha(colour, alpha), corner + e, 2.4f);
+        const auto alpha = (uint32_t)((float)(colour >> 24) /
+                                      ((float)kLayers * 1.8f));
+        if (alpha == 0)
+            return;
+        for (int i = kLayers; i >= 1; --i) {
+            const float e = (float)i * 2.2f;
+            surface.fillRect({a.x - e + dx, a.y - e}, {b.x + e + dx, b.y + e},
+                             withAlpha(colour, alpha), corner + e);
         }
     };
     halo(glowA, -2.5f);
@@ -2733,9 +2733,9 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         surface.fillTriangle({c.x, c.y - 5.0f}, {c.x - 5.0f, c.y + 4.0f},
                              {c.x + 5.0f, c.y + 4.0f}, pal.meterHot);
     }
-    if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, {topLeft.x + size.x, topLeft.y + size.y},
-                      pal, corner);
+    // No focus ring on module boxes (owner: it doubled the border and put a
+    // blue outer ring over Neo's rim). Keyboard focus reads through the
+    // selected border / rim spin, murk-style.
 }
 
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

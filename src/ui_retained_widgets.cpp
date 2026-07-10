@@ -1954,7 +1954,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
     case VisualKind::IconButton: {
-        const bool down = state.active || state.selected || checked(node, sem);
+        const bool down = state.active || state.selected || style.lit ||
+                          checked(node, sem);
         paint::drawTactileIconButton(drawList, iconFont(style.iconFont), topLeft(bounds),
                                      sizeOf(bounds), style.glyph.c_str(), pal, state,
                                      down, style.face);
@@ -2214,7 +2215,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
     case VisualKind::IconButton: {
-        const bool down = state.active || state.selected || checked(node, sem);
+        const bool down = state.active || state.selected || style.lit ||
+                          checked(node, sem);
         paint::drawTactileIconButton(surface, iconFontRef(style.iconFont, context),
                                      topLeftDraw(bounds), sizeOfDraw(bounds),
                                      style.glyph.c_str(), pal, state, down,
@@ -3491,18 +3493,21 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
             dl.AddRect(ImVec2(a.x + 2.0f, a.y + 2.0f),
                        ImVec2(b.x - 2.0f, b.y - 2.0f), inner, 0.0f);
         } else {
-            const auto sides = [&](ImVec2 lo, ImVec2 hi, ImU32 c) {
-                dl.AddLine(lo, ImVec2(hi.x, lo.y), c, 1.0f);
-                dl.AddLine(ImVec2(lo.x, hi.y), hi, c, 1.0f);
+            // owner: the socket keeps its "slightly darker border box" on the
+            // three closed sides (visible on any node fill), open outside
+            const ImU32 frame = paint::mix(col, IM_COL32(0, 0, 0, 255), 0.45f);
+            const auto sides = [&](ImVec2 lo, ImVec2 hi, ImU32 c, float t) {
+                dl.AddLine(lo, ImVec2(hi.x, lo.y), c, t);
+                dl.AddLine(ImVec2(lo.x, hi.y), hi, c, t);
                 if (flushEdge != 1)
-                    dl.AddLine(lo, ImVec2(lo.x, hi.y), c, 1.0f);
+                    dl.AddLine(lo, ImVec2(lo.x, hi.y), c, t);
                 if (flushEdge != 2)
-                    dl.AddLine(ImVec2(hi.x, lo.y), hi, c, 1.0f);
+                    dl.AddLine(ImVec2(hi.x, lo.y), hi, c, t);
             };
-            sides(a, b, outline);
+            sides(a, b, frame, 1.5f);
             sides(ImVec2(a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f),
                   ImVec2(b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f),
-                  inner);
+                  inner, 1.0f);
         }
     } else {
         const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
@@ -3538,17 +3543,21 @@ void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
             surface.strokeRect({a.x + 2.0f, a.y + 2.0f},
                                {b.x - 2.0f, b.y - 2.0f}, inner, 0.0f);
         } else {
-            const auto sides = [&](draw::Vec2 lo, draw::Vec2 hi, ImU32 c) {
-                surface.line(lo, {hi.x, lo.y}, c, 1.0f);
-                surface.line({lo.x, hi.y}, hi, c, 1.0f);
+            // owner: darker border box on the three closed sides, open outside
+            const ImU32 frame = paint::mix(col, IM_COL32(0, 0, 0, 255), 0.45f);
+            const auto sides = [&](draw::Vec2 lo, draw::Vec2 hi, ImU32 c,
+                                   float t) {
+                surface.line(lo, {hi.x, lo.y}, c, t);
+                surface.line({lo.x, hi.y}, hi, c, t);
                 if (flushEdge != 1)
-                    surface.line(lo, {lo.x, hi.y}, c, 1.0f);
+                    surface.line(lo, {lo.x, hi.y}, c, t);
                 if (flushEdge != 2)
-                    surface.line({hi.x, lo.y}, hi, c, 1.0f);
+                    surface.line({hi.x, lo.y}, hi, c, t);
             };
-            sides(a, b, outline);
+            sides(a, b, frame, 1.5f);
             sides({a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f},
-                  {b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f}, inner);
+                  {b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f}, inner,
+                  1.0f);
         }
     } else {
         const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
@@ -5046,8 +5055,9 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                 rectCenter(graphNode.bounds));
                 nodeHit.nodeId = graphNode.id;
                 paint::ControlState nodeState;
+                // murk: hover does NOT light the selected border (owner:
+                // Neo's rim was spinning up "sometimes" on mere hover)
                 nodeState.selected = graphNode.selected ||
-                                     state.hovered.nodeId == graphNode.id ||
                                      sameGraphHit(state.focused, nodeHit);
                 nodeState.hovered = state.hovered.nodeId == graphNode.id;
                 nodeState.focused = sameGraphHit(state.focused, nodeHit);
@@ -5213,8 +5223,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                     rectCenter(graphNode.bounds));
                     nodeHit.nodeId = graphNode.id;
                     paint::ControlState nodeState;
+                    // murk: hover does not light the selected border
                     nodeState.selected = graphNode.selected ||
-                                         state.hovered.nodeId == graphNode.id ||
                                          sameGraphHit(state.focused, nodeHit);
                     nodeState.hovered = state.hovered.nodeId == graphNode.id;
                     nodeState.focused = sameGraphHit(state.focused, nodeHit);
@@ -5412,16 +5422,18 @@ Node::Ptr animatedButton(NodeId id, std::string name,
 
 Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate,
-                     PaintRenderer* renderer, IconFont font)
+                     PaintRenderer* renderer, IconFont font, Vec2 size,
+                     bool lit)
 {
     NodeId sid = id;
     auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
-    node->setIntrinsicSize({30.0f, 30.0f});
+    node->setIntrinsicSize(size);
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::IconButton;
         style.glyph = std::move(glyph);
         style.iconFont = font;
+        style.lit = lit; // toggled transport-style buttons show the down face
         renderer->setStyle(sid, style);
     }
     return node;

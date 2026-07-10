@@ -46,6 +46,11 @@ public:
     // Render the ImGui frame and swap buffers.
     void endFrame();
 
+    // Vsync for this window's swap (default 1). An app driving several
+    // windows per frame sets 0 on the secondary ones so the waits don't
+    // stack (the primary window's vsync already paces the loop).
+    void setSwapInterval(int interval);
+
     // The GL clear behind everything the app draws (IM_COL32 packing).
     // Apps that paint their own chrome should set their canvas colour here so
     // padding/gaps don't show the library default.

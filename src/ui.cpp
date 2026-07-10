@@ -424,6 +424,7 @@ struct Window::Impl {
     int windowedX = 0, windowedY = 0; // frame to restore after fullscreen
     int windowedW = 0, windowedH = 0;
     float clearColor[3] = {0.10f, 0.10f, 0.12f}; // setClearColor overrides
+    int swapInterval = 1; // vsync; secondary windows set 0 so waits don't stack
 
     static void dropCallback(GLFWwindow* w, int count, const char** paths)
     {
@@ -541,6 +542,7 @@ bool Window::beginFrame()
 void Window::endFrame()
 {
     glfwMakeContextCurrent(impl->window);
+    glfwSwapInterval(impl->swapInterval);
     ImGui::SetCurrentContext(impl->ctx);
     ImGui::Render();
     int w, h;
@@ -551,6 +553,11 @@ void Window::endFrame()
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(impl->window);
+}
+
+void Window::setSwapInterval(int interval)
+{
+    impl->swapInterval = interval;
 }
 
 void Window::setClearColor(unsigned int rgba)

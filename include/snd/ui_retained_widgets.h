@@ -441,7 +441,8 @@ Node::Ptr animatedButton(NodeId id, std::string name,
 Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,
-                     IconFont font = IconFont::Material);
+                     IconFont font = IconFont::Material,
+                     Vec2 size = {30.0f, 30.0f}, bool lit = false);
 Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,
