@@ -51,6 +51,8 @@ public:
                      const char* end = nullptr) override;
     void pushClip(Vec2 min, Vec2 max, bool intersect) override;
     void popClip() override;
+    void image(TextureRef texture, Vec2 min, Vec2 max, Color tint,
+               Vec2 uvMin = {0.0f, 0.0f}, Vec2 uvMax = {1.0f, 1.0f}) override;
 
 private:
     struct Vertex {
@@ -70,7 +72,8 @@ private:
 
     void drawSolid(const std::vector<Vertex>& vertices);
     void drawTextured(const std::vector<StbFontAtlas::TextVertex>& vertices);
-    void drawRaw(const void* vertices, int count, int stride, bool textured);
+    void drawRaw(const void* vertices, int count, int stride, bool textured,
+                 unsigned int texture = 0); // 0 = the font atlas
     void fillConvexPoly(const std::vector<Vec2>& points, Color color);
     void applyClip() const;
     static Vertex makeVertex(Vec2 p, Color color,

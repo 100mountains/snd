@@ -56,6 +56,8 @@ public:
                      const char* end = nullptr) override;
     void pushClip(Vec2 min, Vec2 max, bool intersect) override;
     void popClip() override;
+    void image(TextureRef texture, Vec2 min, Vec2 max, Color tint,
+               Vec2 uvMin = {0.0f, 0.0f}, Vec2 uvMax = {1.0f, 1.0f}) override;
 
 private:
     ImDrawList* drawList_ = nullptr;

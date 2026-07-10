@@ -138,6 +138,17 @@ Vec2 RecordingSurface::measureText(FontRef, float sizePx, const char* begin,
     return {(float)len * sizePx * 0.5f, sizePx};
 }
 
+void RecordingSurface::image(TextureRef texture, Vec2 min, Vec2 max,
+                             Color tint, Vec2 uvMin, Vec2 uvMax)
+{
+    RecordedOp op;
+    op.name = "image";
+    op.points = {min, max, uvMin, uvMax};
+    op.colors = {tint};
+    op.text = std::to_string((unsigned long long)texture);
+    push(std::move(op));
+}
+
 void RecordingSurface::pushClip(Vec2 min, Vec2 max, bool intersect)
 {
     RecordedOp op;

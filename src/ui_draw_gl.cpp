@@ -223,7 +223,7 @@ void OpenGLSurface::endFrame()
 }
 
 void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
-                            bool textured)
+                            bool textured, unsigned int texture)
 {
     if (program_ == 0 || vao_ == 0 || vbo_ == 0 || count <= 0 || !vertices)
         return;
@@ -245,7 +245,7 @@ void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
     glUniformMatrix4fv(uniformProjMtx_, 1, GL_FALSE, &ortho[0][0]);
     if (textured) {
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, fonts_.textureId());
+        glBindTexture(GL_TEXTURE_2D, texture ? texture : fonts_.textureId());
     }
 
     glBindVertexArray(vao_);
@@ -270,6 +270,23 @@ void OpenGLSurface::drawRaw(const void* vertices, int count, int stride,
     if (textured)
         glBindTexture(GL_TEXTURE_2D, 0);
     glUseProgram(0);
+}
+
+void OpenGLSurface::image(TextureRef texture, Vec2 mn, Vec2 mx, Color tint,
+                          Vec2 uvMin, Vec2 uvMax)
+{
+    if (!texture)
+        return;
+    const StbFontAtlas::TextVertex v[6] = {
+        {mn.x, mn.y, uvMin.x, uvMin.y, tint},
+        {mx.x, mn.y, uvMax.x, uvMin.y, tint},
+        {mx.x, mx.y, uvMax.x, uvMax.y, tint},
+        {mn.x, mn.y, uvMin.x, uvMin.y, tint},
+        {mx.x, mx.y, uvMax.x, uvMax.y, tint},
+        {mn.x, mx.y, uvMin.x, uvMax.y, tint},
+    };
+    drawRaw(v, 6, (int)sizeof(StbFontAtlas::TextVertex), true,
+            (unsigned int)texture);
 }
 
 void OpenGLSurface::drawSolid(const std::vector<Vertex>& vertices)

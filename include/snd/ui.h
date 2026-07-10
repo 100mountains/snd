@@ -55,7 +55,15 @@ public:
     void setPosition(int x, int y);
     void setSize(int width, int height);
     void minimize();
+    // Zoom, not fullscreen: fill the screen's working area keeping the
+    // app-drawn title bar (the Mac title-bar double-click behaviour).
+    // Toggling restores the previous frame.
     void toggleMaximize();
+    bool isZoomed() const;
+    // Native fullscreen (a Space on macOS, monitor fullscreen elsewhere) --
+    // the green-glyph behaviour. No title bar while active.
+    void toggleFullscreen();
+    bool isFullscreen() const;
 
     // Hand an in-progress mouse-down to the OS as a window drag (call once
     // when the press lands on your custom title bar). Native and smooth on
@@ -213,6 +221,12 @@ struct MenuItem {
     bool danger = false;
     // Optional nested submenu rows. State remains in PopupMenuState.
     std::vector<MenuItem> children;
+    // Optional texture icon for the row (a loadSvgTexture/loadImageTexture
+    // id); when valid it takes the icon column instead of `icon`. The
+    // texture must outlive the menu. Deliberately the last field so every
+    // existing positional aggregate initializer keeps its meaning; set it by
+    // name (item.image = ...).
+    ImTextureID image = ImTextureID_Invalid;
 };
 
 struct PopupMenuState {
@@ -376,7 +390,7 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points,
 
 // 2D pad controlling two normalized values. Returns true while dragging.
 bool xyPad(const char* id, float* x, float* y, const ImVec2& size);
-// Custom-painted pad body (murk-style maps/pucks); SND keeps the drag,
+// Custom-painted pad body (custom maps/pucks); SND keeps the drag,
 // hit target, and focus ring, exactly as the knob/button painter hooks do.
 bool xyPad(const char* id, float* x, float* y, const ImVec2& size,
            const paint::XYPadPainter& painter);

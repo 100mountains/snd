@@ -3469,6 +3469,35 @@ GraphHit hitTestGraph(const GraphViewport& viewport,
     return makeGraphHit(GraphHitKind::Surface, graphPoint);
 }
 
+void fitGraphViewport(GraphSurfaceState& state,
+                      const std::vector<GraphNode>& nodes, Vec2 surfaceSize)
+{
+    if (nodes.empty()) {
+        state.viewport.zoom = 1.0f;
+        state.viewport.pan = {};
+        return;
+    }
+    float x0 = nodes.front().bounds.x, y0 = nodes.front().bounds.y;
+    float x1 = x0 + nodes.front().bounds.w, y1 = y0 + nodes.front().bounds.h;
+    for (const GraphNode& node : nodes) {
+        x0 = std::min(x0, node.bounds.x);
+        y0 = std::min(y0, node.bounds.y);
+        x1 = std::max(x1, node.bounds.x + node.bounds.w);
+        y1 = std::max(y1, node.bounds.y + node.bounds.h);
+    }
+    // Expand 160x120, zoom 0.45..1.25, centre in the surface.
+    x0 -= 160.0f; x1 += 160.0f;
+    y0 -= 120.0f; y1 += 120.0f;
+    const float bw = std::max(1.0f, x1 - x0);
+    const float bh = std::max(1.0f, y1 - y0);
+    const float fitX = surfaceSize.x > 0.0f ? surfaceSize.x / bw : 1.0f;
+    const float fitY = surfaceSize.y > 0.0f ? surfaceSize.y / bh : 1.0f;
+    const float zoom = std::clamp(std::min(fitX, fitY), 0.45f, 1.25f);
+    state.viewport.zoom = zoom;
+    state.viewport.pan = {surfaceSize.x * 0.5f - (x0 + bw * 0.5f) * zoom,
+                          surfaceSize.y * 0.5f - (y0 + bh * 0.5f) * zoom};
+}
+
 namespace widgets {
 
 Node::Ptr panel(NodeId id, Layout layout, Insets padding)
@@ -4301,8 +4330,11 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 contextMenu->highlightedIndex = -1;
                 contextMenu->position = ImVec2(anchor.x, anchor.y);
             }
-            if (callbacks.onContextMenu)
-                callbacks.onContextMenu(hit, hit.graphPosition);
+            if (callbacks.onContextMenu) {
+                const Rect nb = n.bounds();
+                callbacks.onContextMenu(hit, hit.graphPosition,
+                                        {anchor.x - nb.x, anchor.y - nb.y});
+            }
             return true;
         }
         if (action == Action::Activate) {
@@ -4329,7 +4361,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             contextMenu->position = ImVec2(pos.x, pos.y);
         }
         if (callbacks.onContextMenu)
-            callbacks.onContextMenu(state.hovered, state.hovered.graphPosition);
+            callbacks.onContextMenu(state.hovered, state.hovered.graphPosition,
+                                    local);
         return true;
     });
     node->setOnEvent([&state, &nodes, &cables, contextMenu, callbacks, graphStyle](
@@ -4398,6 +4431,30 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         if (event.type == EventType::MouseDown && event.button == MouseButton::Left) {
             state.active = updateHover();
             state.focused = state.active;
+            if (event.clickCount >= 2) {
+                // Double-click module surfaces and empty canvas without
+                // starting marquee or cable gestures.
+                if (state.active.kind == GraphHitKind::NodeBody ||
+                    state.active.kind == GraphHitKind::NodeTitle ||
+                    state.active.kind == GraphHitKind::NodePart) {
+                    if (callbacks.onNodeDoubleClicked)
+                        callbacks.onNodeDoubleClicked(state.active);
+                    return true;
+                }
+                if (state.active.kind == GraphHitKind::Surface ||
+                    state.active.kind == GraphHitKind::None) {
+                    const Vec2 g = screenToGraph(state.viewport, local);
+                    if (callbacks.onBackgroundDoubleClick) {
+                        callbacks.onBackgroundDoubleClick(g);
+                    } else {
+                        state.panning = false;
+                        fitGraphViewport(state, nodes, {b.w, b.h});
+                        if (callbacks.onViewportChanged)
+                            callbacks.onViewportChanged(state.viewport);
+                    }
+                    return true;
+                }
+            }
             if (graphPortHit(state.active)) {
                 state.cablePreviewActive = true;
                 state.cablePreviewStart = state.active;
@@ -4455,7 +4512,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 contextMenu->position = ImVec2(event.position.x, event.position.y);
             }
             if (callbacks.onContextMenu)
-                callbacks.onContextMenu(state.hovered, state.hovered.graphPosition);
+                callbacks.onContextMenu(state.hovered, state.hovered.graphPosition,
+                                        local);
             return true;
         }
 

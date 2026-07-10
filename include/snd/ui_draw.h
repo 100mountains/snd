@@ -22,6 +22,10 @@ struct FontRef {
     uintptr_t handle = 0;
 };
 
+// Opaque texture token (an snd::ui texture id, e.g. from loadSvgTexture /
+// loadImageTexture). 0 = invalid. Only backend adapters may interpret it.
+using TextureRef = uintptr_t;
+
 struct FrameContext {
     FontRef font;
     FontRef iconFontLucide;
@@ -88,6 +92,11 @@ public:
                              const char* end = nullptr) = 0;
     virtual void pushClip(Vec2 min, Vec2 max, bool intersect) = 0;
     virtual void popClip() = 0;
+    // Textured quad (menu row icons, decoded images). tint multiplies the
+    // texels; pass 0xFFFFFFFF to draw unmodified.
+    virtual void image(TextureRef texture, Vec2 min, Vec2 max, Color tint,
+                       Vec2 uvMin = {0.0f, 0.0f},
+                       Vec2 uvMax = {1.0f, 1.0f}) = 0;
 };
 
 } // namespace snd::ui::draw

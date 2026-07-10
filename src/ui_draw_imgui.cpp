@@ -172,6 +172,15 @@ void ImGuiSurface::pushClip(Vec2 min, Vec2 max, bool intersect)
         drawList_->PushClipRect(toImVec2(min), toImVec2(max), intersect);
 }
 
+void ImGuiSurface::image(TextureRef texture, Vec2 min, Vec2 max, Color tint,
+                         Vec2 uvMin, Vec2 uvMax)
+{
+    if (!drawList_ || !texture)
+        return;
+    drawList_->AddImage((ImTextureID)texture, toImVec2(min), toImVec2(max),
+                        toImVec2(uvMin), toImVec2(uvMax), tint);
+}
+
 void ImGuiSurface::popClip()
 {
     if (drawList_)

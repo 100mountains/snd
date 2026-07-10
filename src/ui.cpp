@@ -418,6 +418,8 @@ struct Window::Impl {
     GLFWwindow* window = nullptr;
     ImGuiContext* ctx = nullptr; // one ImGui context per window
     std::vector<std::string> droppedFiles;
+    int windowedX = 0, windowedY = 0; // frame to restore after fullscreen
+    int windowedW = 0, windowedH = 0;
 
     static void dropCallback(GLFWwindow* w, int count, const char** paths)
     {
@@ -579,7 +581,11 @@ void Window::minimize()
 }
 
 #if defined(__APPLE__)
-void nativeDragImpl(GLFWwindow* window); // ui_mac.mm
+void nativeDragImpl(GLFWwindow* window);        // ui_mac.mm
+void macToggleZoomImpl(GLFWwindow* window);     // ui_mac.mm
+bool macIsZoomedImpl(GLFWwindow* window);       // ui_mac.mm
+void macToggleFullscreenImpl(GLFWwindow* window); // ui_mac.mm
+bool macIsFullscreenImpl(GLFWwindow* window);   // ui_mac.mm
 #endif
 
 void Window::beginNativeDrag()
@@ -600,10 +606,59 @@ void Window::toggleMaximize()
 {
     if (!impl->window)
         return;
+#if defined(__APPLE__)
+    macToggleZoomImpl(impl->window); // borderless Cocoa: GLFW maximize no-ops
+#else
     if (glfwGetWindowAttrib(impl->window, GLFW_MAXIMIZED))
         glfwRestoreWindow(impl->window);
     else
         glfwMaximizeWindow(impl->window);
+#endif
+}
+
+bool Window::isZoomed() const
+{
+    if (!impl->window)
+        return false;
+#if defined(__APPLE__)
+    return macIsZoomedImpl(impl->window);
+#else
+    return glfwGetWindowAttrib(impl->window, GLFW_MAXIMIZED) != 0;
+#endif
+}
+
+void Window::toggleFullscreen()
+{
+    if (!impl->window)
+        return;
+#if defined(__APPLE__)
+    macToggleFullscreenImpl(impl->window);
+#else
+    if (glfwGetWindowMonitor(impl->window)) {
+        glfwSetWindowMonitor(impl->window, nullptr, impl->windowedX,
+                             impl->windowedY, impl->windowedW,
+                             impl->windowedH, 0);
+    } else {
+        glfwGetWindowPos(impl->window, &impl->windowedX, &impl->windowedY);
+        glfwGetWindowSize(impl->window, &impl->windowedW, &impl->windowedH);
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        if (mode)
+            glfwSetWindowMonitor(impl->window, monitor, 0, 0, mode->width,
+                                 mode->height, mode->refreshRate);
+    }
+#endif
+}
+
+bool Window::isFullscreen() const
+{
+    if (!impl->window)
+        return false;
+#if defined(__APPLE__)
+    return macIsFullscreenImpl(impl->window);
+#else
+    return glfwGetWindowMonitor(impl->window) != nullptr;
+#endif
 }
 
 std::vector<std::string> Window::takeDroppedFiles()

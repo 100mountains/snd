@@ -175,13 +175,18 @@ Composable gradient primitives live alongside the widget painters:
 rect with a vertical gradient (ImDrawList has no rounded multi-colour rect),
 and `paint::drawGradientArc(center, radius, a0, a1, colStart, colEnd,
 thickness, segments)` strokes a two-colour arc sampled per segment — the
-murk-style panel bodies and gradient value arcs custom painters need. Shared
+hardware-style panel bodies and gradient value arcs custom painters need. Shared
 paint helpers keep existing `ImDrawList*` overloads and add
 `draw::Surface&` overloads where the body is renderer-neutral. The neutral
 surface supports per-corner rounded rectangles through masks such as
 `draw::kRoundCornersTop` and `draw::kRoundCornersBottom`, so surface-only
 painters can match keys, tabs, title strips, and module chrome without falling
 back to ImDrawList flags.
+`draw::Surface::image(texture, min, max, tint, uvMin, uvMax)` draws decoded
+texture quads through the same renderer seam. Use it for menu row thumbnails,
+SVG/PNG-backed icons, and custom painter imagery; the caller owns the texture
+lifetime and should pass an SND texture id from `loadSvgTexture`,
+`loadImageTexture`, or `loadTextureRGBA`.
 
 Widget layers must provide accessibility semantics. Icon-only controls need an
 accessible name and action; sliders/knobs/faders need range, value, value text,
@@ -192,7 +197,7 @@ must be hidden or marked as non-interactive status.
 
 Include `snd/ui_paint.h` when you want to skin a control body without
 forking SND interaction. Four hooks share the contract: `paint::KnobPainter`,
-`paint::ButtonPainter`, `paint::XYPadPainter` (murk-style maps/pucks over the
+`paint::ButtonPainter`, `paint::XYPadPainter` (custom maps/pucks over the
 standard two-axis drag), and `paint::PatternCellPainter` (per-cell bodies —
 velocity gradients, spans, chips — while SND keeps the grid frame, playhead
 tint, drag-paint interaction, border, and focus). Each draws only from its
@@ -261,7 +266,7 @@ auto cutoff = w::knob("cutoff", "Cutoff", binding,
 
 ### Randomise windows (ghost fences)
 
-`paint::KnobWindow{lo, hi, locked}` is the murk GhostOverlay pattern: an
+`paint::KnobWindow{lo, hi, locked}` is a ghost-fence overlay pattern: an
 independent randomise window per control, value-independent at both ends —
 which is why it is not `KnobMod` (one signed depth anchored to the current
 value). SND ships the drawing and the pure hit-tests; the caller owns the
@@ -484,12 +489,12 @@ outside clicks.
 
 Use SND menu primitives for action lists, dropdown/select controls, and
 right-click/context actions. Menu rows share one `MenuItem` model: `id`,
-`label`, optional icon glyph, `separator`, `enabled`, `checked`,
-`rightText`, `danger`, and optional nested `children`.
+`label`, optional icon glyph, optional texture `image`, `separator`,
+`enabled`, `checked`, `rightText`, `danger`, and optional nested `children`.
 
 `MenuOptions` sets `width`, `itemHeight` (0 = defaults), and `iconFont` for
 the glyph column. The immediate `dropdownMenu` overload taking a
-`paint::OutlineButtonStyle` styles the combo face (square murk-style wells,
+`paint::OutlineButtonStyle` styles the combo face (square hardware-style wells,
 custom fills/borders) — the same passthrough the retained
 `widgets::dropdownMenu` offers. `MenuResult` reports `activated`, the row `index`, its
 `id`, and — for nested rows — `targetId`, the full path of the activated

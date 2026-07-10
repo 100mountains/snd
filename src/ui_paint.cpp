@@ -297,7 +297,7 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
     const bool hot = !state.disabled && (state.hovered || state.active);
 
     if (style == KnobStyle::Ring || style == KnobStyle::Seq) {
-        // Butt-capped background ring + accent value sweep (murk's SEQ RingKnobLnf).
+        // Butt-capped background ring + accent value sweep.
         // Ring adds a thumb dot at the value; Seq is the pure flat-ended sweep.
         const float lineW = std::min(5.0f, radius * 0.42f);
         const float rr = radius - lineW * 0.5f - 1.0f;
@@ -316,8 +316,8 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
                                hot ? IM_COL32(255, 255, 255, 255) : accent);
         }
     } else if (style == KnobStyle::Synth) {
-        // murk's FlatLnf synth knob: dished disc + faint track ring + accent value
-        // arc + a single white pointer tick.
+        // Synth knob: dished disc + faint track ring + accent value arc + a
+        // single white pointer tick.
         surface.fillCircle({c.x, c.y + 1.5f}, radius,
                            IM_COL32(0, 0, 0, 90)); // shadow
         surface.fillCircle(c, radius,
@@ -345,8 +345,8 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
         if (hot)
             surface.fillCircle(c, radius - 2.0f, withAlpha(accent, 0x1A));
     } else if (style == KnobStyle::Nxd) {
-        // murk's AID/NxD scalloped knob: a 12-scallop outer case that rotates with
-        // the value, an inner face, a rotating tick ring, and a bold pointer.
+        // Scalloped knob: a 12-scallop outer case that rotates with the value,
+        // an inner face, a rotating tick ring, and a bold pointer.
         const float outerR = radius, innerR = outerR * 0.83f;
         const int tickCount = 12, samplesPerScallop = 10;
         const float tickStep = 6.2831853f / (float)tickCount;
@@ -573,7 +573,7 @@ int knobWindowHitEnd(const ImVec2& topLeft, float size, const KnobWindow& win,
         return -1;
 
     // Press angle -> 0..1 along the knob sweep; outside the sweep snaps to
-    // the nearer endpoint (murk knobProp semantics).
+    // the nearer endpoint.
     constexpr float twoPi = 6.28318531f;
     const ImVec2 c(topLeft.x + size * 0.5f, topLeft.y + size * 0.5f);
     float ang = std::atan2(pressPos.y - c.y, pressPos.x - c.x);
@@ -1449,7 +1449,17 @@ void drawMenuItem(draw::Surface& surface, draw::FontRef font,
                              {topLeft.x + 8.0f, centerY + 5.0f}, accent);
     }
 
-    if (!item.icon.empty()) {
+    const bool hasImage = item.image != ImTextureID_Invalid;
+    if (hasImage) {
+        // Texture icon: per-row SVG/PNG image.
+        const float side = std::min(size.y - 6.0f, 18.0f);
+        const float ix = topLeft.x + 26.0f;
+        const float iy = topLeft.y + (size.y - side) * 0.5f;
+        surface.image((draw::TextureRef)item.image, {ix, iy},
+                      {ix + side, iy + side},
+                      state.disabled ? IM_COL32(255, 255, 255, 128)
+                                     : IM_COL32(255, 255, 255, 255));
+    } else if (!item.icon.empty()) {
         const draw::FontRef glyphFont = iconFont.handle ? iconFont : font;
         const float iconSize = fontSizePx;
         draw::Vec2 glyphSize = surface.measureText(glyphFont, iconSize,
@@ -1461,7 +1471,8 @@ void drawMenuItem(draw::Surface& surface, draw::FontRef font,
                          state.disabled ? pal.textDim : accent, item.icon.c_str());
     }
 
-    const float textX = topLeft.x + (item.icon.empty() ? 30.0f : 50.0f);
+    const float textX = topLeft.x +
+                        (item.icon.empty() && !hasImage ? 30.0f : 50.0f);
     const char* label = item.label.c_str();
     draw::Vec2 labelSize = surface.measureText(font, fontSizePx, label);
     const bool hasSubmenu = !item.children.empty();
@@ -2079,6 +2090,147 @@ void graphCableControls(const ImVec2& from, const ImVec2& to,
 
 } // namespace
 
+namespace {
+
+// Aurora field noise, ported from a compact shader-style gradient noise:
+// hash2(p) = fract(sin([dot(p,(127.1,311.7)), dot(p,(269.5,183.3))])*43758.5453123)*2-1
+void fieldHash2(float px, float py, float& hx, float& hy)
+{
+    const float d1 = px * 127.1f + py * 311.7f;
+    const float d2 = px * 269.5f + py * 183.3f;
+    const float s1 = std::sin(d1) * 43758.5453123f;
+    const float s2 = std::sin(d2) * 43758.5453123f;
+    hx = (s1 - std::floor(s1)) * 2.0f - 1.0f;
+    hy = (s2 - std::floor(s2)) * 2.0f - 1.0f;
+}
+
+float fieldNoise(float px, float py)
+{
+    const float ix = std::floor(px), iy = std::floor(py);
+    const float fx = px - ix, fy = py - iy;
+    const float ux = fx * fx * fx * (fx * (fx * 6.0f - 15.0f) + 10.0f);
+    const float uy = fy * fy * fy * (fy * (fy * 6.0f - 15.0f) + 10.0f);
+    float hx, hy;
+    fieldHash2(ix, iy, hx, hy);
+    const float a = hx * fx + hy * fy;
+    fieldHash2(ix + 1.0f, iy, hx, hy);
+    const float b = hx * (fx - 1.0f) + hy * fy;
+    fieldHash2(ix, iy + 1.0f, hx, hy);
+    const float c = hx * fx + hy * (fy - 1.0f);
+    fieldHash2(ix + 1.0f, iy + 1.0f, hx, hy);
+    const float d = hx * (fx - 1.0f) + hy * (fy - 1.0f);
+    const float m0 = a + (b - a) * ux;
+    const float m1 = c + (d - c) * ux;
+    return m0 + (m1 - m0) * uy;
+}
+
+// Aurora palette, cycled by fp in 0..6.
+ImU32 fieldStopColor(float fp, float k)
+{
+    static const float kStops[7][3] = {
+        {124, 96, 214}, {176, 104, 196}, {214, 120, 160}, {236, 172, 146},
+        {120, 140, 214}, {86, 96, 184}, {124, 96, 214}};
+    const int n = std::clamp((int)fp, 0, 5);
+    const float f = std::clamp(fp - (float)n, 0.0f, 1.0f);
+    float rgb[3];
+    for (int i = 0; i < 3; ++i) {
+        const float base = (kStops[n][i] + (kStops[n + 1][i] - kStops[n][i]) * f) / 255.0f;
+        rgb[i] = std::min(1.0f, base * k);
+    }
+    return IM_COL32((int)(rgb[0] * 255.0f), (int)(rgb[1] * 255.0f),
+                    (int)(rgb[2] * 255.0f), 255);
+}
+
+// Displaced field mesh drawn as flat facets on the Surface. AuroraMosaic adds
+// the bright wireframe pass; Aurora subdivides for a smoother field.
+void drawAuroraField(draw::Surface& surface, draw::Vec2 topLeft,
+                     draw::Vec2 size, double timeSeconds, bool mosaicFacets)
+{
+    const float w = size.x, h = size.y;
+    const float t = (float)timeSeconds;
+    float cell = std::max(34.0f, std::min(w, h) / 8.0f);
+    if (!mosaicFacets)
+        cell *= 0.5f; // finer facets stand in for GL per-vertex smoothness
+    const float amp = cell * (mosaicFacets ? 0.34f : 0.68f);
+    const float pulse = cell * (mosaicFacets ? 0.4f : 0.8f);
+    const float x0 = -cell, y0 = -cell;
+    const int cols = (int)std::ceil((w + cell * 2.0f) / cell) + 1;
+    const int rows = (int)std::ceil((h + cell * 2.0f) / cell) + 1;
+    if (cols < 2 || rows < 2 || cols * rows > 8192)
+        return;
+    const float sx = (w + cell * 2.0f) / (float)(cols - 1);
+    const float sy = (h + cell * 2.0f) / (float)(rows - 1);
+    const float originX = w * 0.5f, originY = h * 0.5f;
+    const float waveBright = mosaicFacets ? 0.22f : 0.07f;
+
+    auto waveAt = [&](float bx, float by) {
+        const float dx = bx - originX, dy = by - originY;
+        const float dist = std::sqrt(dx * dx + dy * dy) + 1e-3f;
+        return std::sin(dist * 0.012f - t) * std::exp(-dist * 0.0016f);
+    };
+    auto displace = [&](float bx, float by, float& ox, float& oy) {
+        const float dx = bx - originX, dy = by - originY;
+        const float dist = std::sqrt(dx * dx + dy * dy) + 1e-3f;
+        const float wv = std::sin(dist * 0.012f - t) * std::exp(-dist * 0.0016f);
+        const float nx = fieldNoise(bx * 0.002f, by * 0.002f + t * 0.05f);
+        const float ny = fieldNoise(bx * 0.002f + 11.3f, by * 0.002f + t * 0.05f);
+        ox = bx + nx * amp + (dx / dist) * wv * pulse;
+        oy = by + ny * amp + (dy / dist) * wv * pulse;
+    };
+    auto facetColor = [&](float sx0, float sy0) {
+        float px, py;
+        displace(sx0, sy0, px, py);
+        float fp = (px + py) / (w + h) * 0.5f + t * 0.012f;
+        fp = (fp - std::floor(fp)) * 6.0f;
+        const float wv = waveAt(sx0, sy0);
+        const float k = std::clamp(1.0f + wv * waveBright, 0.55f, 1.3f);
+        return fieldStopColor(fp, k);
+    };
+
+    std::vector<draw::Vec2> pts((size_t)cols * (size_t)rows);
+    for (int j = 0; j < rows; ++j)
+        for (int i = 0; i < cols; ++i) {
+            float px, py;
+            displace(x0 + (float)i * sx, y0 + (float)j * sy, px, py);
+            pts[(size_t)j * cols + i] = {topLeft.x + px, topLeft.y + py};
+        }
+
+    for (int j = 0; j + 1 < rows; ++j) {
+        for (int i = 0; i + 1 < cols; ++i) {
+            const draw::Vec2 a = pts[(size_t)j * cols + i];
+            const draw::Vec2 b = pts[(size_t)j * cols + i + 1];
+            const draw::Vec2 c = pts[(size_t)(j + 1) * cols + i];
+            const draw::Vec2 e = pts[(size_t)(j + 1) * cols + i + 1];
+            const float bx = x0 + (float)i * sx, by = y0 + (float)j * sy;
+            // seed at each triangle's centroid (mosaicBase semantics)
+            surface.fillTriangle(a, b, c,
+                                 facetColor(bx + sx / 3.0f, by + sy / 3.0f));
+            surface.fillTriangle(b, e, c,
+                                 facetColor(bx + sx * 2.0f / 3.0f,
+                                            by + sy * 2.0f / 3.0f));
+        }
+    }
+
+    if (mosaicFacets) { // AuroraMosaic wireframe pass (u_linecol * 3.2 factor)
+        const ImU32 wire = IM_COL32(184, 204, 245, 0x83);
+        for (int j = 0; j + 1 < rows; ++j) {
+            for (int i = 0; i + 1 < cols; ++i) {
+                const draw::Vec2 a = pts[(size_t)j * cols + i];
+                const draw::Vec2 b = pts[(size_t)j * cols + i + 1];
+                const draw::Vec2 c = pts[(size_t)(j + 1) * cols + i];
+                const draw::Vec2 e = pts[(size_t)(j + 1) * cols + i + 1];
+                surface.line(a, b, wire, 1.0f);
+                surface.line(a, c, wire, 1.0f);
+                surface.line(b, c, wire, 1.0f);
+                surface.line(b, e, wire, 1.0f);
+                surface.line(e, c, wire, 1.0f);
+            }
+        }
+    }
+}
+
+} // namespace
+
 void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
                    draw::Vec2 pan, float zoom, const Palette& pal,
                    const ControlState& state,
@@ -2087,30 +2239,63 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
     const ImU32 defaultFill = mix(IM_COL32(0, 0, 0, 255), pal.frame, 0.72f);
     const ImU32 flatFill = graphColor(style.backdropFill, defaultFill);
+    const bool aurora = style.backdrop == GraphSurfaceStyle::Backdrop::Aurora ||
+                        style.backdrop == GraphSurfaceStyle::Backdrop::AuroraMosaic;
     surface.fillRect(topLeft, mx,
                      style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
                          ? graphColor(style.backdropFill, IM_COL32(4, 19, 11, 255))
                      : style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic
                          ? graphColor(style.backdropFill, IM_COL32(9, 11, 17, 255))
+                     : aurora
+                         ? graphColor(style.backdropFill, IM_COL32(10, 14, 34, 255))
                          : flatFill,
                      style.corner);
     if (size.x <= 0.0f || size.y <= 0.0f)
         return;
 
+    if (aurora) {
+        // Animated field backdrop, then a legibility veil over the graph.
+        surface.pushClip(topLeft, mx, true);
+        drawAuroraField(surface, topLeft, size, timeSeconds,
+                        style.backdrop ==
+                            GraphSurfaceStyle::Backdrop::AuroraMosaic);
+        surface.popClip();
+        surface.fillRect(topLeft, mx, IM_COL32(0, 0, 0, 102), style.corner);
+        surface.strokeRect(topLeft, mx,
+                           state.focused ? pal.accent : pal.frameBright,
+                           style.corner);
+        if (state.focused && !state.disabled)
+            drawFocusRing(surface, topLeft, mx, pal, style.corner);
+        return;
+    }
+
     if (style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic) {
+        // Faceted graph backdrop: 58px cells,
+        // hue 0.58 + 0.18*n + 0.04*t with n = sin(cx*7 + t*0.5)*cos(cy*6 - t*0.4),
+        // sat 0.55, bri 0.30 + 0.22*(0.5 + 0.5*sin(cx*5 + cy*4 + t*0.8)),
+        // facets at alpha 0.5 with a bri*0.7 diagonal split, 0.40 black veil.
         const float cell = 58.0f;
-        const float t = (float)timeSeconds * 0.025f;
+        const float t = (float)timeSeconds;
+        surface.pushClip(topLeft, mx, true);
         for (float y = topLeft.y; y < mx.y; y += cell) {
             for (float x = topLeft.x; x < mx.x; x += cell) {
-                const ImU32 col = hsvToRgbColor(
-                    std::fmod((x * 0.013f + y * 0.007f) + t, 1.0f),
-                    0.45f, 0.18f);
-                surface.fillRect({x, y},
-                                 {std::min(mx.x, x + cell - 1.0f),
-                                  std::min(mx.y, y + cell - 1.0f)},
-                                 col);
+                const float cx = (x + cell * 0.5f - topLeft.x) / size.x;
+                const float cy = (y + cell * 0.5f - topLeft.y) / size.y;
+                const float n = std::sin(cx * 7.0f + t * 0.5f) *
+                                std::cos(cy * 6.0f - t * 0.4f);
+                const float hue = 0.58f + 0.18f * n + 0.04f * t;
+                const float bri = 0.30f + 0.22f * (0.5f + 0.5f *
+                                  std::sin(cx * 5.0f + cy * 4.0f + t * 0.8f));
+                const float fx0 = x + 0.5f, fy0 = y + 0.5f;
+                const float fx1 = x + cell - 0.5f, fy1 = y + cell - 0.5f;
+                surface.fillRect({fx0, fy0}, {fx1, fy1},
+                                 withAlpha(hsvToRgbColor(hue, 0.55f, bri), 0x80));
+                surface.fillTriangle({fx0, fy0}, {fx1, fy0}, {fx0, fy1},
+                                     withAlpha(hsvToRgbColor(hue, 0.55f, bri * 0.7f),
+                                               0x80));
             }
         }
+        surface.popClip();
         surface.fillRect(topLeft, mx, IM_COL32(0, 0, 0, 102), style.corner);
     }
 
@@ -2123,25 +2308,33 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
         return;
     }
 
+    if (style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid) {
+        // Fixed 38px screen-space grid, green @ 0.09,
+        // no major lines, unaffected by pan/zoom.
+        const ImU32 green = withAlpha(IM_COL32(57, 224, 138, 255), 0x17);
+        surface.pushClip(topLeft, mx, true);
+        for (float x = topLeft.x; x < mx.x; x += 38.0f)
+            surface.line({x, topLeft.y}, {x, mx.y}, green, 1.0f);
+        for (float y = topLeft.y; y < mx.y; y += 38.0f)
+            surface.line({topLeft.x, y}, {mx.x, y}, green, 1.0f);
+        surface.popClip();
+        surface.strokeRect(topLeft, mx,
+                           state.focused ? pal.accent : pal.frameBright,
+                           style.corner);
+        if (state.focused && !state.disabled)
+            drawFocusRing(surface, topLeft, mx, pal, style.corner);
+        return;
+    }
+
     float minor = 24.0f * std::max(0.05f, zoom);
-    if (style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid)
-        minor = 38.0f * std::max(0.05f, zoom);
     while (minor < 12.0f)
         minor *= 2.0f;
     while (minor > 48.0f)
         minor *= 0.5f;
     const float major = minor * 4.0f;
-    const ImU32 gridBase = style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
-                               ? IM_COL32(57, 224, 138, 255)
-                               : pal.frameBright;
-    const ImU32 minorCol = withAlpha(gridBase,
-                                     style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
-                                         ? 0x17
-                                         : state.disabled ? 0x24 : 0x38);
-    const ImU32 majorCol = withAlpha(gridBase,
-                                     style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
-                                         ? 0x24
-                                         : state.disabled ? 0x38 : 0x62);
+    const ImU32 gridBase = pal.frameBright;
+    const ImU32 minorCol = withAlpha(gridBase, state.disabled ? 0x24 : 0x38);
+    const ImU32 majorCol = withAlpha(gridBase, state.disabled ? 0x38 : 0x62);
 
     const float ox = std::fmod(pan.x * zoom, minor);
     const float oy = std::fmod(pan.y * zoom, minor);

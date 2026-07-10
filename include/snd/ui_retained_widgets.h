@@ -258,12 +258,22 @@ struct GraphSurfaceState {
 struct GraphSurfaceCallbacks {
     std::function<void(const GraphHit&)> onSelect;
     std::function<void(const GraphHit&)> onActivate;
-    std::function<void(const GraphHit&, Vec2 graphPosition)> onContextMenu;
+    // surfacePosition is the pointer in surface-local coordinates (the same
+    // space as the node bounds), so consumers can open a popup exactly under
+    // the cursor; the bound PopupMenuState is anchored there automatically.
+    std::function<void(const GraphHit&, Vec2 graphPosition, Vec2 surfacePosition)>
+        onContextMenu;
     std::function<void(const GraphHit&, Vec2 graphDelta)> onDrag;
     std::function<bool(const GraphHit& fromPort, const GraphHit& toPort)> canConnect;
     std::function<void(const GraphHit& fromPort, const GraphHit& toPort)> onConnect;
     std::function<void(const GraphHit& fromPort, Vec2 graphPosition)> onCablePreview;
     std::function<void(const GraphViewport&)> onViewportChanged;
+    // Double-click on a module (NodeBody/NodeTitle/NodePart), usually to open
+    // an editor or inspector for the graph item.
+    std::function<void(const GraphHit&)> onNodeDoubleClicked;
+    // Double-click on empty canvas. When unset, the surface centres/fits all
+    // modules itself.
+    std::function<void(Vec2 graphPosition)> onBackgroundDoubleClick;
 };
 
 using GraphSurfaceStyle = paint::GraphSurfaceStyle;
@@ -271,6 +281,14 @@ using GraphSurfaceStyle = paint::GraphSurfaceStyle;
 Vec2 graphToScreen(const GraphViewport& viewport, Vec2 graphPoint);
 Rect graphToScreen(const GraphViewport& viewport, Rect graphRect);
 Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint);
+
+// Centre/fit every module in view: the union of module bounds expanded by
+// 160x120, zoom clamped to 0.45..1.25, centred in surfaceSize. Empty graph
+// resets to zoom 1, pan 0. The surface runs this on empty-canvas double-click
+// when onBackgroundDoubleClick is unset; callers can invoke it for a "fit"
+// menu action.
+void fitGraphViewport(GraphSurfaceState& state,
+                      const std::vector<GraphNode>& nodes, Vec2 surfaceSize);
 GraphHit hitTestGraph(const GraphViewport& viewport,
                       const std::vector<GraphNode>& nodes,
                       const std::vector<GraphCable>& cables,

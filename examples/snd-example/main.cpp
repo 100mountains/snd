@@ -461,6 +461,9 @@ static bool selftestRetainedUi()
     snd::ui::paint::drawGradientPanel(recording, {2.0f, 3.0f}, {4.0f, 5.0f},
                                       0x01000001u, 0x02000002u,
                                       0x03000003u, 0x04000004u);
+    recording.image((snd::ui::draw::TextureRef)0x1234u, {7.0f, 8.0f},
+                    {17.0f, 28.0f}, 0xA1B2C3D4u, {0.25f, 0.5f},
+                    {0.75f, 1.0f});
     const auto measured = recording.measureText({}, 12.0f, "abc", nullptr);
 
     snd::ui::draw::RecordingSurface helperRecording;
@@ -616,7 +619,7 @@ static bool selftestRetainedUi()
     };
 
     const auto& ops = recording.ops();
-    bool recordingOk = ops.size() == 7 &&
+    bool recordingOk = ops.size() == 8 &&
         ops[0].name == "fillRect" && ops[0].colors[0] == 0x01020304u &&
         closeEnough(ops[0].points[0].x, 1.0f) &&
         closeEnough(ops[0].points[1].y, 4.0f) &&
@@ -639,6 +642,17 @@ static bool selftestRetainedUi()
         ops[6].colors.size() == 4 && ops[6].colors[2] == 0x03000003u &&
         closeEnough(ops[6].points[0].x, 2.0f) &&
         closeEnough(ops[6].points[1].x, 6.0f) &&
+        ops[7].name == "image" && ops[7].text == "4660" &&
+        ops[7].colors.size() == 1 && ops[7].colors[0] == 0xA1B2C3D4u &&
+        ops[7].points.size() == 4 &&
+        closeEnough(ops[7].points[0].x, 7.0f) &&
+        closeEnough(ops[7].points[0].y, 8.0f) &&
+        closeEnough(ops[7].points[1].x, 17.0f) &&
+        closeEnough(ops[7].points[1].y, 28.0f) &&
+        closeEnough(ops[7].points[2].x, 0.25f) &&
+        closeEnough(ops[7].points[2].y, 0.5f) &&
+        closeEnough(ops[7].points[3].x, 0.75f) &&
+        closeEnough(ops[7].points[3].y, 1.0f) &&
         closeEnough(measured.x, 18.0f) && closeEnough(measured.y, 12.0f) &&
         helperOps.size() == 10 &&
         helperOps[0].name == "fillRectMultiColor" &&
@@ -1573,7 +1587,7 @@ static bool selftestRetainedUi()
         ++graphActivates;
         activatedGraphHit = hit;
     };
-    graphCallbacks.onContextMenu = [&](const r::GraphHit&, r::Vec2) {
+    graphCallbacks.onContextMenu = [&](const r::GraphHit&, r::Vec2, r::Vec2) {
         ++graphContexts;
     };
     graphCallbacks.canConnect = [&](const r::GraphHit& from,

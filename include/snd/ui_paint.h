@@ -104,6 +104,8 @@ struct GraphSurfaceStyle {
         Grid,
         GreenGrid,
         Mosaic,
+        Aurora,       // smooth drifting aurora mesh
+        AuroraMosaic, // faceted aurora mesh + bright wireframe
     };
 
     ImU32 node = 0;
@@ -164,7 +166,7 @@ void drawGradientRect(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                       ImU32 top, ImU32 bottom, float rounding = 0.0f);
 
 // Arc stroked with a colour gradient from a0 to a1, sampled per segment
-// (murk-style two-colour value arcs).
+// (two-colour value arcs).
 void drawGradientArc(draw::Surface& surface, draw::Vec2 center, float radius,
                      float a0, float a1, ImU32 colStart, ImU32 colEnd,
                      float thickness, int segments = 32);
@@ -202,7 +204,7 @@ void drawDefaultKnob(const KnobPaintArgs& args);
 void drawKnobWithPainter(const KnobPaintArgs& args,
                          const KnobPainter& painter = {});
 
-// Randomise-window overlay ("ghost fences", murk's GhostOverlay): an
+// Randomise-window overlay ("ghost fences"): an
 // independent {lo, hi} window over a control with two separately grabbable
 // end dots and a padlock when locked out of randomisation. Unlike KnobMod
 // (one signed depth anchored to the current value) the two ends are
@@ -229,7 +231,7 @@ void drawKnobWindow(ImDrawList* dl, const ImVec2& topLeft, float size,
 
 // Which window end a press should grab: 0 = lo, 1 = hi, or -1 when the press
 // is outside the control rect grown by 6*uiScale px. Inside, the nearest end
-// by knob angle wins (murk knobProp semantics); callers keep click-vs-drag
+// by knob angle wins; callers keep click-vs-drag
 // lock toggling.
 int knobWindowHitEnd(const ImVec2& topLeft, float size, const KnobWindow& win,
                      const ImVec2& pressPos, float uiScale = 1.0f);
@@ -410,7 +412,7 @@ void drawXYPad(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
 void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float x, float y, const Palette& pal, const ControlState& state);
 void drawDefaultXYPad(const XYPadPaintArgs& args);
-// Body painter hook for xyPad faces (murk-style maps/pucks). The painter
+// Body painter hook for xyPad faces (custom maps/pucks). The painter
 // draws the body with focus suppressed; SND draws the focus ring after, as
 // with the knob/button hooks.
 void drawXYPadWithPainter(const XYPadPaintArgs& args,
