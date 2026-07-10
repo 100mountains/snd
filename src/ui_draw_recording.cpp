@@ -138,6 +138,21 @@ Vec2 RecordingSurface::measureText(FontRef, float sizePx, const char* begin,
     return {(float)len * sizePx * 0.5f, sizePx};
 }
 
+void RecordingSurface::polylineGradient(const Vec2* points, int count,
+                                        const Color* colors, float thickness,
+                                        bool closed)
+{
+    RecordedOp op;
+    op.name = "polylineGradient";
+    if (points && count > 0)
+        op.points.assign(points, points + count);
+    if (colors && count > 0)
+        op.colors.assign(colors, colors + count);
+    op.a = thickness;
+    op.flag = closed;
+    push(std::move(op));
+}
+
 void RecordingSurface::image(TextureRef texture, Vec2 min, Vec2 max,
                              Color tint, Vec2 uvMin, Vec2 uvMax)
 {

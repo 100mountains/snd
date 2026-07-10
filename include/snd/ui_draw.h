@@ -97,6 +97,25 @@ public:
     virtual void image(TextureRef texture, Vec2 min, Vec2 max, Color tint,
                        Vec2 uvMin = {0.0f, 0.0f},
                        Vec2 uvMax = {1.0f, 1.0f}) = 0;
+
+    // ONE continuous stroked strip with a colour per point (gradient wires,
+    // conic rims). Unlike per-segment line() calls there are no joint
+    // overlaps, so translucent strokes don't bead at the seams and the
+    // anti-alias fringe runs once along the whole strip. `colors` has one
+    // entry per point; `closed` joins the last point back to the first.
+    // The default falls back to per-segment lines for backends without a
+    // native strip.
+    virtual void polylineGradient(const Vec2* points, int count,
+                                  const Color* colors,
+                                  float thickness = 1.0f, bool closed = false)
+    {
+        if (!points || !colors || count < 2)
+            return;
+        for (int i = 0; i + 1 < count; ++i)
+            line(points[i], points[i + 1], colors[i], thickness);
+        if (closed)
+            line(points[count - 1], points[0], colors[count - 1], thickness);
+    }
 };
 
 } // namespace snd::ui::draw

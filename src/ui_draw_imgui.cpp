@@ -1,6 +1,9 @@
 #include "ui_draw_imgui.h"
 
+#include "imgui_internal.h" // ImDrawListSharedData: TexUvWhitePixel for PrimWriteVtx
+
 #include <cfloat>
+#include <cmath>
 #include <vector>
 
 namespace snd::ui::draw {
@@ -74,6 +77,79 @@ void ImGuiSurface::line(Vec2 a, Vec2 b, Color color, float thickness)
 {
     if (drawList_)
         drawList_->AddLine(toImVec2(a), toImVec2(b), color, thickness);
+}
+
+void ImGuiSurface::polylineGradient(const Vec2* points, int count,
+                                    const Color* colors, float thickness,
+                                    bool closed)
+{
+    if (!drawList_ || !points || !colors || count < 2)
+        return;
+    const float half = std::max(thickness, 1.0f) * 0.5f;
+    const float aa = 1.0f; // fringe width
+    const int spans = closed ? count : count - 1;
+
+    // averaged joint normals (open ends keep their single segment normal)
+    const auto segNormal = [&](int i) {
+        const Vec2& p0 = points[i];
+        const Vec2& p1 = points[(i + 1) % count];
+        const float dx = p1.x - p0.x;
+        const float dy = p1.y - p0.y;
+        const float len = std::sqrt(dx * dx + dy * dy);
+        if (len < 1e-4f)
+            return ImVec2(0.0f, 0.0f);
+        return ImVec2(-dy / len, dx / len);
+    };
+    std::vector<ImVec2> normals((size_t)count);
+    for (int i = 0; i < count; ++i) {
+        ImVec2 n(0.0f, 0.0f);
+        if (closed || i > 0) {
+            const ImVec2 a = segNormal((i - 1 + count) % count);
+            n.x += a.x;
+            n.y += a.y;
+        }
+        if (closed || i < count - 1) {
+            const ImVec2 b = segNormal(i);
+            n.x += b.x;
+            n.y += b.y;
+        }
+        const float len = std::sqrt(n.x * n.x + n.y * n.y);
+        if (len > 1e-4f) {
+            n.x /= len;
+            n.y /= len;
+        }
+        normals[(size_t)i] = n;
+    }
+
+    ImDrawList* dl = drawList_;
+    const ImVec2 uv = dl->_Data->TexUvWhitePixel;
+    dl->PrimReserve(spans * 18, count * 4);
+    const unsigned int base = dl->_VtxCurrentIdx;
+    for (int i = 0; i < count; ++i) {
+        const ImVec2 p(points[i].x, points[i].y);
+        const ImVec2 n = normals[(size_t)i];
+        const ImU32 col = colors[i];
+        const ImU32 colT = col & 0x00FFFFFFu; // fringe fades to alpha 0
+        dl->PrimWriteVtx(ImVec2(p.x + n.x * half, p.y + n.y * half), uv, col);
+        dl->PrimWriteVtx(ImVec2(p.x - n.x * half, p.y - n.y * half), uv, col);
+        dl->PrimWriteVtx(ImVec2(p.x + n.x * (half + aa), p.y + n.y * (half + aa)),
+                         uv, colT);
+        dl->PrimWriteVtx(ImVec2(p.x - n.x * (half + aa), p.y - n.y * (half + aa)),
+                         uv, colT);
+    }
+    const auto V = [&](int point, int which) {
+        return (ImDrawIdx)(base + (unsigned int)(point * 4 + which));
+    };
+    for (int sIdx = 0; sIdx < spans; ++sIdx) {
+        const int i = sIdx;
+        const int j = (sIdx + 1) % count;
+        dl->PrimWriteIdx(V(i, 0)); dl->PrimWriteIdx(V(j, 0)); dl->PrimWriteIdx(V(j, 1));
+        dl->PrimWriteIdx(V(i, 0)); dl->PrimWriteIdx(V(j, 1)); dl->PrimWriteIdx(V(i, 1));
+        dl->PrimWriteIdx(V(i, 2)); dl->PrimWriteIdx(V(j, 2)); dl->PrimWriteIdx(V(j, 0));
+        dl->PrimWriteIdx(V(i, 2)); dl->PrimWriteIdx(V(j, 0)); dl->PrimWriteIdx(V(i, 0));
+        dl->PrimWriteIdx(V(i, 1)); dl->PrimWriteIdx(V(j, 1)); dl->PrimWriteIdx(V(j, 3));
+        dl->PrimWriteIdx(V(i, 1)); dl->PrimWriteIdx(V(j, 3)); dl->PrimWriteIdx(V(i, 3));
+    }
 }
 
 void ImGuiSurface::polyline(const Vec2* points, int count, Color color,

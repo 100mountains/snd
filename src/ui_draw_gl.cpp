@@ -459,6 +459,63 @@ void OpenGLSurface::line(Vec2 a, Vec2 b, Color color, float thickness)
     drawSolid(verts);
 }
 
+void OpenGLSurface::polylineGradient(const Vec2* points, int count,
+                                     const Color* colors, float thickness,
+                                     bool closed)
+{
+    if (!points || !colors || count < 2)
+        return;
+    const float half = std::max(1.0f, thickness) * 0.5f;
+    const int spans = closed ? count : count - 1;
+    const auto segNormal = [&](int i) {
+        const Vec2& p0 = points[i];
+        const Vec2& p1 = points[(i + 1) % count];
+        const Vec2 d{p1.x - p0.x, p1.y - p0.y};
+        const float len = length(d);
+        if (len < 1e-4f)
+            return Vec2{0.0f, 0.0f};
+        return Vec2{-d.y / len, d.x / len};
+    };
+    std::vector<Vec2> normals((size_t)count);
+    for (int i = 0; i < count; ++i) {
+        Vec2 n{0.0f, 0.0f};
+        if (closed || i > 0) {
+            const Vec2 a = segNormal((i - 1 + count) % count);
+            n.x += a.x;
+            n.y += a.y;
+        }
+        if (closed || i < count - 1) {
+            const Vec2 b = segNormal(i);
+            n.x += b.x;
+            n.y += b.y;
+        }
+        const float len = length(n);
+        if (len > 1e-4f) {
+            n.x /= len;
+            n.y /= len;
+        }
+        normals[(size_t)i] = n;
+    }
+    std::vector<Vertex> verts;
+    verts.reserve((size_t)spans * 6);
+    const auto edge = [&](int i, float side) {
+        const Vec2& p = points[i];
+        const Vec2& n = normals[(size_t)i];
+        return Vec2{p.x + n.x * half * side, p.y + n.y * half * side};
+    };
+    for (int sIdx = 0; sIdx < spans; ++sIdx) {
+        const int i = sIdx;
+        const int j = (sIdx + 1) % count;
+        verts.push_back(makeVertex(edge(i, 1.0f), colors[i]));
+        verts.push_back(makeVertex(edge(j, 1.0f), colors[j]));
+        verts.push_back(makeVertex(edge(j, -1.0f), colors[j]));
+        verts.push_back(makeVertex(edge(i, 1.0f), colors[i]));
+        verts.push_back(makeVertex(edge(j, -1.0f), colors[j]));
+        verts.push_back(makeVertex(edge(i, -1.0f), colors[i]));
+    }
+    drawSolid(verts);
+}
+
 void OpenGLSurface::polyline(const Vec2* points, int count, Color color,
                              bool closed, float thickness)
 {

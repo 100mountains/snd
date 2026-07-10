@@ -179,7 +179,12 @@ Composable gradient primitives live alongside the widget painters:
 `paint::drawGradientRect(min, max, top, bottom, rounding)` fills a rounded
 rect with a vertical gradient (ImDrawList has no rounded multi-colour rect),
 and `paint::drawGradientArc(center, radius, a0, a1, colStart, colEnd,
-thickness, segments)` strokes a two-colour arc sampled per segment — the
+thickness, segments)` strokes a two-colour arc sampled per segment. For a
+smooth multi-colour stroke use `draw::Surface::polylineGradient(points,
+count, colors, thickness, closed)` — ONE continuous strip with a colour per
+point (gradient wires, conic rims): unlike per-segment lines there are no
+joint overlaps, so translucent strokes don't bead and the anti-alias fringe
+runs once along the whole strip — the
 hardware-style panel bodies and gradient value arcs custom painters need. Shared
 paint helpers keep existing `ImDrawList*` overloads and add
 `draw::Surface&` overloads where the body is renderer-neutral. The neutral

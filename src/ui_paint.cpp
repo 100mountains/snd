@@ -2745,31 +2745,42 @@ int rimStops(const GraphSurfaceStyle& style, ImU32 out[6])
 }
 
 // Stroke a rounded-rect outline as a conic gradient through `stops` about
-// the rect centre; phase rotates the sweep (1 = one revolution).
+// the rect centre; phase rotates the sweep (1 = one revolution). ONE closed
+// gradient strip: per-segment lines beaded at every joint and read as a
+// soft tube (owner).
 void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
                     float corner, const ImU32* stops, int stopCount,
                     float phase, float thickness)
 {
     const float w = b.x - a.x;
     const float h = b.y - a.y;
-    if (w <= 0.0f || h <= 0.0f)
+    if (w <= 0.0f || h <= 0.0f || stopCount <= 0)
         return;
     const float r = std::clamp(corner, 0.0f, std::min(w, h) * 0.5f);
     constexpr float kPi = 3.14159265f;
     constexpr int kEdge = 8; // segments per side (gradient resolution)
     constexpr int kArc = 4;  // segments per corner
-    draw::Vec2 pts[4 * (kEdge + kArc) + 1];
+    draw::Vec2 pts[4 * (kEdge + kArc)];
     int n = 0;
+    const auto push = [&](draw::Vec2 p) {
+        if (n > 0) { // corner arcs collapse to duplicates at r = 0
+            const float dx = p.x - pts[n - 1].x;
+            const float dy = p.y - pts[n - 1].y;
+            if (dx * dx + dy * dy < 0.01f)
+                return;
+        }
+        pts[n++] = p;
+    };
     const auto edge = [&](draw::Vec2 p0, draw::Vec2 p1) {
         for (int i = 0; i < kEdge; ++i) {
             const float t = (float)i / kEdge;
-            pts[n++] = {p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t};
+            push({p0.x + (p1.x - p0.x) * t, p0.y + (p1.y - p0.y) * t});
         }
     };
     const auto arc = [&](draw::Vec2 centre, float a0, float a1) {
         for (int i = 0; i < kArc; ++i) {
             const float t = a0 + (a1 - a0) * (float)i / kArc;
-            pts[n++] = {centre.x + std::cos(t) * r, centre.y + std::sin(t) * r};
+            push({centre.x + std::cos(t) * r, centre.y + std::sin(t) * r});
         }
     };
     edge({a.x + r, a.y}, {b.x - r, a.y}); // clockwise from top-left
@@ -2780,20 +2791,16 @@ void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
     arc({a.x + r, b.y - r}, kPi * 0.5f, kPi);
     edge({a.x, b.y - r}, {a.x, a.y + r});
     arc({a.x + r, a.y + r}, kPi, kPi * 1.5f);
-    pts[n] = pts[0];
+    if (n < 3)
+        return;
     const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+    ImU32 cols[4 * (kEdge + kArc)];
     for (int i = 0; i < n; ++i) {
-        const float dx = pts[i + 1].x - pts[i].x;
-        const float dy = pts[i + 1].y - pts[i].y;
-        if (dx * dx + dy * dy < 0.01f) // corner arcs collapse at r = 0
-            continue;
-        const draw::Vec2 m{(pts[i].x + pts[i + 1].x) * 0.5f,
-                           (pts[i].y + pts[i + 1].y) * 0.5f};
         const float u =
-            std::atan2(m.y - c.y, m.x - c.x) / (2.0f * kPi) - phase;
-        surface.line(pts[i], pts[i + 1], conicStopN(stops, stopCount, u),
-                     thickness);
+            std::atan2(pts[i].y - c.y, pts[i].x - c.x) / (2.0f * kPi) - phase;
+        cols[i] = conicStopN(stops, stopCount, u);
     }
+    surface.polylineGradient(pts, n, cols, thickness, /*closed*/ true);
 }
 
 // Layered soft halo behind a node body, one tint per side (A left, B right);
@@ -2853,19 +2860,21 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
         ImU32 g1 = state.disabled
                        ? mix(style.wireGradientEnd, pal.frameBright, 0.70f)
                        : style.wireGradientEnd;
+        // one continuous strip: per-segment lines double-blended at every
+        // joint (24 beads along a translucent wire -- owner's "shadow")
         constexpr int kSegs = 24;
-        draw::Vec2 prev = from;
-        for (int i = 1; i <= kSegs; ++i) {
+        draw::Vec2 pts[kSegs + 1];
+        ImU32 cols[kSegs + 1];
+        for (int i = 0; i <= kSegs; ++i) {
             const float t = (float)i / kSegs;
             const float it = 1.0f - t;
-            const draw::Vec2 p{it * it * it * from.x + 3 * it * it * t * c1.x +
-                                   3 * it * t * t * c2.x + t * t * t * to.x,
-                               it * it * it * from.y + 3 * it * it * t * c1.y +
-                                   3 * it * t * t * c2.y + t * t * t * to.y};
-            const float mid = (t + (float)(i - 1) / kSegs) * 0.5f;
-            surface.line(prev, p, mix(g0, g1, mid), lineW);
-            prev = p;
+            pts[i] = {it * it * it * from.x + 3 * it * it * t * c1.x +
+                          3 * it * t * t * c2.x + t * t * t * to.x,
+                      it * it * it * from.y + 3 * it * it * t * c1.y +
+                          3 * it * t * t * c2.y + t * t * t * to.y};
+            cols[i] = mix(g0, g1, t);
         }
+        surface.polylineGradient(pts, kSegs + 1, cols, lineW, /*closed*/ false);
         return;
     }
     surface.bezierCubic(from, c1, c2, to, color, lineW, 24);
@@ -2955,8 +2964,14 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         if (state.selected && style.rimSpinSeconds > 0.0f)
             phase = (float)std::fmod(timeSeconds / (double)style.rimSpinSeconds,
                                      1.0);
-        strokeConicRim(surface, a, b, corner, rim, rimCount, phase,
+        // a LIP, not a tube (owner): the colour band sits just inside a
+        // hard 1px dark arris on the true outline, like a machined edge
+        const float inset = 1.5f;
+        strokeConicRim(surface, {a.x + inset, a.y + inset},
+                       {b.x - inset, b.y - inset},
+                       std::max(0.0f, corner - inset), rim, rimCount, phase,
                        1.5f); // owner: tight; spin marks selection
+        surface.strokeRect(a, b, IM_COL32(0, 0, 0, 150), corner, 1.0f);
     } else {
         surface.strokeRect(a, b, state.selected ? selectedCol : borderCol,
                            corner, state.selected ? 2.0f : 1.0f);
