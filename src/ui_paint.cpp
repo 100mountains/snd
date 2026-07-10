@@ -897,37 +897,39 @@ void drawTactileIconButton(draw::Surface& surface, draw::FontRef font,
     if (!glyph)
         return;
 
-    ImU32 light = face ? face : IM_COL32(0xc6, 0xc9, 0xcf, 255);
+    // Subtle key: the face stays in the theme's own greys (owner: the old
+    // white-to-dark-grey flip read as "wtf") and the bevel is a quiet 1px
+    // pair that inverts on press. The glyph NEVER moves.
     down = down && !state.disabled;
+    const ImU32 base = face ? face : pal.frame;
+    ImU32 faceCol = down ? mix(base, IM_COL32(0, 0, 0, 255), 0.30f)
+                         : mix(base, IM_COL32(255, 255, 255, 255), 0.10f);
     if (state.hovered && !down && !state.disabled)
-        light = mix(light, IM_COL32(255, 255, 255, 255), 0.12f);
-    ImU32 dark = face ? mix(face, IM_COL32(0, 0, 0, 255), 0.55f)
-                      : IM_COL32(0x35, 0x38, 0x3e, 255);
-    if (state.disabled) {
-        light = mix(light, IM_COL32(0, 0, 0, 255), 0.28f);
-        dark = mix(dark, IM_COL32(0, 0, 0, 255), 0.28f);
-    }
-    ImU32 faceCol = down ? dark : light;
+        faceCol = mix(faceCol, IM_COL32(255, 255, 255, 255), 0.05f);
+    if (state.disabled)
+        faceCol = mix(faceCol, IM_COL32(0, 0, 0, 255), 0.28f);
 
     const float r = 4.0f;
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
     surface.fillRect(topLeft, mx, faceCol, r);
-    ImU32 topEdge = down ? IM_COL32(0, 0, 0, 110) : IM_COL32(255, 255, 255, 150);
-    ImU32 botEdge = down ? IM_COL32(255, 255, 255, 40) : IM_COL32(0, 0, 0, 90);
+    const ImU32 topEdge =
+        down ? IM_COL32(0, 0, 0, 90) : IM_COL32(255, 255, 255, 55);
+    const ImU32 botEdge =
+        down ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 90);
     surface.line({topLeft.x + r, topLeft.y + 1.0f},
-                 {mx.x - r, topLeft.y + 1.0f}, topEdge, 1.6f);
-    surface.line({topLeft.x + r, mx.y - 1.5f},
-                 {mx.x - r, mx.y - 1.5f}, botEdge, 1.6f);
+                 {mx.x - r, topLeft.y + 1.0f}, topEdge, 1.0f);
+    surface.line({topLeft.x + r, mx.y - 1.0f},
+                 {mx.x - r, mx.y - 1.0f}, botEdge, 1.0f);
     surface.strokeRect(topLeft, mx, IM_COL32(0, 0, 0, 110), r, 1.0f);
 
     const float iconPx = size.y * 0.60f;
-    ImU32 iconCol = state.disabled ? pal.textDim
-                                   : down ? IM_COL32(0xec, 0xef, 0xf3, 255)
-                                          : IM_COL32(0x2b, 0x2e, 0x34, 255);
+    const ImU32 iconCol = state.disabled ? pal.textDim
+                          : down         ? mix(pal.text, pal.accent, 0.35f)
+                                         : pal.text;
     if (iconPx > 0.0f) {
         draw::Vec2 ts = surface.measureText(font, iconPx, glyph);
         draw::Vec2 gp{topLeft.x + (size.x - ts.x) * 0.5f,
-                      topLeft.y + (size.y - ts.y) * 0.5f + (down ? 1.0f : 0.0f)};
+                      topLeft.y + (size.y - ts.y) * 0.5f};
         surface.text(font, iconPx, gp, iconCol, glyph);
     }
 

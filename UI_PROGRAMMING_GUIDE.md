@@ -498,6 +498,14 @@ tree) use the split: `renderMain(...)` paints everything except overlays,
 `renderOverlays(...)` only them — put the overlays pass on top of your layer
 (`ImGui::GetForegroundDrawList()` in the bridged case).
 
+**Outline icon button.** `widgets::outlineIconButton(id, name, glyph, ...,
+size, style, selected, font)` puts an icon-font glyph (70% of the button
+height, centred, never moves) in the outline-button chrome — border-first,
+`activeFill` on press, `selectedFill` while latched. Use it beside
+`outlineButton` text buttons with the same `OutlineButtonStyle` so a
+transport row reads as one family. The tactile `iconButton` remains as the
+raised-key alternative; its face is palette-derived and its glyph is pinned.
+
 **Splitter.** `widgets::splitter(id, name, binding, horizontal, invert,
 renderer, thickness)` is a draggable pane divider: dragging (or arrow keys
 while focused) writes the adjacent pane's size through the `ValueBinding`,

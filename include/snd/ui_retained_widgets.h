@@ -23,6 +23,7 @@ enum class VisualKind {
     IconButton,
     VectorIconButton,
     OutlineButton,
+    OutlineIconButton,
     Segmented,
     CycleButton,
     LedButton,
@@ -443,6 +444,18 @@ Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      PaintRenderer* renderer = nullptr,
                      IconFont font = IconFont::Material,
                      Vec2 size = {30.0f, 30.0f}, bool lit = false);
+// Icon button in the OUTLINE chrome (drawOutlineButton: border-first, fill
+// on press, selectedFill while `selected`) with a centred glyph at 70% of
+// the button height. The house look for transport rows -- pass the same
+// OutlineButtonStyle as the neighbouring text buttons so the family
+// matches.
+Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
+                            std::function<void(Node&)> onActivate = {},
+                            PaintRenderer* renderer = nullptr,
+                            Vec2 size = {30.0f, 30.0f},
+                            paint::OutlineButtonStyle style = {},
+                            bool selected = false,
+                            IconFont font = IconFont::Material);
 Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,

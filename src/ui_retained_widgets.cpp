@@ -1965,6 +1965,19 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                      down, style.face);
         break;
     }
+    case VisualKind::OutlineIconButton: {
+        // outline chrome + a centred glyph at 70% height: drawOutlineButton
+        // already centres any string, so hand it the glyph in the icon font
+        paint::ControlState st = state;
+        st.selected = st.selected || style.lit ||
+                      checked(node, sem);
+        draw::ImGuiSurface s(drawList);
+        paint::drawOutlineButton(s, draw::fontRef(iconFont(style.iconFont)),
+                                 bounds.h * 0.70f, topLeftDraw(bounds),
+                                 sizeOfDraw(bounds), style.glyph.c_str(), pal,
+                                 st, style.outlineButtonStyle);
+        break;
+    }
     case VisualKind::VectorIconButton:
         paint::drawVectorIconButton(drawList, topLeft(bounds), sizeOf(bounds),
                                     style.vectorIcon, style.accent, pal, state,
@@ -2225,6 +2238,16 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                      topLeftDraw(bounds), sizeOfDraw(bounds),
                                      style.glyph.c_str(), pal, state, down,
                                      style.face);
+        break;
+    }
+    case VisualKind::OutlineIconButton: {
+        paint::ControlState st = state;
+        st.selected = st.selected || style.lit ||
+                      checked(node, sem);
+        paint::drawOutlineButton(surface, iconFontRef(style.iconFont, context),
+                                 bounds.h * 0.70f, topLeftDraw(bounds),
+                                 sizeOfDraw(bounds), style.glyph.c_str(), pal,
+                                 st, style.outlineButtonStyle);
         break;
     }
     case VisualKind::VectorIconButton:
@@ -5439,6 +5462,27 @@ Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
         style.iconFont = font;
         style.lit = lit; // toggled transport-style buttons show the down face
         renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
+                            std::function<void(Node&)> onActivate,
+                            PaintRenderer* renderer, Vec2 size,
+                            paint::OutlineButtonStyle style, bool selected,
+                            IconFont font)
+{
+    NodeId sid = id;
+    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    node->setIntrinsicSize(size);
+    if (renderer) {
+        VisualStyle vs;
+        vs.kind = VisualKind::OutlineIconButton;
+        vs.glyph = std::move(glyph);
+        vs.iconFont = font;
+        vs.outlineButtonStyle = style;
+        vs.lit = selected;
+        renderer->setStyle(sid, vs);
     }
     return node;
 }
