@@ -193,7 +193,7 @@ Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `dropdownMenu`, `contextMenuRegion`, `button`, `outlineButton`,
 `segmented`, `cycleButton`, `ledButton`,
 `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
-`patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`,
+`patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`, `valueField`,
 `envelopeEditor`, `canvas`, and `graphSurface`. Value controls use `ValueBinding`; the caller
 still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
 faders, drag numbers, XY pads, pattern grids, keyboards, menus, and envelope
@@ -218,6 +218,8 @@ snapshots whenever caller-owned model values may have changed.
 Use `canvas` for direct-to-screen animated regions such as waveforms, spectra,
 meters, playheads, and other views whose node should own layout, focus,
 hit-testing, and semantics while custom code draws inside its bounds.
+Canvas-backed controls clip drawing to their node rect by default; set
+`VisualStyle::canvasClip = false` only for deliberate bleed effects.
 Canvas-backed controls expose focus and names today; add richer custom value
 text where practical, and prefer built-in helpers when one exists.
 Use `widgets::gradientPanel(...)` only for decorative retained chrome; it is
@@ -239,6 +241,10 @@ read-only numeric/status rows; it keeps the setter out of retained semantics.
 Use `widgets::dragNumber(id, name, binding, &renderer, size, dragSpeed)` for a
 compact slider-like value row that edits horizontally; Shift-drag is fine
 adjustment and keyboard/semantic increments use `ValueBinding::step`.
+Use `widgets::valueField(id, name, binding, &renderer, size, style, dragSpeed)`
+for numeric fields that should drag horizontally and enter inline text edit on
+double-click. It owns the temporary UI edit buffer; the caller still owns the
+bound value.
 Use `widgets::led(..., &renderer, radius, onColor)` when a retained LED needs
 the same radius or accent override as the immediate LED helper.
 Use `widgets::outlineButton(id, name, onActivate, &renderer, size, style,
@@ -328,7 +334,8 @@ face needs custom square/hover/selected treatment; do not restyle the generated
 so right-clicks do not double-trigger normal retained activation. It also sets
 `PopupMenuState::anchorToPosition` and records `PopupMenuState::position`; the
 normal retained frame bridge moves the popup subtree to that tree-local anchor
-before hit testing and render.
+before hit testing and render. Retained popup/menu children are overlay nodes:
+they do not inflate row/column layout while open.
 
 ## Graph Surfaces
 
@@ -336,8 +343,8 @@ Graph UI starts from retained `widgets::graphSurface(...)`: the caller owns
 modules, ports, cables, selection, and DSP/plugin graph state; SND owns shared
 paint, viewport transforms, hit-region conventions, focus treatment, and
 context-menu routing. Use `GraphSurfaceState`, `GraphNode`, `GraphNodePart`,
-`GraphPort`, and `GraphCable` as the structured model. Cables are draw-only;
-module boxes are first-class graph items with stable child parts for readouts,
+`GraphPort`, `GraphCable`, and optional `GraphSurfaceStyle` as the structured
+model. Cables are draw-only; module boxes are first-class graph items with stable child parts for readouts,
 meters, bypass/options/delete controls, status chips, and ports. Those parts
 have stable IDs, hit regions, and virtual semantic children even though the
 first renderer draws them in one canvas pass. See
@@ -507,11 +514,12 @@ Shift drags 10× slower.
 ### Graphs
 
 - `widgets::graphSurface(id, name, state, nodes, cables, callbacks, &renderer,
-  size, &menuState)` — retained graph surface with pan/zoom, grid, typed
-  hit-testing, cable drawing, module chrome, module child-part regions, marquee,
-  anchored context-menu support, and virtual semantic children for modules,
-  ports, child parts, and cables. `GraphSurfaceState`, nodes, cables, and graph
-  mutations stay caller-owned.
+  size, &menuState, style={})` — retained graph surface with pan/zoom, grid,
+  typed hit-testing, cable drawing, module chrome, module child-part regions,
+  marquee, anchored context-menu support, and virtual semantic children for
+  modules, ports, child parts, and cables. `GraphSurfaceStyle` skins backdrop,
+  module chrome, square/round pins, and wire droop/thickness. `GraphSurfaceState`,
+  nodes, cables, and graph mutations stay caller-owned.
 
 ### Lists and files
 

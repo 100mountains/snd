@@ -1313,26 +1313,97 @@ void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
         drawFocusRing(dl, topLeft, mx, pal, 3.0f);
 }
 
+namespace {
+
+ImU32 graphColor(ImU32 preferred, ImU32 fallback)
+{
+    return visible(preferred) ? preferred : fallback;
+}
+
+void graphCableControls(const ImVec2& from, const ImVec2& to,
+                        const GraphSurfaceStyle& style,
+                        ImVec2& c1, ImVec2& c2)
+{
+    const float dx = std::max(style.wireDroop ? 40.0f : 38.0f,
+                              std::abs(to.x - from.x) *
+                                  (style.wireDroop ? 0.50f : 0.52f));
+    const float sag = style.wireDroop
+                          ? std::min(80.0f, 22.0f + std::abs(to.x - from.x) * 0.18f)
+                          : 0.0f;
+    c1 = ImVec2(from.x + dx, from.y + sag);
+    c2 = ImVec2(to.x - dx, to.y + sag);
+}
+
+} // namespace
+
 void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                    const ImVec2& pan, float zoom, const Palette& pal,
-                   const ControlState& state)
+                   const ControlState& state,
+                   const GraphSurfaceStyle& style)
 {
     if (!dl)
         return;
     const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
+    const ImU32 defaultFill = mix(IM_COL32(0, 0, 0, 255), pal.frame, 0.72f);
+    const ImU32 flatFill = graphColor(style.backdropFill, defaultFill);
     dl->AddRectFilled(topLeft, mx,
-                      mix(IM_COL32(0, 0, 0, 255), pal.frame, 0.72f), 3.0f);
+                      style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
+                          ? graphColor(style.backdropFill, IM_COL32(4, 19, 11, 255))
+                      : style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic
+                          ? graphColor(style.backdropFill, IM_COL32(9, 11, 17, 255))
+                          : flatFill,
+                      style.corner);
     if (size.x <= 0.0f || size.y <= 0.0f)
         return;
 
+    if (style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic) {
+        const float cell = 58.0f;
+        const float t = (float)ImGui::GetTime() * 0.025f;
+        for (float y = topLeft.y; y < mx.y; y += cell) {
+            for (float x = topLeft.x; x < mx.x; x += cell) {
+                float r = 0.0f, g = 0.0f, b = 0.0f;
+                ImGui::ColorConvertHSVtoRGB(
+                    std::fmod((x * 0.013f + y * 0.007f) + t, 1.0f),
+                    0.45f, 0.18f, r, g, b);
+                dl->AddRectFilled(ImVec2(x, y),
+                                  ImVec2(std::min(mx.x, x + cell - 1.0f),
+                                         std::min(mx.y, y + cell - 1.0f)),
+                                  IM_COL32((int)(r * 255.0f),
+                                           (int)(g * 255.0f),
+                                           (int)(b * 255.0f), 255));
+            }
+        }
+        dl->AddRectFilled(topLeft, mx, IM_COL32(0, 0, 0, 102), style.corner);
+    }
+
+    if (style.backdrop == GraphSurfaceStyle::Backdrop::Flat ||
+        style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic) {
+        dl->AddRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright,
+                    style.corner);
+        if (state.focused && !state.disabled)
+            drawFocusRing(dl, topLeft, mx, pal, style.corner);
+        return;
+    }
+
     float minor = 24.0f * std::max(0.05f, zoom);
+    if (style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid)
+        minor = 38.0f * std::max(0.05f, zoom);
     while (minor < 12.0f)
         minor *= 2.0f;
     while (minor > 48.0f)
         minor *= 0.5f;
     const float major = minor * 4.0f;
-    const ImU32 minorCol = withAlpha(pal.frameBright, state.disabled ? 0x24 : 0x38);
-    const ImU32 majorCol = withAlpha(pal.frameBright, state.disabled ? 0x38 : 0x62);
+    const ImU32 gridBase = style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
+                               ? IM_COL32(57, 224, 138, 255)
+                               : pal.frameBright;
+    const ImU32 minorCol = withAlpha(gridBase,
+                                     style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
+                                         ? 0x17
+                                         : state.disabled ? 0x24 : 0x38);
+    const ImU32 majorCol = withAlpha(gridBase,
+                                     style.backdrop == GraphSurfaceStyle::Backdrop::GreenGrid
+                                         ? 0x24
+                                         : state.disabled ? 0x38 : 0x62);
 
     const float ox = std::fmod(pan.x * zoom, minor);
     const float oy = std::fmod(pan.y * zoom, minor);
@@ -1352,14 +1423,15 @@ void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
         if (y >= topLeft.y)
             dl->AddLine(ImVec2(topLeft.x, y), ImVec2(mx.x, y), majorCol, 1.0f);
 
-    dl->AddRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright, 3.0f);
+    dl->AddRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright,
+                style.corner);
     if (state.focused && !state.disabled)
-        drawFocusRing(dl, topLeft, mx, pal, 3.0f);
+        drawFocusRing(dl, topLeft, mx, pal, style.corner);
 }
 
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const Palette& pal, const ControlState& state,
-               ImU32 color, float thickness)
+               ImU32 color, float thickness, const GraphSurfaceStyle& style)
 {
     if (!dl)
         return;
@@ -1369,10 +1441,13 @@ void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
     if (state.hovered)
         color = mix(color, IM_COL32(255, 255, 255, 255), 0.18f);
 
-    const float dx = std::max(38.0f, std::abs(to.x - from.x) * 0.52f);
-    const ImVec2 c1(from.x + dx, from.y);
-    const ImVec2 c2(to.x - dx, to.y);
-    const float lineW = std::max(1.0f, thickness + (state.selected ? 1.4f : 0.0f));
+    ImVec2 c1;
+    ImVec2 c2;
+    graphCableControls(from, to, style, c1, c2);
+    const float baseThickness =
+        thickness > 0.0f ? thickness
+                         : style.wireThickness > 0.0f ? style.wireThickness : 2.6f;
+    const float lineW = std::max(1.0f, baseThickness + (state.selected ? 1.4f : 0.0f));
 
     if (state.selected || state.focused)
         dl->AddBezierCubic(from, c1, c2, to, withAlpha(pal.text, 0x80),
@@ -1386,13 +1461,16 @@ void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
 
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* title, const Palette& pal,
-                   const ControlState& state, bool bypassed, bool error)
+                   const ControlState& state, bool bypassed, bool error,
+                   const GraphSurfaceStyle& style)
 {
     if (!dl || !font)
         return;
     const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
-    const float r = 5.0f;
-    ImU32 body = state.selected ? mix(pal.frame, pal.accent, 0.18f) : pal.frame;
+    const float r = std::max(0.0f, style.corner);
+    ImU32 body = graphColor(style.node,
+                            state.selected ? mix(pal.frame, pal.accent, 0.18f)
+                                           : pal.frame);
     if (state.hovered && !state.disabled)
         body = mix(body, pal.frameBright, 0.35f);
     if (state.disabled || bypassed)
@@ -1400,21 +1478,22 @@ void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 
     dl->AddRectFilled(topLeft, mx, body, r);
     const ImVec2 titleMax(mx.x, std::min(mx.y, topLeft.y + 26.0f));
-    ImU32 titleFill = mix(pal.frame, pal.frameBright, 0.35f);
+    ImU32 titleFill = graphColor(style.header, mix(pal.frame, pal.frameBright, 0.35f));
     if (error)
         titleFill = mix(titleFill, pal.meterHot, 0.35f);
     if (bypassed)
         titleFill = mix(titleFill, pal.textDim, 0.20f);
     dl->AddRectFilled(topLeft, titleMax, titleFill, r, ImDrawFlags_RoundCornersTop);
 
-    const ImU32 border = state.selected ? pal.accent
+    const ImU32 border = state.selected ? graphColor(style.selectedBorder, pal.accent)
                         : error          ? pal.meterHot
-                                         : pal.frameBright;
+                                         : graphColor(style.border, pal.frameBright);
     dl->AddRect(topLeft, mx, border, r, 0, state.selected ? 2.0f : 1.0f);
-    if (state.selected) {
+    const ImU32 accent = graphColor(style.accent, pal.accent);
+    if (state.selected || visible(style.accent)) {
         dl->AddRectFilled(ImVec2(topLeft.x + 3.0f, topLeft.y + 30.0f),
                           ImVec2(topLeft.x + 6.0f, mx.y - 6.0f),
-                          pal.accent, 2.0f);
+                          accent, std::min(2.0f, r));
     }
 
     const char* label = title ? title : "";
@@ -1425,7 +1504,9 @@ void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        topLeft.y + std::max(0.0f, titleMax.y - topLeft.y - ts.y) * 0.5f);
         dl->PushClipRect(ImVec2(topLeft.x + 8.0f, topLeft.y),
                          ImVec2(mx.x - 8.0f, titleMax.y), true);
-        dl->AddText(font, fs, p, state.disabled ? pal.textDim : pal.text, label);
+        dl->AddText(font, fs, p,
+                    state.disabled ? pal.textDim : graphColor(style.text, pal.text),
+                    label);
         dl->PopClipRect();
     }
 

@@ -63,6 +63,7 @@ enum class SemanticState : uint32_t {
     Selected = 1u << 5,
     Expanded = 1u << 6,
     Hidden = 1u << 7,
+    FocusVisible = 1u << 8,
 };
 using SemanticStates = uint32_t;
 
@@ -301,12 +302,18 @@ public:
     void setVisible(bool visible);
     bool visible() const { return visible_; }
 
+    // Overlay nodes are laid out for their own subtree but do not consume
+    // parent row/column space. Menus/popups use this for floating children.
+    void setOverlay(bool overlay);
+    bool overlay() const { return overlay_; }
+
     void setEnabled(bool enabled);
     bool enabled() const { return enabled_; }
 
     void setFocusable(bool focusable);
     bool focusable() const { return focusable_; }
     bool focused() const { return focused_; }
+    bool focusVisible() const { return focusVisible_; }
     bool hovered() const { return hovered_; }
     bool pressed() const { return pressed_; }
 
@@ -343,7 +350,7 @@ public:
 private:
     friend class Tree;
 
-    void setFocused(bool focused);
+    void setFocused(bool focused, bool focusVisible);
     void setHovered(bool hovered);
     void setPressed(bool pressed);
     bool handleEvent(const Event& event);
@@ -362,9 +369,11 @@ private:
     Vec2 intrinsic_;
     Rect bounds_;
     bool visible_ = true;
+    bool overlay_ = false;
     bool enabled_ = true;
     bool focusable_ = false;
     bool focused_ = false;
+    bool focusVisible_ = false;
     bool hovered_ = false;
     bool pressed_ = false;
     bool dirty_ = true;

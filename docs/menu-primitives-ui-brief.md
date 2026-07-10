@@ -154,6 +154,10 @@ Nested submenu rows use `MenuItem::children` and caller-owned
 If the dropdown face needs custom square/hover/selected treatment, pass a
 `paint::OutlineButtonStyle` to `rw::dropdownMenu(...)`; consumers should not
 reach in and restyle the generated `<id>.button` child by ID.
+Dropdown popup children are retained overlay nodes: they remain visible,
+hittable, and anchored below the button while not consuming ancestor row/column
+layout space. Consumers should not pin the dropdown root to hide menu layout
+inflation.
 
 ## Accessibility Contract
 

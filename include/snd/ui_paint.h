@@ -61,6 +61,31 @@ struct OutlineButtonStyle {
     float fontScale = 0.90f;
 };
 
+struct GraphSurfaceStyle {
+    enum class Backdrop {
+        Flat,
+        Grid,
+        GreenGrid,
+        Mosaic,
+    };
+
+    ImU32 node = 0;
+    ImU32 header = 0;
+    ImU32 border = 0;
+    ImU32 text = 0;
+    ImU32 accent = 0;
+    ImU32 selectedBorder = 0;
+    float corner = 5.0f;
+    bool squarePins = false;
+    ImU32 pinAudio = 0;
+    ImU32 pinMidi = 0;
+    ImU32 pinControl = 0;
+    float wireThickness = 2.6f;
+    bool wireDroop = false;
+    Backdrop backdrop = Backdrop::Grid;
+    ImU32 backdropFill = 0;
+};
+
 ImU32 withAlpha(ImU32 c, uint32_t a);
 ImU32 mix(ImU32 a, ImU32 b, float t);
 ImVec4 toVec4(ImU32 c);
@@ -200,16 +225,19 @@ void drawEnvelope(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
 
 void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                    const ImVec2& pan, float zoom, const Palette& pal,
-                   const ControlState& state);
+                   const ControlState& state,
+                   const GraphSurfaceStyle& style = {});
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const Palette& pal, const ControlState& state,
-               ImU32 color = 0, float thickness = 2.6f);
+               ImU32 color = 0, float thickness = 2.6f,
+               const GraphSurfaceStyle& style = {});
 // Draws module chrome only. GraphNode/ModuleBox internals such as meters,
 // readouts, toggles, actions, and ports remain structured UI parts.
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* title, const Palette& pal,
                    const ControlState& state, bool bypassed = false,
-                   bool error = false);
+                   bool error = false,
+                   const GraphSurfaceStyle& style = {});
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const char* text, float fontSize, float width,

@@ -22,6 +22,8 @@ Caller-owned state:
 - Node/module list, port list, cable list, selection, and model mutations.
 - `GraphViewport` pan/zoom values.
 - Context menu state and callbacks.
+- Optional `GraphSurfaceStyle` for backdrop, module chrome, pin shape/colors,
+  and cable curve/thickness.
 - DSP/plugin graph state. UI helpers must not own or mutate audio graph policy.
 
 GraphSurface-owned UI behavior:
@@ -44,6 +46,9 @@ Cables are draw-only objects in the first pass, rendered through
 - Not individual retained nodes unless accessibility or action needs require it.
 - Should carry stable IDs so selection, hover, context actions, and semantics can
   reference them.
+- Cable hit-testing must use the same curve family as drawing. If
+  `GraphSurfaceStyle::wireDroop` is enabled, both paint and hit-test use the
+  drooping cubic.
 
 ### ModuleBox / GraphNode
 
@@ -145,6 +150,9 @@ from string IDs.
 Use shared paint helpers for module boxes, ports, cables, grid, and selection
 overlays so immediate/debug tools and retained GraphSurface share the same paint
 language.
+Use `GraphSurfaceStyle` for consumer skins that need square pins, custom module
+chrome, drooping wires, or flat/grid/green-grid/mosaic backdrops; do not fork
+the graph painter for those choices.
 
 ## Interaction Contract
 
@@ -261,7 +269,7 @@ First-pass helper call:
 auto graph = widgets::graphSurface("graph.surface", "Patch graph",
                                    graphState, graphNodes, graphCables,
                                    callbacks, &renderer, {520.0f, 320.0f},
-                                   &contextMenuState);
+                                   &contextMenuState, graphStyle);
 ```
 
 ## Tests And Docs

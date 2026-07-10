@@ -66,6 +66,8 @@ SemanticStates derivedStates(const Node& node)
         states |= SemanticState::Focusable;
     if (node.focused())
         states |= SemanticState::Focused;
+    if (node.focusVisible())
+        states |= SemanticState::FocusVisible;
     if (!node.enabled())
         states |= SemanticState::Disabled;
     if (node.pressed())
@@ -248,9 +250,17 @@ void layoutLinear(Node& node, bool row)
 
     std::vector<Node*> visible;
     visible.reserve(node.childCount());
-    for (const auto& childPtr : node.children())
-        if (childPtr->visible())
-            visible.push_back(childPtr.get());
+    std::vector<Node*> overlays;
+    overlays.reserve(node.childCount());
+    for (const auto& childPtr : node.children()) {
+        if (!childPtr->visible())
+            continue;
+        if (childPtr->overlay()) {
+            overlays.push_back(childPtr.get());
+            continue;
+        }
+        visible.push_back(childPtr.get());
+    }
 
     const float totalGap =
         visible.empty() ? 0.0f : clampNonNegative(node.layout().gap) * (visible.size() - 1);
@@ -308,6 +318,16 @@ void layoutLinear(Node& node, bool row)
 
         layoutNode(*child);
         cursor += mainSize + clampNonNegative(node.layout().gap);
+    }
+
+    for (Node* child : overlays) {
+        float w = lengthValue(child->width(), child->intrinsicSize().x, c.w);
+        float h = lengthValue(child->height(), child->intrinsicSize().y, c.h);
+        if (row)
+            child->setBounds({c.x, c.y, w, h});
+        else
+            child->setBounds({c.x, c.y, w, h});
+        layoutNode(*child);
     }
 }
 
@@ -473,6 +493,14 @@ void Node::setVisible(bool visible)
     if (visible_ == visible)
         return;
     visible_ = visible;
+    markDirty();
+}
+
+void Node::setOverlay(bool overlay)
+{
+    if (overlay_ == overlay)
+        return;
+    overlay_ = overlay;
     markDirty();
 }
 
@@ -683,11 +711,12 @@ void Node::clearDirtyRecursive()
         child->clearDirtyRecursive();
 }
 
-void Node::setFocused(bool focused)
+void Node::setFocused(bool focused, bool focusVisible)
 {
-    if (focused_ == focused)
+    if (focused_ == focused && focusVisible_ == (focused && focusVisible))
         return;
     focused_ = focused;
+    focusVisible_ = focused && focusVisible;
     markDirty();
 }
 
@@ -820,9 +849,9 @@ bool Tree::focus(const NodeId& id)
         return true;
 
     if (Node* prev = focused())
-        prev->setFocused(false);
+        prev->setFocused(false, false);
     focusedId_ = id;
-    next->setFocused(true);
+    next->setFocused(true, true);
     return true;
 }
 
@@ -831,7 +860,7 @@ bool Tree::clearFocus()
     if (focusedId_.empty())
         return false;
     if (Node* prev = focused())
-        prev->setFocused(false);
+        prev->setFocused(false, false);
     focusedId_.clear();
     return true;
 }
@@ -935,8 +964,12 @@ bool Tree::dispatch(const Event& event)
             return false;
         pressedId_ = target->id();
         target->setPressed(true);
-        if (target->focusable_)
-            focus(target->id());
+        if (target->focusable_) {
+            if (Node* prev = focused())
+                prev->setFocused(false, false);
+            focusedId_ = target->id();
+            target->setFocused(true, false);
+        }
         target->handleEvent(event);
         return true;
     }

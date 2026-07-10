@@ -712,10 +712,17 @@ static bool selftestRetainedUi()
     ok = ok && tree.dispatch(mouse);
     mouse.type = r::EventType::MouseUp;
     ok = ok && tree.dispatch(mouse) && activated == 2;
+    r::SemanticNode playFocusSem;
+    ok = ok && tree.semanticNode("transport.play", playFocusSem) &&
+         r::hasState(playFocusSem.states, r::SemanticState::Focused) &&
+         !r::hasState(playFocusSem.states, r::SemanticState::FocusVisible);
 
     key.key = r::Key::Tab;
     ok = ok && tree.dispatch(key) && tree.focused() &&
          tree.focused()->id() == "mixer.gain";
+    r::SemanticNode gainFocusSem;
+    ok = ok && tree.semanticNode("mixer.gain", gainFocusSem) &&
+         r::hasState(gainFocusSem.states, r::SemanticState::FocusVisible);
     key.key = r::Key::Right;
     ok = ok && tree.dispatch(key) && std::abs(gain - 0.6) < 0.0001;
     ok = ok && tree.performAction("mixer.gain", r::Action::SetValue, 0.25) &&
@@ -887,6 +894,43 @@ static bool selftestRetainedUi()
          !hasAction(&readonlySem, r::Action::Decrement) &&
          !readonlyTree.setValue("readonly.meter", 0.2) &&
          !readonlyTree.incrementValue("readonly.meter");
+
+    double fieldValue = 120.0;
+    r::PaintRenderer fieldRenderer;
+    r::ValueBinding fieldBinding;
+    fieldBinding.get = [&] { return fieldValue; };
+    fieldBinding.set = [&](double value) { fieldValue = value; };
+    fieldBinding.min = 40.0;
+    fieldBinding.max = 240.0;
+    fieldBinding.step = 1.0;
+    fieldBinding.format = [](double value) {
+        char text[32];
+        std::snprintf(text, sizeof text, "%.0f", value);
+        return std::string(text);
+    };
+    auto fieldRoot = r::Node::make("field.root");
+    fieldRoot->addChild(w::valueField("field.tempo", "Tempo", fieldBinding,
+                                      &fieldRenderer, {92.0f, 28.0f}));
+    r::Tree fieldTree(std::move(fieldRoot));
+    fieldTree.layout({120.0f, 44.0f});
+    r::SemanticNode fieldSem;
+    ok = ok && fieldTree.validate().empty() &&
+         fieldTree.semanticNode("field.tempo", fieldSem) &&
+         fieldSem.role == r::Role::Slider &&
+         fieldSem.value.text == "120";
+    r::Event fieldDrag;
+    fieldDrag.type = r::EventType::MouseDown;
+    fieldDrag.button = r::MouseButton::Left;
+    fieldDrag.position = {8.0f, 8.0f};
+    ok = ok && fieldTree.dispatch(fieldDrag);
+    fieldDrag.type = r::EventType::MouseMove;
+    fieldDrag.delta = {10.0f, 0.0f};
+    fieldDrag.position = {18.0f, 8.0f};
+    ok = ok && fieldTree.dispatch(fieldDrag) &&
+         std::abs(fieldValue - 122.0) < 0.0001;
+    fieldDrag.type = r::EventType::MouseDown;
+    fieldDrag.clickCount = 2;
+    ok = ok && fieldTree.dispatch(fieldDrag);
 
     int externalCount = 2;
     int observedCount = externalCount;
@@ -1073,6 +1117,12 @@ static bool selftestRetainedUi()
          r::hasState(dropdownButtonSem.states, r::SemanticState::Expanded);
     dropdownTree.layout({220.0f, 160.0f});
     dropdownRenderer.prepareOpenPopups(dropdownTree);
+    const r::Node* dropdownMenuNode = dropdownTree.find("menu.select.menu");
+    const r::Node* dropdownButtonNode = dropdownTree.find("menu.select.button");
+    ok = ok && dropdownMenuNode && dropdownMenuNode->overlay() &&
+         dropdownButtonNode &&
+         dropdownMenuNode->bounds().y >=
+             dropdownButtonNode->bounds().y + dropdownButtonNode->bounds().h;
     ok = ok && dropdownTree.focused() &&
          dropdownTree.focused()->id() == "menu.select.menu.duplicate" &&
          dropdownState.highlightedIndex == 3;
@@ -1180,22 +1230,29 @@ static bool selftestRetainedUi()
     std::vector<r::GraphCable> graphCables = {
         {"osc-to-filter", "osc", "out", "filter", "in", true},
     };
+    r::GraphSurfaceStyle graphStyle;
+    graphStyle.corner = 0.0f;
+    graphStyle.squarePins = true;
+    graphStyle.pinAudio = IM_COL32(127, 209, 174, 255);
+    graphStyle.wireThickness = 2.0f;
+    graphStyle.wireDroop = true;
+    graphStyle.backdrop = r::GraphSurfaceStyle::Backdrop::GreenGrid;
     const r::Vec2 oscOut = r::graphToScreen(graphState.viewport,
                                             r::Vec2{138.0f, 60.0f});
     r::GraphHit graphHit = r::hitTestGraph(graphState.viewport, graphNodes,
-                                           graphCables, oscOut);
+                                           graphCables, oscOut, graphStyle);
     ok = ok && graphHit.kind == r::GraphHitKind::Port &&
          graphHit.nodeId == "osc" && graphHit.portId == "out" && graphHit.output;
     const r::Vec2 bypassPoint = r::graphToScreen(graphState.viewport,
                                                  r::Vec2{116.0f, 58.0f});
     graphHit = r::hitTestGraph(graphState.viewport, graphNodes, graphCables,
-                               bypassPoint);
+                               bypassPoint, graphStyle);
     ok = ok && graphHit.kind == r::GraphHitKind::NodePart &&
          graphHit.nodeId == "osc" && graphHit.partId == "bypass";
     const r::Vec2 cablePoint = r::graphToScreen(graphState.viewport,
                                                 r::Vec2{178.0f, 66.0f});
     graphHit = r::hitTestGraph(graphState.viewport, graphNodes, graphCables,
-                               cablePoint);
+                               cablePoint, graphStyle);
     ok = ok && (graphHit.kind == r::GraphHitKind::Cable ||
                 graphHit.kind == r::GraphHitKind::CableEndpoint) &&
          graphHit.cableId == "osc-to-filter";
@@ -1227,7 +1284,8 @@ static bool selftestRetainedUi()
     graphRoot->addChild(w::graphSurface("graph.surface", "Patch graph",
                                         graphState, graphNodes, graphCables,
                                         graphCallbacks, &graphRenderer,
-                                        {420.0f, 220.0f}, &graphMenuState));
+                                        {420.0f, 220.0f}, &graphMenuState,
+                                        graphStyle));
     r::Tree graphTree(std::move(graphRoot));
     graphTree.layout({440.0f, 240.0f});
     r::SemanticNode graphSem;

@@ -3,13 +3,16 @@
 #include "imgui.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <memory>
+#include <unordered_set>
 #include <unordered_map>
 #include <utility>
 
@@ -143,7 +146,7 @@ paint::ControlState controlState(const Node& node, const SemanticNode* sem,
     const SemanticStates states = sem ? sem->states : node.semantics().states;
     paint::ControlState state;
     state.disabled = !node.enabled() || hasState(states, SemanticState::Disabled);
-    state.focused = hasState(states, SemanticState::Focused);
+    state.focused = hasState(states, SemanticState::FocusVisible);
     state.active = hasState(states, SemanticState::Pressed);
     state.selected = hasState(states, SemanticState::Checked) ||
                      hasState(states, SemanticState::Selected);
@@ -324,6 +327,32 @@ void anchorPopupSubtree(Tree& tree, Node& popup, PopupMenuState& state)
     Rect b = popup.bounds();
     float x = state.position.x;
     float y = state.position.y;
+    const Vec2 viewport = tree.viewport();
+    if (viewport.x > 0.0f && b.w > 0.0f)
+        x = std::clamp(x, 0.0f, std::max(0.0f, viewport.x - b.w));
+    if (viewport.y > 0.0f && b.h > 0.0f)
+        y = std::clamp(y, 0.0f, std::max(0.0f, viewport.y - b.h));
+    translateSubtree(popup, {x - b.x, y - b.y});
+}
+
+void anchorOverlayPopup(Tree& tree, Node& popup)
+{
+    if (!popup.overlay() || !popup.parent())
+        return;
+    const Node* parent = popup.parent();
+    Rect anchor = parent->bounds();
+    for (std::size_t i = 0; i < parent->childCount(); ++i) {
+        const Node* child = parent->child(i);
+        if (!child || child == &popup)
+            break;
+        if (child->visible() && !child->overlay()) {
+            anchor = child->bounds();
+        }
+    }
+
+    Rect b = popup.bounds();
+    float x = anchor.x;
+    float y = anchor.y + anchor.h + 2.0f;
     const Vec2 viewport = tree.viewport();
     if (viewport.x > 0.0f && b.w > 0.0f)
         x = std::clamp(x, 0.0f, std::max(0.0f, viewport.x - b.w));
@@ -603,6 +632,113 @@ void installDragNumberPointerBehavior(Node& node, double dragSpeed)
             speed = binding->step;
         else if (range > 0.0)
             speed = range / 100.0;
+        if (event.shift)
+            speed *= 0.1;
+        return setBindingValue(n, binding->get() + (double)dx * speed);
+    });
+}
+
+using ValueFieldBuffer = std::array<char, 64>;
+
+std::unordered_map<NodeId, ValueFieldBuffer>& valueFieldBuffers()
+{
+    static std::unordered_map<NodeId, ValueFieldBuffer> buffers;
+    return buffers;
+}
+
+std::unordered_set<NodeId>& activeValueFields()
+{
+    static std::unordered_set<NodeId> active;
+    return active;
+}
+
+std::unordered_set<NodeId>& focusValueFields()
+{
+    static std::unordered_set<NodeId> focus;
+    return focus;
+}
+
+void beginValueFieldEdit(const Node& node)
+{
+    ValueFieldBuffer& buf = valueFieldBuffers()[node.id()];
+    buf.fill(0);
+    std::string text = nodeValueText(node, nullptr);
+    if (text.empty()) {
+        if (const ValueBinding* binding = node.valueBinding())
+            text = formatBindingValue(*binding, readBinding(*binding));
+    }
+    std::snprintf(buf.data(), buf.size(), "%s", text.c_str());
+    activeValueFields().insert(node.id());
+    focusValueFields().insert(node.id());
+}
+
+void cancelValueFieldEdit(const NodeId& id)
+{
+    activeValueFields().erase(id);
+    focusValueFields().erase(id);
+}
+
+bool commitValueFieldEdit(const NodeId& id, const ValueBinding& binding)
+{
+    auto it = valueFieldBuffers().find(id);
+    if (it == valueFieldBuffers().end())
+        return false;
+    char* end = nullptr;
+    const double parsed = std::strtod(it->second.data(), &end);
+    activeValueFields().erase(id);
+    focusValueFields().erase(id);
+    if (end == it->second.data() || !binding.set)
+        return false;
+    return writeBinding(binding, parsed);
+}
+
+bool valueFieldEditing(const NodeId& id)
+{
+    return activeValueFields().find(id) != activeValueFields().end();
+}
+
+void installValueFieldPointerBehavior(Node& node, double dragSpeed)
+{
+    node.setOnEvent([dragSpeed](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown) {
+            if (event.button != MouseButton::Left)
+                return false;
+            if (event.clickCount >= 2) {
+                beginValueFieldEdit(n);
+                return true;
+            }
+            return true;
+        }
+
+        if (event.type == EventType::MouseUp) {
+            if (event.button != MouseButton::Left)
+                return false;
+            return true;
+        }
+
+        if (event.type == EventType::KeyDown &&
+            event.key == Key::Escape && valueFieldEditing(n.id())) {
+            cancelValueFieldEdit(n.id());
+            return true;
+        }
+
+        if (event.type != EventType::MouseMove || !n.pressed() ||
+            valueFieldEditing(n.id()))
+            return false;
+
+        const ValueBinding* binding = n.valueBinding();
+        if (!binding || !binding->get)
+            return false;
+
+        const float dx = event.delta.x;
+        if (dx == 0.0f)
+            return false;
+
+        const double range = std::abs(binding->max - binding->min);
+        double speed = dragSpeed > 0.0 ? dragSpeed
+                     : binding->step > 0.0 ? binding->step
+                     : range > 0.0 ? range / 100.0
+                                   : 0.01;
         if (event.shift)
             speed *= 0.1;
         return setBindingValue(n, binding->get() + (double)dx * speed);
@@ -1140,6 +1276,8 @@ void PaintRenderer::prepareOpenPopups(Tree& tree) const
             continue;
         if (state->anchorToPosition)
             anchorPopupSubtree(tree, *node, *state);
+        else
+            anchorOverlayPopup(tree, *node);
         syncPopupFocus(tree, *node, *state);
     }
 }
@@ -1320,8 +1458,13 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     case VisualKind::Canvas:
         if (style.panelFill)
             drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame, 3.0f);
-        if (style.canvasDraw)
+        if (style.canvasDraw) {
+            if (style.canvasClip)
+                drawList->PushClipRect(topLeft(bounds), bottomRight(bounds), true);
             style.canvasDraw(*drawList, node, bounds, state);
+            if (style.canvasClip)
+                drawList->PopClipRect();
+        }
         if (style.panelBorder)
             drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright, 3.0f);
         if (state.focused && !state.disabled)
@@ -1925,11 +2068,24 @@ Vec2 cubic(Vec2 a, Vec2 b, Vec2 c, Vec2 d, float t)
     };
 }
 
-float distanceToCable(Vec2 p, Vec2 from, Vec2 to)
+void graphCableControls(Vec2 from, Vec2 to, const GraphSurfaceStyle& style,
+                        Vec2& c1, Vec2& c2)
 {
-    const float dx = std::max(38.0f, std::abs(to.x - from.x) * 0.52f);
-    const Vec2 c1{from.x + dx, from.y};
-    const Vec2 c2{to.x - dx, to.y};
+    const float dx = std::max(style.wireDroop ? 40.0f : 38.0f,
+                              std::abs(to.x - from.x) *
+                                  (style.wireDroop ? 0.50f : 0.52f));
+    const float sag = style.wireDroop
+                          ? std::min(80.0f, 22.0f + std::abs(to.x - from.x) * 0.18f)
+                          : 0.0f;
+    c1 = {from.x + dx, from.y + sag};
+    c2 = {to.x - dx, to.y + sag};
+}
+
+float distanceToCable(Vec2 p, Vec2 from, Vec2 to, const GraphSurfaceStyle& style)
+{
+    Vec2 c1;
+    Vec2 c2;
+    graphCableControls(from, to, style, c1, c2);
     float best = std::numeric_limits<float>::max();
     Vec2 prev = from;
     for (int i = 1; i <= 24; ++i) {
@@ -2289,21 +2445,60 @@ Vec2 graphHitTreeAnchor(const Node& surface, const GraphSurfaceState& state,
     return {b.x + local.x, b.y + local.y};
 }
 
+ImU32 graphPortColor(const GraphPort& port, const GraphSurfaceStyle& style,
+                     const Palette& pal)
+{
+    auto use = [](ImU32 preferred, ImU32 fallback) {
+        return (preferred & 0xFF000000u) != 0 ? preferred : fallback;
+    };
+    switch (port.kind) {
+    case GraphPortKind::Audio:
+        return use(style.pinAudio, pal.accent);
+    case GraphPortKind::Midi:
+        return use(style.pinMidi, pal.meterHot);
+    case GraphPortKind::Control:
+    case GraphPortKind::Parameter:
+        return use(style.pinControl, pal.meterMid);
+    case GraphPortKind::Event:
+    case GraphPortKind::Unknown:
+    default:
+        return pal.frameBright;
+    }
+}
+
 void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
-                   const paint::ControlState& state)
+                   const paint::ControlState& state,
+                   const GraphSurfaceStyle& style)
 {
     const Palette& pal = palette();
     const ImVec2 c(bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f);
     ImU32 col = port.invalidDrop ? pal.meterHot
-                : port.connected ? pal.accent
+                : port.connected ? graphPortColor(port, style, pal)
                                  : pal.frameBright;
     if (!port.enabled)
         col = paint::mix(col, pal.textDim, 0.65f);
-    if (state.hovered || state.selected)
-        dl.AddCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
-                     state.selected ? pal.text : pal.accent, 0, 1.4f);
-    dl.AddCircleFilled(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
-                       col, 16);
+    if (state.hovered || state.selected) {
+        if (style.squarePins)
+            dl.AddRect(ImVec2(bounds.x - 2.0f, bounds.y - 2.0f),
+                       ImVec2(bounds.x + bounds.w + 2.0f,
+                              bounds.y + bounds.h + 2.0f),
+                       state.selected ? pal.text : pal.accent, 0.0f, 0, 1.4f);
+        else
+            dl.AddCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
+                         state.selected ? pal.text : pal.accent, 0, 1.4f);
+    }
+    if (style.squarePins) {
+        dl.AddRectFilled(topLeft(bounds), bottomRight(bounds), col, 0.0f);
+        dl.AddRect(topLeft(bounds), bottomRight(bounds),
+                   paint::withAlpha(IM_COL32(0, 0, 0, 255), 0x73), 0.0f);
+        dl.AddRect(ImVec2(bounds.x + 1.0f, bounds.y + 1.0f),
+                   ImVec2(bounds.x + bounds.w - 1.0f,
+                          bounds.y + bounds.h - 1.0f),
+                   paint::withAlpha(IM_COL32(255, 255, 255, 255), 0x2E), 0.0f);
+    } else {
+        dl.AddCircleFilled(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
+                           col, 16);
+    }
     if (port.direction == GraphPortDirection::Output) {
         dl.AddLine(ImVec2(c.x - 2.5f, c.y), ImVec2(c.x + 2.5f, c.y),
                    paint::withAlpha(pal.text, 0xB0), 1.0f);
@@ -2374,7 +2569,8 @@ Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint)
 GraphHit hitTestGraph(const GraphViewport& viewport,
                       const std::vector<GraphNode>& nodes,
                       const std::vector<GraphCable>& cables,
-                      Vec2 screenPoint)
+                      Vec2 screenPoint,
+                      GraphSurfaceStyle style)
 {
     const Vec2 graphPoint = screenToGraph(viewport, screenPoint);
 
@@ -2449,7 +2645,8 @@ GraphHit hitTestGraph(const GraphViewport& viewport,
             hit.output = distance(screenPoint, fromScreen) <= 7.0f;
             return hit;
         }
-        if (distanceToCable(screenPoint, fromScreen, toScreen) <= 6.0f) {
+        const float tolerance = std::max(6.0f, style.wireThickness + 4.0f);
+        if (distanceToCable(screenPoint, fromScreen, toScreen, style) <= tolerance) {
             GraphHit hit = makeGraphHit(GraphHitKind::Cable, graphPoint);
             hit.cableId = cable.id;
             return hit;
@@ -2595,6 +2792,7 @@ Node::Ptr popupMenu(NodeId id, PopupMenuState* state,
     NodeId sid = id;
     auto node = column(std::move(id), 0.0f, Insets::all(4.0f));
     node->setSize(Length::fixed(width + 8.0f), Length::intrinsic());
+    node->setOverlay(true);
     Semantics sem = named(Role::Menu, "Menu");
     node->setSemantics(sem);
     setMenuVisibleFromState(*node, state);
@@ -2633,6 +2831,7 @@ Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
     const NodeId menuId = sid + ".menu";
     auto root = column(std::move(id), 2.0f);
     root->setSize(Length::intrinsic(), Length::intrinsic());
+    root->setIntrinsicSize(buttonSize);
     Semantics rootSem = named(Role::Group, name);
     root->setSemantics(rootSem);
 
@@ -2993,6 +3192,62 @@ Node::Ptr dragNumber(NodeId id, std::string name, ValueBinding binding,
     return node;
 }
 
+Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
+                     PaintRenderer* renderer, Vec2 size,
+                     paint::OutlineButtonStyle fieldStyle, double dragSpeed)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    Semantics sem = named(Role::Slider, name);
+    sem.description = "Editable numeric value field";
+    setBindingSemantics(sem, binding);
+    node->setSemantics(sem);
+    node->setValueBinding(binding);
+    installValueFieldPointerBehavior(*node, dragSpeed);
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasDraw = [binding, fieldStyle](ImDrawList& dl, const Node& node,
+                                                 Rect bounds,
+                                                 const paint::ControlState& state) mutable {
+            const NodeId& id = node.id();
+            if (valueFieldEditing(id)) {
+                ValueFieldBuffer& buf = valueFieldBuffers()[id];
+                ImGui::SetCursorScreenPos(ImVec2(bounds.x + 1.0f, bounds.y + 1.0f));
+                ImGui::SetNextItemWidth(std::max(8.0f, bounds.w - 2.0f));
+                ImGui::PushID(id.c_str());
+                if (focusValueFields().erase(id) > 0)
+                    ImGui::SetKeyboardFocusHere();
+                const bool commit =
+                    ImGui::InputText("##value", buf.data(), buf.size(),
+                                     ImGuiInputTextFlags_EnterReturnsTrue |
+                                         ImGuiInputTextFlags_AutoSelectAll);
+                const bool cancel = ImGui::IsItemActive() &&
+                                    ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+                const bool deactivated = ImGui::IsItemDeactivatedAfterEdit();
+                ImGui::PopID();
+                if (cancel)
+                    cancelValueFieldEdit(id);
+                else if (commit || deactivated)
+                    commitValueFieldEdit(id, binding);
+                return;
+            }
+
+            paint::ControlState inner = state;
+            const std::string valueText = nodeValueText(node, nullptr);
+            paint::drawOutlineButton(&dl, ImGui::GetFont(), topLeft(bounds),
+                                     sizeOf(bounds), valueText.c_str(), palette(),
+                                     inner, fieldStyle);
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
                  PaintRenderer* renderer, bool focusable, Role semanticRole)
@@ -3020,7 +3275,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                        const std::vector<GraphCable>& cables,
                        GraphSurfaceCallbacks callbacks,
                        PaintRenderer* renderer, Vec2 size,
-                       PopupMenuState* contextMenu)
+                       PopupMenuState* contextMenu,
+                       GraphSurfaceStyle graphStyle)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Canvas);
@@ -3065,14 +3321,14 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         }
         return false;
     });
-    node->setOnAction([&state, &nodes, &cables, contextMenu, callbacks](
+    node->setOnAction([&state, &nodes, &cables, contextMenu, callbacks, graphStyle](
                           Node& n, Action action, double) mutable {
         if (action != Action::OpenMenu)
             return false;
         const Rect b = n.bounds();
         const Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
         const Vec2 local{pos.x - b.x, pos.y - b.y};
-        state.hovered = hitTestGraph(state.viewport, nodes, cables, local);
+        state.hovered = hitTestGraph(state.viewport, nodes, cables, local, graphStyle);
         if (contextMenu) {
             contextMenu->open = true;
             contextMenu->anchorToPosition = true;
@@ -3083,12 +3339,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             callbacks.onContextMenu(state.hovered, state.hovered.graphPosition);
         return true;
     });
-    node->setOnEvent([&state, &nodes, &cables, contextMenu, callbacks](
+    node->setOnEvent([&state, &nodes, &cables, contextMenu, callbacks, graphStyle](
                          Node& n, const Event& event) mutable {
         const Rect b = n.bounds();
         const Vec2 local{event.position.x - b.x, event.position.y - b.y};
         auto updateHover = [&] {
-            state.hovered = hitTestGraph(state.viewport, nodes, cables, local);
+            state.hovered = hitTestGraph(state.viewport, nodes, cables, local, graphStyle);
             return state.hovered;
         };
 
@@ -3199,12 +3455,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
         VisualStyle style;
         style.kind = VisualKind::Canvas;
         style.panelBorder = true;
-        style.canvasDraw = [&state, &nodes, &cables](ImDrawList& dl, const Node&,
-                                                     Rect bounds,
-                                                     const paint::ControlState& cs) {
+        style.canvasDraw = [&state, &nodes, &cables, graphStyle](
+                                ImDrawList& dl, const Node&,
+                                Rect bounds, const paint::ControlState& cs) {
             paint::drawGraphGrid(&dl, topLeft(bounds), sizeOf(bounds),
                                  ImVec2(state.viewport.pan.x, state.viewport.pan.y),
-                                 state.viewport.zoom, palette(), cs);
+                                 state.viewport.zoom, palette(), cs, graphStyle);
 
             for (const GraphCable& cable : cables) {
                 Vec2 fromGraph;
@@ -3226,7 +3482,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                              bounds.y + fromLocal.y),
                                  ImVec2(bounds.x + toLocal.x,
                                         bounds.y + toLocal.y), palette(),
-                                 cableState, cable.invalid ? palette().meterHot : cable.color);
+                                 cableState, cable.invalid ? palette().meterHot : cable.color,
+                                 graphStyle.wireThickness, graphStyle);
             }
 
             for (const GraphNode& graphNode : nodes) {
@@ -3241,7 +3498,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 paint::drawModuleBox(&dl, ImGui::GetFont(), topLeft(nodeRect),
                                      sizeOf(nodeRect), graphNode.title.c_str(),
                                      palette(), nodeState, graphNode.bypassed,
-                                     graphNode.error);
+                                     graphNode.error, graphStyle);
 
                 auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                     for (const GraphPort& port : ports) {
@@ -3254,7 +3511,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                             state.hovered.nodeId == graphNode.id &&
                                             state.hovered.portId == port.id;
                         portState.selected = portState.hovered;
-                        drawGraphPort(dl, pr, port, portState);
+                        drawGraphPort(dl, pr, port, portState, graphStyle);
                     }
                 };
                 drawPortList(graphNode.inputs);

@@ -117,6 +117,12 @@ Use `Role::Canvas` for custom-drawn or live animated regions that still need
 retained layout, focus, hit testing, dirty state, and semantics. Canvas drawing
 must stay on the UI/render thread and read audio-derived values through the
 same snapshot/atomic patterns as other UI.
+Retained Canvas drawing is clipped to the node bounds by default; only disable
+`VisualStyle::canvasClip` for deliberate bleed effects. Popup/dropdown content
+that should float over surrounding layout must use `Node::setOverlay(true)` so
+it remains visible and hittable without consuming row/column layout space.
+Focus rings should follow keyboard-visible focus. Pointer-acquired focus remains
+semantic focus, but should not draw the focus-visible ring.
 
 Use `nodeSnapshot()` as the renderer/widget boundary and `semanticSnapshot()`
 as the accessibility boundary. Shared visual work should consume

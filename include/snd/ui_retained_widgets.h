@@ -67,6 +67,7 @@ struct VisualStyle {
     PopupMenuState* popupState = nullptr;
     bool panelFill = false;
     bool panelBorder = false;
+    bool canvasClip = true;
     bool lit = false;
     std::vector<std::string> segments; // Segmented / CycleButton option labels
     bool ledBlink = false;             // LedButton: pulse the lit ring
@@ -242,13 +243,16 @@ struct GraphSurfaceCallbacks {
     std::function<void(const GraphViewport&)> onViewportChanged;
 };
 
+using GraphSurfaceStyle = paint::GraphSurfaceStyle;
+
 Vec2 graphToScreen(const GraphViewport& viewport, Vec2 graphPoint);
 Rect graphToScreen(const GraphViewport& viewport, Rect graphRect);
 Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint);
 GraphHit hitTestGraph(const GraphViewport& viewport,
                       const std::vector<GraphNode>& nodes,
                       const std::vector<GraphCable>& cables,
-                      Vec2 screenPoint);
+                      Vec2 screenPoint,
+                      GraphSurfaceStyle style = {});
 
 namespace widgets {
 
@@ -312,6 +316,11 @@ Node::Ptr dragNumber(NodeId id, std::string name, ValueBinding binding,
                      PaintRenderer* renderer = nullptr,
                      Vec2 size = {160.0f, 26.0f},
                      double dragSpeed = 0.0);
+Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
+                     PaintRenderer* renderer = nullptr,
+                     Vec2 size = {120.0f, 28.0f},
+                     paint::OutlineButtonStyle style = {},
+                     double dragSpeed = 0.2);
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
@@ -322,7 +331,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                        GraphSurfaceCallbacks callbacks = {},
                        PaintRenderer* renderer = nullptr,
                        Vec2 size = {520.0f, 320.0f},
-                       PopupMenuState* contextMenu = nullptr);
+                       PopupMenuState* contextMenu = nullptr,
+                       GraphSurfaceStyle style = {});
 
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate = {},
                  PaintRenderer* renderer = nullptr,
