@@ -340,12 +340,55 @@ std::string menuPath(const std::string& parentPath, const MenuItem& item, int in
     return parentPath.empty() ? key : parentPath + "/" + key;
 }
 
+// Open `path` and close every open submenu that is not one of its ancestors
+// (hover moving to another parent closes the old flyout, like a real menu).
+void openSubmenuExclusive(PopupMenuState* state, const std::string& path);
+// Close every open submenu that is not `parentPath` itself or an ancestor of
+// it (hovering a leaf closes flyouts deeper than its own menu level).
+void closeSubmenusBelow(PopupMenuState* state, const std::string& parentPath);
+
 bool submenuOpen(const PopupMenuState* state, const std::string& path)
 {
     if (!state)
         return false;
     return std::find(state->openSubmenuPath.begin(), state->openSubmenuPath.end(),
                      path) != state->openSubmenuPath.end();
+}
+
+bool pathIsAncestorOrSelf(const std::string& candidate, const std::string& path)
+{
+    if (candidate.size() > path.size())
+        return false;
+    if (path.compare(0, candidate.size(), candidate) != 0)
+        return false;
+    return candidate.size() == path.size() || path[candidate.size()] == '/';
+}
+
+void openSubmenuExclusive(PopupMenuState* state, const std::string& path)
+{
+    if (!state)
+        return;
+    auto& paths = state->openSubmenuPath;
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [&](const std::string& openPath) {
+                                   return !pathIsAncestorOrSelf(openPath, path);
+                               }),
+                paths.end());
+    if (std::find(paths.begin(), paths.end(), path) == paths.end())
+        paths.push_back(path);
+}
+
+void closeSubmenusBelow(PopupMenuState* state, const std::string& parentPath)
+{
+    if (!state)
+        return;
+    auto& paths = state->openSubmenuPath;
+    paths.erase(std::remove_if(paths.begin(), paths.end(),
+                               [&](const std::string& openPath) {
+                                   return !pathIsAncestorOrSelf(openPath,
+                                                                parentPath);
+                               }),
+                paths.end());
 }
 
 void setSubmenuOpen(PopupMenuState* state, const std::string& path, bool open)
@@ -1506,6 +1549,41 @@ const VisualStyle* PaintRenderer::styleFor(const NodeId& id) const
     return it == styles_.end() ? nullptr : &it->second;
 }
 
+namespace {
+
+// Place every open flyout panel ("<rowId>.sub") beside its parent row:
+// right edge - 2, top-aligned with the row (menu padding compensated),
+// flipped to the left when it would leave the viewport. Parent panels are
+// anchored before their nested panels (DFS), so chains land correctly.
+void anchorOpenSubmenuPanels(Tree& tree, Node& panel)
+{
+    for (std::size_t i = 0; i < panel.childCount(); ++i) {
+        Node* sub = panel.child(i);
+        if (!sub || !sub->visible())
+            continue;
+        const NodeId& id = sub->id();
+        constexpr const char* kSuffix = ".sub";
+        if (id.size() > 4 && id.compare(id.size() - 4, 4, kSuffix) == 0) {
+            if (const Node* row = tree.find(id.substr(0, id.size() - 4))) {
+                const Rect rb = row->bounds();
+                const Rect sb = sub->bounds();
+                const Vec2 viewport = tree.viewport();
+                float x = rb.x + rb.w - 2.0f;
+                if (viewport.x > 0.0f && x + sb.w > viewport.x)
+                    x = std::max(0.0f, rb.x - sb.w + 2.0f); // flip left
+                float y = rb.y - 4.0f; // row sits 4px inside the panel pad
+                if (viewport.y > 0.0f && sb.h > 0.0f)
+                    y = std::clamp(y, 0.0f,
+                                   std::max(0.0f, viewport.y - sb.h));
+                translateSubtree(*sub, {x - sb.x, y - sb.y});
+            }
+            anchorOpenSubmenuPanels(tree, *sub);
+        }
+    }
+}
+
+} // namespace
+
 void PaintRenderer::prepareOpenPopups(Tree& tree) const
 {
     for (const auto& entry : styles_) {
@@ -1519,6 +1597,7 @@ void PaintRenderer::prepareOpenPopups(Tree& tree) const
             anchorPopupSubtree(tree, *node, *state);
         else
             anchorOverlayPopup(tree, *node);
+        anchorOpenSubmenuPanels(tree, *node);
         syncPopupFocus(tree, *node, *state);
     }
 }
@@ -1536,9 +1615,8 @@ bool PaintRenderer::dismissOpenPopupsOutside(Tree& tree, const ImVec2& origin,
         if (!node || !node->visible())
             continue;
         hasOpenPopup = true;
-        const Rect b = offset(node->bounds(), origin);
-        if (screenPoint.x >= b.x && screenPoint.y >= b.y &&
-            screenPoint.x <= b.x + b.w && screenPoint.y <= b.y + b.h) {
+        const Vec2 local{screenPoint.x - origin.x, screenPoint.y - origin.y};
+        if (node->hitTest(local) != nullptr) { // covers flyout panels too
             insideOpenPopup = true;
             break;
         }
@@ -1674,9 +1752,11 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     switch (style.kind) {
     case VisualKind::Panel:
         if (style.panelFill)
-            drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame, 4.0f);
+            drawList->AddRectFilled(topLeft(bounds), bottomRight(bounds), pal.frame,
+                                    style.panelRounding);
         if (style.panelBorder)
-            drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright, 4.0f);
+            drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright,
+                              style.panelRounding);
         break;
     case VisualKind::Text:
         drawText(drawList, font, bounds, nodeName(node, sem),
@@ -1915,7 +1995,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     switch (style.kind) {
     case VisualKind::Panel:
         if (style.panelFill)
-            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame, 4.0f);
+            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), pal.frame,
+                             style.panelRounding);
         if (style.panelBorder)
             surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
                                pal.frameBright, 4.0f);
@@ -2215,7 +2296,8 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
         }
     }
 
-    if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        // murk opens context menus on right mouse-DOWN, not on release
         Event event = pointerEvent(EventType::ContextMenu, localMouse, {},
                                    MouseButton::Right, io);
         event.clickCount = 1;
@@ -2302,14 +2384,13 @@ float retainedVisibleMenuHeight(const std::vector<MenuItem>& items,
                                 const PopupMenuState* state,
                                 const std::string& parentPath = {})
 {
+    // Flyout submenus live in their own side panels; a menu panel's height
+    // is just its direct rows.
+    (void)state;
+    (void)parentPath;
     float total = 8.0f;
-    for (int i = 0; i < (int)items.size(); ++i) {
-        const MenuItem& item = items[(std::size_t)i];
+    for (const MenuItem& item : items)
         total += retainedMenuItemHeight(item);
-        const std::string path = menuPath(parentPath, item, i);
-        if (!item.children.empty() && submenuOpen(state, path))
-            total += retainedVisibleMenuHeight(item.children, state, path) - 8.0f;
-    }
     return total;
 }
 
@@ -2339,12 +2420,42 @@ void addMenuItemNodes(Node& menu, const NodeId& sid,
         const MenuItem& item = items[(std::size_t)i];
         const std::string path = menuPath(parentPath, item, i);
         const int focusIndex = (int)menu.childCount();
-        menu.addChild(makeMenuItemNode(menuChildId(sid, item, focusIndex), item,
+        const NodeId rowId = menuChildId(sid, item, focusIndex);
+        menu.addChild(makeMenuItemNode(rowId, item,
                                        onSelect, renderer, i, width, state,
                                        path, parentPath, depth, focusIndex));
-        if (!item.children.empty())
-            addMenuItemNodes(menu, sid + "." + menuPathKey(item, i), item.children,
-                             onSelect, renderer, width, state, path, depth + 1);
+        if (!item.children.empty()) {
+            // Real flyout: the submenu is its own overlay panel, anchored to
+            // the right of its parent row by prepareOpenPopups, not an
+            // inline accordion in the same column.
+            auto sub = widgets::column(rowId + ".sub", 0.0f, Insets::all(4.0f));
+            sub->setOverlay(true);
+            sub->setSize(Length::fixed(width + 8.0f), Length::intrinsic());
+            sub->setIntrinsicSize({width + 8.0f,
+                                   retainedVisibleMenuHeight(item.children,
+                                                             state)});
+            Semantics subSem = named(Role::Menu, item.label + " submenu");
+            sub->setSemantics(subSem);
+            const std::string subPath = path;
+            sub->setVisible(state && state->open && submenuOpen(state, subPath));
+            sub->setOnRefresh([state, subPath](Node& n) {
+                const bool wasVisible = n.visible();
+                n.setVisible(state && state->open &&
+                             submenuOpen(state, subPath));
+                return wasVisible != n.visible();
+            });
+            addMenuItemNodes(*sub, rowId + ".sub", item.children, onSelect,
+                             renderer, width, state, path, depth + 1);
+            if (renderer) {
+                VisualStyle subStyle;
+                subStyle.kind = VisualKind::Panel;
+                subStyle.panelFill = true;
+                subStyle.panelBorder = true;
+                subStyle.panelRounding = 0.0f;
+                renderer->setStyle(rowId + ".sub", subStyle);
+            }
+            menu.addChild(std::move(sub));
+        }
     }
 }
 
@@ -2451,7 +2562,10 @@ Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
     if (!item.separator && item.enabled) {
         node->setOnActivate([item, index, onSelect, state, path](Node& n) {
             if (!item.children.empty()) {
-                setSubmenuOpen(state, path, !submenuOpen(state, path));
+                if (submenuOpen(state, path))
+                    setSubmenuOpen(state, path, false);
+                else
+                    openSubmenuExclusive(state, path);
                 n.markDirty();
                 return;
             }
@@ -2462,11 +2576,30 @@ Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
         node->setOnAction([state, path, item](Node& n, Action action, double) {
             if (action != Action::OpenMenu || item.children.empty())
                 return false;
-            setSubmenuOpen(state, path, true);
+            openSubmenuExclusive(state, path);
             n.markDirty();
             return true;
         });
-        node->setOnEvent([state, index, focusIndex, path, item](Node& n, const Event& event) {
+        node->setOnEvent([state, index, focusIndex, path, parentPath,
+                          item](Node& n, const Event& event) {
+            if (event.type == EventType::MouseMove) {
+                // hover opens flyouts like a real menu; hovering a sibling
+                // (leaf or other parent) closes deeper flyouts
+                if (state && state->open) {
+                    if (!item.children.empty()) {
+                        if (!submenuOpen(state, path)) {
+                            openSubmenuExclusive(state, path);
+                            n.markDirty();
+                        }
+                    } else if (!state->openSubmenuPath.empty()) {
+                        const std::size_t before = state->openSubmenuPath.size();
+                        closeSubmenusBelow(state, parentPath);
+                        if (state->openSubmenuPath.size() != before)
+                            n.markDirty();
+                    }
+                }
+                return false; // never consume hover
+            }
             if (event.type != EventType::KeyDown)
                 return false;
             if (!event.text.empty() && state) {
@@ -2485,7 +2618,7 @@ Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
                 return true;
             }
             if (event.key == Key::Right && !item.children.empty() && state) {
-                setSubmenuOpen(state, path, true);
+                openSubmenuExclusive(state, path);
                 n.markDirty();
                 return true;
             }
@@ -2513,9 +2646,6 @@ Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
         VisualStyle style;
         style.kind = VisualKind::MenuItem;
         style.menuItem = item;
-        if (depth > 0)
-            style.menuItem.label = std::string((std::size_t)depth * 2, ' ') +
-                                   style.menuItem.label;
         renderer->setStyle(sid, style);
     }
     return node;
@@ -3645,6 +3775,7 @@ Node::Ptr popupMenu(NodeId id, PopupMenuState* state,
         style.kind = VisualKind::Panel;
         style.panelFill = true;
         style.panelBorder = true;
+        style.panelRounding = 0.0f; // menus are square
         style.popupState = state;
         renderer->setStyle(sid, style);
     }

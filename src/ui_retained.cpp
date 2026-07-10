@@ -677,14 +677,17 @@ Node* Node::hitTest(Vec2 point)
 
 const Node* Node::hitTest(Vec2 point) const
 {
-    if (!visible_ || !bounds_.contains(point))
+    if (!visible_)
         return nullptr;
 
+    // Children are consulted regardless of this node's own rect: overlay
+    // subtrees (popups, flyout submenus) are translated outside their
+    // parent's bounds by design and must stay hittable.
     for (auto it = children_.rbegin(); it != children_.rend(); ++it)
         if (const Node* hit = (*it)->hitTest(point))
             return hit;
 
-    return this;
+    return bounds_.contains(point) ? this : nullptr;
 }
 
 void Node::markDirty()

@@ -70,6 +70,7 @@ struct VisualStyle {
     PopupMenuState* popupState = nullptr;
     bool panelFill = false;
     bool panelBorder = false;
+    float panelRounding = 4.0f;
     bool canvasClip = true;
     bool lit = false;
     std::vector<std::string> segments; // Segmented / CycleButton option labels
