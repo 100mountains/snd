@@ -545,7 +545,8 @@ void sectionHeader(const char* text)
 }
 
 bool patternGrid(const char* id, bool* cells, int rows, int steps,
-                 const ImVec2& size, int playheadStep)
+                 const ImVec2& size, int playheadStep,
+                 const paint::PatternCellPainter& cellPainter)
 {
     if (rows <= 0 || steps <= 0 || !cells)
         return false;
@@ -573,8 +574,15 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
     paint::drawPatternGrid(ImGui::GetWindowDrawList(), p, size, cells, rows, steps,
-                           playheadStep, gPalette, state);
+                           playheadStep, gPalette, state, cellPainter);
     return changed;
+}
+
+bool patternGrid(const char* id, bool* cells, int rows, int steps,
+                 const ImVec2& size, int playheadStep)
+{
+    return patternGrid(id, cells, rows, steps, size, playheadStep,
+                       paint::PatternCellPainter{});
 }
 
 bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2& size,
@@ -699,7 +707,8 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
     return changed;
 }
 
-bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
+bool xyPad(const char* id, float* x, float* y, const ImVec2& size,
+           const paint::XYPadPainter& painter)
 {
     ImVec2 p = ImGui::GetCursorScreenPos();
     ImGui::InvisibleButton(id, size);
@@ -718,8 +727,22 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
-    paint::drawXYPad(ImGui::GetWindowDrawList(), p, size, *x, *y, gPalette, state);
+
+    paint::XYPadPaintArgs args;
+    args.drawList = ImGui::GetWindowDrawList();
+    args.topLeft = p;
+    args.size = size;
+    args.x = *x;
+    args.y = *y;
+    args.palette = &gPalette;
+    args.state = &state;
+    paint::drawXYPadWithPainter(args, painter);
     return changed;
+}
+
+bool xyPad(const char* id, float* x, float* y, const ImVec2& size)
+{
+    return xyPad(id, x, y, size, paint::XYPadPainter{});
 }
 
 bool selectableList(const char* id, const std::vector<std::string>& items,

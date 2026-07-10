@@ -123,6 +123,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <div class="grp">Controls</div>
     <a href="#knobs" class="nl">Knobs</a>
     <a href="#modring" class="nl">Knob mod ring</a>
+    <a href="#ghost" class="nl">Randomise window</a>
     <a href="#fader" class="nl">Fader</a>
     <a href="#toggle" class="nl">Toggle</a>
     <a href="#buttons" class="nl">Buttons</a>
@@ -181,6 +182,15 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <div class="unit"><canvas class="cv live" data-w="modknob"  width="72" height="72"></canvas><div class="cellcap">Ring · depth +0.30</div></div>
         <div class="unit"><canvas class="cv live" data-w="modknob2" width="72" height="72"></canvas><div class="cellcap">Davies · depth −0.25</div></div>
         <div class="unit"><canvas class="cv live" data-w="modknob3" width="72" height="72"></canvas><div class="cellcap">custom painter + mod</div></div>
+      </div>
+    </section>
+
+    <section id="ghost">
+      <div class="sechead"><h2>Randomise window</h2><span class="tag">paint::drawKnobWindow · drawComboWindow · KnobWindow</span></div>
+      <p class="desc">Ghost fences (murk's GhostOverlay): every control carries an independent <code style="color:var(--dim)">{lo, hi, locked}</code> randomise window — an arc with <b>two separately grabbable end dots</b> over knobs, an index bracket under combos, and a padlock when locked out of RND. Draw + hit-test live in SND; the overlay mode and drag state stay with the caller. <b class="try">Drag an end dot (up / down on the knob, along the bracket on the combo) — click without dragging to lock.</b></p>
+      <div class="rack">
+        <div class="unit"><canvas class="cv live" data-w="ghostk" width="86" height="86"></canvas><div class="cellcap">knob window · Seq ring</div></div>
+        <div class="unit"><canvas class="cv live" data-w="ghostc" width="150" height="46"></canvas><div class="cellcap">combo bracket</div></div>
       </div>
     </section>
 
@@ -250,12 +260,15 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 
 
     <section id="custom-paint">
-      <div class="sechead"><h2>Animated &amp; custom paint</h2><span class="tag">animatedButton · ButtonPainter · KnobPainter</span></div>
-      <p class="desc">Generation/action buttons can carry a subtle live sweep, while custom painter hooks let a consumer draw the knob or button body without owning hit-testing, focus, keyboard, value mapping, or accessibility. SND draws the required focus treatment after the painter runs.</p>
+      <div class="sechead"><h2>Animated &amp; custom paint</h2><span class="tag">animatedButton · ButtonPainter · KnobPainter · XYPadPainter · PatternCellPainter</span></div>
+      <p class="desc">Generation/action buttons can carry a subtle live sweep, while custom painter hooks let a consumer draw a knob, button, XY-pad, or pattern-grid-cell body without owning hit-testing, focus, keyboard, value mapping, or accessibility. SND draws the required focus treatment after the painter runs. The gradient knob and velocity cells below also use the shared <code>drawGradientArc</code> / <code>drawGradientRect</code> primitives.</p>
       <div class="rack">
         <div class="statecol"><button class="genbtn">GENERATE</button><div class="cellcap">animatedButton</div></div>
         <div class="statecol"><button class="custombtn"><span>RENDER</span></button><div class="cellcap">custom ButtonPainter</div></div>
         <div class="unit"><canvas class="cv live" data-w="custom" width="72" height="72"></canvas><div class="cellcap">custom KnobPainter</div></div>
+        <div class="unit"><canvas class="cv live" data-w="gradknob" width="72" height="72"></canvas><div class="cellcap">gradient-arc painter</div></div>
+        <div class="unit"><canvas class="cv live" data-w="velgrid" width="240" height="96"></canvas><div class="cellcap">PatternCellPainter · velocity</div></div>
+        <div class="unit"><canvas class="cv live" data-w="puck" width="96" height="96"></canvas><div class="cellcap">XYPadPainter · puck map</div></div>
       </div>
     </section>
 
@@ -639,6 +652,105 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     g.lineWidth=1.8;roundRect(g,2.5,2.5,W-5,H-5,3);g.stroke();
   }
   function armLv(){return RM?1:0.35+0.65*(0.5+0.5*Math.sin(T*6));}
+  function gradArc(g,cx,cy,r,a0,a1,c0,c1,w,segs){segs=segs||32;
+    var px=cx+Math.cos(a0)*r,py=cy+Math.sin(a0)*r;
+    for(var i=1;i<=segs;i++){var t=i/segs,a=a0+(a1-a0)*t;
+      var x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+      g.strokeStyle=mix(c0,c1,((i-1)/segs+t)/2);g.lineWidth=w;g.lineCap='butt';
+      g.beginPath();g.moveTo(px,py);g.lineTo(x,y);g.stroke();px=x;py=y;}}
+  function gradKnob(g,W,H,frac){ // murk drum-macro style via the painter hook
+    var r=W/2,cx=r,cy=r,va=kang(frac);
+    g.beginPath();g.arc(cx,cy+1.5,r,0,7);g.fillStyle='rgba(0,0,0,.42)';g.fill();
+    var gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#22262b');gr.addColorStop(.48,'#171b20');gr.addColorStop(1,'#080a0d');
+    g.beginPath();g.arc(cx,cy,r-1,0,7);g.fillStyle=gr;g.fill();
+    g.beginPath();g.arc(cx,cy,r-1,0,7);g.strokeStyle='rgba(255,255,255,.055)';g.lineWidth=1;g.stroke();
+    gradArc(g,cx,cy,r-6,A0,A1,'#3a3f4e','#3a3f4e',2.3);
+    if(va>A0) gradArc(g,cx,cy,r-6,A0,va,'#ff5046',A.accent,2.9);
+    var dx=Math.cos(va),dy=Math.sin(va);
+    g.beginPath();g.arc(cx+dx*(r-6),cy+dy*(r-6),2.6,0,7);g.fillStyle=A.accent;g.fill();
+    g.beginPath();g.arc(cx,cy,r*0.28,0,7);g.fillStyle='rgba(0,0,0,.18)';g.fill();
+    g.beginPath();g.arc(cx-r*.12*.28,cy-r*.12*.28,r*0.24,0,7);g.fillStyle='rgba(255,255,255,.035)';g.fill();
+  }
+  function velGrid(g,W,H,s){ // PatternCellPainter demo: velocity-gradient cells
+    g.fillStyle=PAL.frame;roundRect(g,0,0,W,H,3);g.fill();
+    var cw=W/s.steps,ch=H/s.rows;
+    for(var r=0;r<s.rows;r++)for(var c=0;c<s.steps;c++){
+      var x0=c*cw+1.5,y0=r*ch+1.5,x1=(c+1)*cw-1.5,y1=(r+1)*ch-1.5;
+      var v=s.vel[r*s.steps+c];
+      if(v<=0){g.fillStyle=rgba(PAL.frameB,((c/4|0)%2)?0.19:0.33);roundRect(g,x0,y0,x1-x0,y1-y0,2);g.fill();continue;}
+      var gr=g.createLinearGradient(0,y0,0,y1);
+      gr.addColorStop(0,rgba(A.accent,0.35+0.65*v));gr.addColorStop(1,rgba(A.accentDim,0.5));
+      g.fillStyle=gr;roundRect(g,x0,y0,x1-x0,y1-y0,2);g.fill();
+      g.fillStyle=rgba('#ffffff',0.25+0.45*v);g.fillRect(x0,y0,x1-x0,1.5);
+    }
+    g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,3);g.stroke();
+  }
+  function puckPad(g,W,H,s){ // XYPadPainter demo: puck map face
+    g.fillStyle='#05070d';roundRect(g,0,0,W,H,3);g.fill();
+    for(var i=1;i<4;i++){g.strokeStyle='rgba(26,34,51,.9)';g.lineWidth=1;
+      g.beginPath();g.moveTo(W*i/4,0);g.lineTo(W*i/4,H);g.moveTo(0,H*i/4);g.lineTo(W,H*i/4);g.stroke();}
+    var cx=s.x*W,cy=(1-s.y)*H;
+    var gr=g.createRadialGradient(cx,cy,2,cx,cy,16);
+    gr.addColorStop(0,rgba(A.accent,0.5));gr.addColorStop(1,rgba(A.accent,0));
+    g.fillStyle=gr;g.beginPath();g.arc(cx,cy,16,0,7);g.fill();
+    g.beginPath();g.arc(cx,cy,7.5,0,7);g.fillStyle='#0d1320';g.fill();
+    g.strokeStyle=A.accent;g.lineWidth=2;g.beginPath();g.arc(cx,cy,7.5,0,7);g.stroke();
+    g.beginPath();g.arc(cx,cy,2.4,0,7);g.fillStyle=A.accent;g.fill();
+    g.strokeStyle='rgba(26,34,51,1)';g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,3);g.stroke();
+  }
+  function padlock(g,x0,y0,x1,y1,col){ // murk lock glyph: body + shackle
+    var w=x1-x0,h=y1-y0,bt=y0+h*0.45;
+    g.fillStyle=col;roundRect(g,x0,bt,w,y1-bt,1.5);g.fill();
+    var cx=x0+w*0.5,rx=w*0.28,ry=h*0.405;
+    g.strokeStyle=col;g.lineWidth=1.6;g.beginPath();
+    for(var i=0;i<=12;i++){var t=-Math.PI/2+Math.PI*(i/12);
+      var px=cx+rx*Math.sin(t),py=bt-ry*Math.cos(t);i?g.lineTo(px,py):g.moveTo(px,py);}
+    g.stroke();
+  }
+  function ghostKnob(g,W,H,s){ // knob body inset 7px; fence just outside it
+    var k=W-14;g.save();g.translate(7,7);knobRing(g,k,k,0.55,false,false,false);g.restore();
+    var col=s.locked?PAL.dim:A.accent,cx=W/2,cy=H/2,r=k/2+2.5;
+    var aLo=kang(Math.min(s.lo,s.hi)),aHi=kang(Math.max(s.lo,s.hi));
+    if(aHi>aLo){g.beginPath();g.arc(cx,cy,r,aLo,aHi);g.lineCap='butt';
+      g.strokeStyle=rgba(col,s.locked?0.35:0.85);g.lineWidth=2;g.stroke();}
+    [aLo,aHi].forEach(function(a){var dx=Math.cos(a),dy=Math.sin(a);
+      g.beginPath();g.arc(cx+dx*r,cy+dy*r,2.8,0,7);g.fillStyle=col;g.fill();});
+    if(s.locked)padlock(g,7+k-9,6,7+k,16,PAL.hot);
+  }
+  function ghostCombo(g,W,H,s){ // flat combo face + index bracket at the base
+    var bx0=2,by0=12,bx1=W-2,by1=H-8;
+    g.fillStyle=PAL.frame;g.fillRect(bx0,by0,bx1-bx0,by1-by0);
+    g.strokeStyle=PAL.frameB;g.lineWidth=1;g.strokeRect(bx0+0.5,by0+0.5,bx1-bx0-1,by1-by0-1);
+    g.font='11px system-ui,sans-serif';g.textBaseline='middle';g.fillStyle=PAL.ink;
+    g.fillText('Scale · Dorian',bx0+8,(by0+by1)/2);g.textBaseline='alphabetic';
+    var col=s.locked?PAL.dim:A.accent,w=bx1-bx0;
+    var lo=Math.min(s.lo,s.hi),hi=Math.max(s.lo,s.hi);
+    var y=by1-2,x0=bx0+lo*w,x1=bx0+hi*w;
+    g.fillStyle=s.locked?'rgba(140,145,158,0.35)':rgba(A.accent,0.85);
+    g.fillRect(x0,y-1,Math.max(2,x1-x0),3);
+    g.fillStyle=col;g.fillRect(x0-1,y-6,2,8);g.fillRect(x1-1,y-6,2,8);
+    if(s.locked)padlock(g,bx1-9,by0-11,bx1,by0-1,PAL.hot);
+  }
+  function ghostKnobT(cv,e){ // press -> 0..1 along the sweep (murk knobProp)
+    var r=cv.getBoundingClientRect(),cx=r.left+cv._w/2,cy=r.top+cv._h/2;
+    var ang=Math.atan2(e.clientY-cy,e.clientX-cx),twoPi=Math.PI*2;
+    while(ang<A0)ang+=twoPi;while(ang>A0+twoPi)ang-=twoPi;
+    if(ang>A1)ang=(ang-A1)<(A0+twoPi-ang)?A1:A0;
+    return (ang-A0)/(A1-A0);
+  }
+  function ghostDrag(cv,s,horiz){cv.style.cursor='pointer';cv.style.touchAction='none';
+    var grabEnd=-1,dragged=false,y0=0,x0=0,start=0;
+    function fracX(e){var r=cv.getBoundingClientRect();return cl((e.clientX-r.left-2)/(cv._w-4));}
+    cv.addEventListener('pointerdown',function(e){
+      var t=horiz?fracX(e):ghostKnobT(cv,e);
+      grabEnd=Math.abs(t-s.hi)<Math.abs(t-s.lo)?1:0;dragged=false;y0=e.clientY;x0=e.clientX;
+      start=grabEnd===1?s.hi:s.lo;cap(cv,e);e.preventDefault();});
+    cv.addEventListener('pointermove',function(e){if(grabEnd<0)return;
+      if(!dragged&&Math.hypot(e.clientX-x0,e.clientY-y0)>3)dragged=true;
+      if(!dragged)return;
+      var v=horiz?fracX(e):cl(start+(y0-e.clientY)/140);
+      if(grabEnd===0)s.lo=Math.min(v,s.hi);else s.hi=Math.max(v,s.lo);drawOne(cv);});
+    end(cv,function(){if(grabEnd>=0&&!dragged){s.locked=!s.locked;}grabEnd=-1;drawOne(cv);});}
   function roundRect(g,x,y,w,h,r){r=Math.min(r,w/2,h/2);g.beginPath();
     g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
   function roundRectB(g,x,y,w,h,r){g.beginPath();g.moveTo(x,y);g.lineTo(x+w,y);g.lineTo(x+w,y+h-r);
@@ -659,6 +771,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     cyc:{i:1,hov:false,act:false,n:3,labels:['12 dB/oct','24 dB/oct','48 dB/oct']},
     cyc2:{i:0,hov:false,act:false,n:3,labels:['×1','×2','×4']},
     ledrec:{on:true},ledarm:{on:true},ledmon:{on:false},
+    ghostk:{lo:0.25,hi:0.85,locked:false},ghostc:{lo:0.2,hi:0.7,locked:false},
+    gradknob:{v:0.62},puck:{x:0.62,y:0.38},
+    velgrid:{rows:4,steps:16,vel:(function(){var v=[];var seed=[[0,.9],[4,.7],[8,1],[12,.6],[19,.5],[23,.8],[34,.65],[38,.45],[42,.95],[51,.75],[55,.55],[60,.85]];
+      for(var i=0;i<64;i++)v[i]=0;seed.forEach(function(p){v[p[0]]=p[1];});return v;})()},
     xy:{x:0.5,y:0.6},env:{points:[[0,0.35],[0.24,0.82],[0.52,0.28],[0.78,0.62],[1,0.48]],hot:-1,active:-1},keys:{lit:-1}};
 
   var dpr=Math.max(1,window.devicePixelRatio||1);
@@ -692,6 +808,11 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       case 'ledrec': ledBtn(g,W,H,'',s.on?1:0,s.on,s.hov);break;
       case 'ledarm': ledBtn(g,W,H,'',s.on?armLv():0,s.on,s.hov);break;
       case 'ledmon': ledBtn(g,W,H,'',s.on?1:0,s.on,s.hov);break;
+      case 'ghostk': ghostKnob(g,W,H,s);break;
+      case 'ghostc': ghostCombo(g,W,H,s);break;
+      case 'gradknob': gradKnob(g,W,H,s.v);break;
+      case 'velgrid': velGrid(g,W,H,s);break;
+      case 'puck': puckPad(g,W,H,s);break;
       case 'fader0': case 'fader1': case 'fader2': case 'fader3': fader(g,W,H,s.v,!!s.hot);break;
       case 'toggle': case 'toggleon': case 'toggleoff': toggle(g,W,H,s.anim);break;
       case 'ledblink': case 'ledon': case 'ledoff': led(g,W,H,s.on);break;
@@ -774,6 +895,13 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     else if(/^toggle/.test(k)) clickToggle(cv,function(){s.v=s.v>0.5?0:1;});
     else if(k==='seg'||k==='segab') segDrag(cv,s);
     else if(/^cyc/.test(k)) cycClick(cv,s);
+    else if(k==='ghostk') ghostDrag(cv,s,false);
+    else if(k==='ghostc') ghostDrag(cv,s,true);
+    else if(k==='gradknob') knobDrag(cv,s);
+    else if(k==='puck') xyDrag(cv,s);
+    else if(k==='velgrid'){cv.style.cursor='pointer';cv.addEventListener('pointerdown',function(e){
+      var r=cv.getBoundingClientRect();var c=Math.floor((e.clientX-r.left)/(cv._w/s.steps)),rr=Math.floor((e.clientY-r.top)/(cv._h/s.rows));
+      if(c>=0&&c<s.steps&&rr>=0&&rr<s.rows){var i=rr*s.steps+c;s.vel[i]=s.vel[i]>0?0:(e.altKey?0.4:0.85);drawOne(cv);}e.preventDefault();});}
     else if(/^led/.test(k)) clickToggle(cv,function(){s.on=!s.on;drawOne(cv);});
     else if(k==='xy') xyDrag(cv,s);
     else if(k==='env') envDrag(cv,s);

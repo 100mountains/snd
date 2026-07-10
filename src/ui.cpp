@@ -32,6 +32,22 @@ namespace {
 int gWindowCount = 0;             // glfwTerminate when the last one dies
 GLFWwindow* gShareWindow = nullptr; // GL object sharing (textures cross windows)
 
+// ImGui labels may carry an "##id" suffix; painted button text stops there.
+// Returns `label` unchanged when there is no suffix (no allocation), else the
+// visible prefix copied into `storage`.
+const char* visibleButtonText(const char* label, std::string& storage)
+{
+    if (!label)
+        return "";
+    const char* end = label;
+    while (*end && !(end[0] == '#' && end[1] == '#'))
+        ++end;
+    if (*end == 0)
+        return label;
+    storage.assign(label, end);
+    return storage.c_str();
+}
+
 float menuItemHeight(const MenuOptions& options)
 {
     return options.itemHeight > 0.0f ? options.itemHeight
@@ -614,8 +630,10 @@ bool gradientButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
+    std::string visible;
     paint::drawAnimatedButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
-                              label, top, bottom, palette(), state, 0.0f);
+                              visibleButtonText(label, visible), top, bottom,
+                              palette(), state, 0.0f);
     return pressed;
 }
 
@@ -628,8 +646,10 @@ bool animatedButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
     const float pulse = 0.5f + 0.5f * std::sin((float)ImGui::GetTime() * 3.6f);
+    std::string visible;
     paint::drawAnimatedButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
-                              label, top, bottom, palette(), state, pulse);
+                              visibleButtonText(label, visible), top, bottom,
+                              palette(), state, pulse);
     return pressed;
 }
 
@@ -643,12 +663,13 @@ bool button(const char* label, const ImVec2& size,
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
 
+    std::string visible;
     paint::ButtonPaintArgs args;
     args.drawList = ImGui::GetWindowDrawList();
     args.font = ImGui::GetFont();
     args.topLeft = p;
     args.size = size;
-    args.text = label;
+    args.text = visibleButtonText(label, visible);
     args.palette = &palette();
     args.state = &state;
     paint::drawButtonWithPainter(args, painter);
@@ -671,9 +692,31 @@ bool outlineButton(const char* label, const ImVec2& size,
     state.active = ImGui::IsItemActive();
     state.focused = ImGui::IsItemFocused();
     state.selected = selected;
+    std::string visible;
     paint::drawOutlineButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
-                             label, palette(), state, style);
+                             visibleButtonText(label, visible), palette(), state,
+                             style);
     return pressed;
+}
+
+void tooltip(const char* text, float maxWidth)
+{
+    if (!text || !text[0])
+        return;
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+        return;
+
+    const Palette& pal = palette();
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, paint::toVec4(pal.frame));
+    ImGui::PushStyleColor(ImGuiCol_Border, paint::toVec4(pal.frameBright));
+    ImGui::PushStyleColor(ImGuiCol_Text, paint::toVec4(pal.text));
+    if (ImGui::BeginTooltip()) {
+        ImGui::PushTextWrapPos(maxWidth > 0.0f ? maxWidth : 400.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+    ImGui::PopStyleColor(3);
 }
 
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, bool active)
@@ -709,6 +752,18 @@ MenuResult dropdownMenu(const char* id, const char* currentLabel,
                         const std::vector<MenuItem>& items, int* selectedIndex,
                         const ImVec2& size, const MenuOptions& options)
 {
+    paint::OutlineButtonStyle style;
+    style.hoverBorder = palette().accent;
+    style.activeFill = paint::withAlpha(palette().accent, 0x28);
+    return dropdownMenu(id, currentLabel, items, selectedIndex, style, size,
+                        options);
+}
+
+MenuResult dropdownMenu(const char* id, const char* currentLabel,
+                        const std::vector<MenuItem>& items, int* selectedIndex,
+                        const paint::OutlineButtonStyle& buttonStyle,
+                        const ImVec2& size, const MenuOptions& options)
+{
     MenuResult result;
     if (!id || !id[0])
         return result;
@@ -720,10 +775,7 @@ MenuResult dropdownMenu(const char* id, const char* currentLabel,
         buttonSize.y = std::max(24.0f, ImGui::GetFrameHeight());
 
     std::string buttonLabel = std::string(label) + "##" + (id ? id : "dropdown");
-    paint::OutlineButtonStyle style;
-    style.hoverBorder = palette().accent;
-    style.activeFill = paint::withAlpha(palette().accent, 0x28);
-    const bool pressed = outlineButton(buttonLabel.c_str(), buttonSize, style);
+    const bool pressed = outlineButton(buttonLabel.c_str(), buttonSize, buttonStyle);
     if (pressed)
         ImGui::OpenPopup(id);
 

@@ -3132,7 +3132,8 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
 
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,
                       PaintRenderer* renderer, Vec2 size,
-                      std::function<int()> playheadStep)
+                      std::function<int()> playheadStep,
+                      paint::PatternCellPainter cellPainter)
 {
     NodeId sid = id;
     auto binding = std::make_shared<PatternGridBinding>();
@@ -3165,13 +3166,15 @@ Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int st
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
-        style.canvasDraw = [binding](ImDrawList& dl, const Node&, Rect bounds,
-                                     const paint::ControlState& state) {
+        style.canvasDraw = [binding, cellPainter = std::move(cellPainter)](
+                               ImDrawList& dl, const Node&, Rect bounds,
+                               const paint::ControlState& state) {
             paint::ControlState inner = state;
             inner.focused = false;
             paint::drawPatternGrid(&dl, topLeft(bounds), sizeOf(bounds),
                                    binding->cells, binding->rows, binding->steps,
-                                   patternPlayhead(*binding), palette(), inner);
+                                   patternPlayhead(*binding), palette(), inner,
+                                   cellPainter);
         };
         renderer->setStyle(sid, style);
     }
@@ -3179,7 +3182,8 @@ Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int st
 }
 
 Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
-                ValueBinding yBinding, PaintRenderer* renderer, Vec2 size)
+                ValueBinding yBinding, PaintRenderer* renderer, Vec2 size,
+                paint::XYPadPainter painter)
 {
     NodeId sid = id;
     auto bindings = std::make_shared<XYPadBindings>();
@@ -3210,14 +3214,20 @@ Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
-        style.canvasDraw = [bindings](ImDrawList& dl, const Node&, Rect bounds,
-                                      const paint::ControlState& state) {
+        style.canvasDraw = [bindings, painter = std::move(painter)](
+                               ImDrawList& dl, const Node&, Rect bounds,
+                               const paint::ControlState& state) {
             paint::ControlState inner = state;
             inner.focused = false;
-            paint::drawXYPad(&dl, topLeft(bounds), sizeOf(bounds),
-                             (float)readBinding(bindings->x),
-                             (float)readBinding(bindings->y),
-                             palette(), inner);
+            paint::XYPadPaintArgs args;
+            args.drawList = &dl;
+            args.topLeft = topLeft(bounds);
+            args.size = sizeOf(bounds);
+            args.x = (float)readBinding(bindings->x);
+            args.y = (float)readBinding(bindings->y);
+            args.palette = &palette();
+            args.state = &inner;
+            paint::drawXYPadWithPainter(args, painter);
         };
         renderer->setStyle(sid, style);
     }

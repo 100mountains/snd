@@ -110,6 +110,54 @@ palette — set `ImGui::GetStyle()` colours if you want them to match.
 For a look outside the palette's reach (a bespoke skin), draw directly with
 `ImGui::GetWindowDrawList()` and your own colours, as the widgets do internally.
 
+## Icon fonts and glyphs
+
+SND embeds two icon fonts; `<snd/icons.h>` provides named glyph constants.
+
+- **Material Icons** (`ICON_MD_*`, Apache-2.0) is merged into the default
+  font, so the glyphs work inline anywhere text does:
+  `ImGui::TextUnformatted(ICON_MD_FOLDER " Open")`, button labels, menus.
+- **Lucide** (`ICON_LC_*`, ISC) is a second font: draw with
+  `iconFontLucide()` (e.g. pass it to the tactile icon button, or push it
+  around `ImGui::Text`).
+
+`iconFontMaterial()` returns the default font (Material merged in);
+`loadFonts()` is internal — `Window::create` calls it per context. Both
+accessors return the font for the *current* window's context.
+
+The tactile icon button is the standard home for a lone glyph:
+
+```cpp
+snd::ui::iconButton("cfg", ICON_MD_SETTINGS);                  // Material
+snd::ui::iconButton("brush", ICON_LC_BRUSH, {0, 0},
+                    snd::ui::iconFontLucide());                // Lucide
+```
+
+`MenuItem::icon` takes the same glyph strings; `MenuOptions::iconFont`
+switches the font a menu draws them with.
+
+## SVG assets
+
+`<snd/ui.h>` includes a small SVG pipeline (nanosvg) for logos and vector
+art that must stay crisp at any size or DPI:
+
+- `rasterizeSvg(svgText, heightPx, tint = 0)` → `SvgBitmap{rgba, w, h}`.
+  GL-free and headless-safe (usable in tests). `tint` multiplies every texel:
+  recolour a monochrome glyph, or fade one toward a watermark.
+- `loadSvgTexture(svgText, heightPx, tint = 0)` → `SvgTexture{id, w, h}`.
+  Uploads to a GL texture — call it once a context exists (after
+  `Window::create`, or inside the frame loop) and feed `id` to
+  `ImGui::Image`. Release with `releaseTexture(id)`.
+
+Width follows the source aspect ratio; a parse failure returns an empty
+bitmap / invalid texture id.
+
+For raster pixels from any other source (a decoded image, a generated
+bitmap), `loadTextureRGBA(rgba, w, h)` uploads straight-alpha RGBA8 directly
+and returns the same texture struct; release with `releaseTexture`. SND does
+not ship an image decoder — decode with your own dependency or embed pixels
+at build time, then upload here.
+
 ## Shared paint and semantics
 
 SND-owned immediate and retained widgets share visuals through `snd/ui_paint.h`.
@@ -120,6 +168,13 @@ Use the same control states in both modes: `hovered` previews, `active`
 presses/drags, `focused` draws `paint::drawFocusRing`, `disabled` mutes and
 rejects actions, and `selected` marks latched state.
 
+Composable gradient primitives live alongside the widget painters:
+`paint::drawGradientRect(min, max, top, bottom, rounding)` fills a rounded
+rect with a vertical gradient (ImDrawList has no rounded multi-colour rect),
+and `paint::drawGradientArc(center, radius, a0, a1, colStart, colEnd,
+thickness, segments)` strokes a two-colour arc sampled per segment — the
+murk-style panel bodies and gradient value arcs custom painters need.
+
 Widget layers must provide accessibility semantics. Icon-only controls need an
 accessible name and action; sliders/knobs/faders need range, value, value text,
 and value actions; meters expose read-only value text; decorative icons or LEDs
@@ -127,9 +182,13 @@ must be hidden or marked as non-interactive status.
 
 ### Custom painters
 
-Include `snd/ui_paint.h` when you want to skin a knob or button body without
-forking SND interaction. Use `paint::KnobPainter` or `paint::ButtonPainter` to
-draw only the control body from the supplied args. SND still owns hit-testing,
+Include `snd/ui_paint.h` when you want to skin a control body without
+forking SND interaction. Four hooks share the contract: `paint::KnobPainter`,
+`paint::ButtonPainter`, `paint::XYPadPainter` (murk-style maps/pucks over the
+standard two-axis drag), and `paint::PatternCellPainter` (per-cell bodies —
+velocity gradients, spans, chips — while SND keeps the grid frame, playhead
+tint, drag-paint interaction, border, and focus). Each draws only from its
+args struct. SND still owns hit-testing,
 drag/key handling, value mapping, focus rings, semantic names/actions, and
 accessibility. Painters must not create ImGui controls, read input, mutate app
 or plugin state, touch audio-thread state, or own model data. The state passed
@@ -182,6 +241,30 @@ auto cutoff = w::knob("cutoff", "Cutoff", binding,
                       &renderer);
 ```
 
+### Randomise windows (ghost fences)
+
+`paint::KnobWindow{lo, hi, locked}` is the murk GhostOverlay pattern: an
+independent randomise window per control, value-independent at both ends —
+which is why it is not `KnobMod` (one signed depth anchored to the current
+value). SND ships the drawing and the pure hit-tests; the caller owns the
+overlay mode, drag state, and click-vs-drag lock toggling:
+
+- `paint::drawKnobWindow(dl, topLeft, size, win, pal, accent=0, lockColor=0,
+  uiScale=1)` — window arc just outside the knob circle, a grab dot at each
+  end, and a padlock at the top-right while locked. Call after the knob body.
+- `paint::knobWindowHitEnd(topLeft, size, win, pressPos, uiScale=1)` → `0`
+  (lo), `1` (hi), or `-1` (outside the rect grown by 6·uiScale px). Inside,
+  the nearest end by knob angle wins.
+- `paint::drawComboWindow` / `paint::comboWindowHitEnd` — the same window as
+  an index bracket along a combo's bottom edge (3·uiScale px grow, horizontal
+  mapping).
+- `paint::drawPadlock(dl, mn, mx, color)` — the lock glyph standalone, for
+  locked toggles or rows.
+
+The fence dims itself while locked; `lockColor = 0` uses `pal.meterHot`.
+`paint::kKnobA0` / `paint::kKnobA1` (the rotary sweep endpoints) are public so
+consumer-drawn overlays land exactly on the arc the knob bodies draw.
+
 ## Retained widgets
 
 Include `snd/ui_retained_widgets.h` to build retained panels with the shared
@@ -226,9 +309,12 @@ Use `widgets::gradientPanel(...)` only for decorative retained chrome; it is
 semantic-hidden and non-interactive.
 
 Use `widgets::patternGrid(id, name, cells, rows, steps, &renderer, size,
-playheadFn)` for step grids. `cells` stays caller-owned, mouse drag paints, and
-Alt-drag erases. Use `widgets::xyPad(id, name, xBinding, yBinding, &renderer,
-size)` for two-axis controls over normalized values. Use
+playheadFn, cellPainter)` for step grids. `cells` stays caller-owned, mouse
+drag paints, and Alt-drag erases; the optional trailing
+`paint::PatternCellPainter` custom-draws cell bodies. Use
+`widgets::xyPad(id, name, xBinding, yBinding, &renderer, size, painter)` for
+two-axis controls over normalized values; the optional trailing
+`paint::XYPadPainter` custom-draws the pad body. Use
 `widgets::keyboard(id, name, firstNote, octaves, noteOn, noteOff, lit,
 &renderer, size)` for piano surfaces; `noteOn`/`noteOff` fire from retained
 pointer transitions and `lit` is an optional caller-owned `bool[128]`.
@@ -279,12 +365,92 @@ Retained `widgets::button(...)` and `widgets::knob(...)` accept optional custom
 painters using the same `paint::ButtonPaintArgs` and `paint::KnobPaintArgs`
 contract as immediate mode.
 
+## Semantics, focus, and headless testing
+
+The retained core is the accessibility surface. Every node carries
+`Semantics`: a `Role` (`Button`, `Toggle`, `Slider`, `Meter`, `ListItem`,
+`Menu`, `Canvas`, ...), an accessible `name`, a `ValueRange` (numeric
+value/min/max/step plus display `text`), state bits, and the `Action`s it
+supports (`Activate`, `Increment`, `Decrement`, `SetValue`, `OpenMenu`,
+`Focus`). The built-in widget helpers fill all of this in; custom nodes must
+do the same — `validate()` returns `ValidationIssue`s for empty IDs,
+duplicate IDs, and visible interactive nodes without an accessible name, and
+belongs in headless tests for any non-trivial tree.
+
+State bits (`SemanticState`): `Focusable`, `Focused`, `FocusVisible`,
+`Disabled`, `Pressed`, `Checked`, `Selected`, `Expanded`, `Hidden`.
+
+**Focus-visible.** Keyboard-acquired focus (`Tab` via `focusNext`, or
+`Tree::focus(id)`) sets `Focused | FocusVisible` and draws the shared focus
+ring; pointer-press focus is semantic focus only — `Focused` without
+`FocusVisible`, no ring. The retained renderer maps
+`paint::ControlState::focused` from `FocusVisible`, so widgets and custom
+painters get the correct ring behaviour without doing anything; don't key
+custom ring drawing off `Focused`.
+
+**Two snapshot boundaries.** `nodeSnapshot()` (→ `NodeSnapshot`) is the
+renderer/widget boundary: bounds, role, value, interaction state.
+`semanticSnapshot()` (→ `SemanticNode`) is the accessibility boundary: what
+an assistive technology (or a test) should see — names, value text, actions,
+with `Hidden`/decorative nodes filtered. Native
+accessibility bridges drive the tree through `semanticNode(id)`,
+`performSemanticAction(id, action, value)` (which checks the node actually
+exposes the action — prefer it over `performAction` at that boundary),
+`value(id)` / `setValue(id, v)` / `incrementValue(id)` / `decrementValue(id)`.
+
+**Headless tests.** The core runs without a window, GL, or ImGui: build the
+tree, `layout(size)`, `dispatch(Event)`, assert on values and snapshots. This
+is how `snd-example --selftest` exercises retained behaviour:
+
+```cpp
+r::Tree tree(std::move(root));
+tree.layout({320.0f, 120.0f});
+tree.focus("gain");
+
+r::Event key;                       // keyboard increments the bound value
+key.type = r::EventType::KeyDown;
+key.key = r::Key::Up;
+tree.dispatch(key);
+
+r::ValueRange v;
+tree.value("gain", v);              // assert v.value moved by one step
+assert(tree.validate().empty());    // ids + accessible names hold up
+```
+
+**Custom controls.** Semantic actions beyond binding/activation need
+`setOnAction(...)`. Canvas-backed widgets that draw structured internal parts
+must not expose one opaque node: publish virtual children with
+`setSemanticChildren(...)` (stable IDs, bounds, roles, values, actions) and
+route their actions back with `setOnSemanticAction(...)` — the pattern graph
+surfaces use, and the right one for any zoomable/spatial view where real
+child layout nodes would fight the viewport transform. Caller-owned models
+that a `ValueBinding` can't represent should install `setOnRefresh(...)`;
+`refreshBoundValues()` invokes it so semantics stay fresh. Popup content that
+floats over surrounding layout uses `Node::setOverlay(true)` — visible and
+hittable without consuming row/column space.
+
+**Input bridge details.** `dispatchImGuiInput(tree, origin, mouseCaptured)`
+takes an optional flag: pass `true` when another ImGui widget owns the mouse
+so the retained tree does not double-handle pointer events (`drawImGui` does
+this for you). When wiring render manually instead of `drawImGui`, call
+`renderer.prepareOpenPopups(tree)` after layout so anchored popups are moved
+before hit-testing/paint, and `renderer.dismissOpenPopupsOutside(...)` on
+outside clicks.
+
 ## Menus
 
 Use SND menu primitives for action lists, dropdown/select controls, and
 right-click/context actions. Menu rows share one `MenuItem` model: `id`,
 `label`, optional icon glyph, `separator`, `enabled`, `checked`,
 `rightText`, `danger`, and optional nested `children`.
+
+`MenuOptions` sets `width`, `itemHeight` (0 = defaults), and `iconFont` for
+the glyph column. The immediate `dropdownMenu` overload taking a
+`paint::OutlineButtonStyle` styles the combo face (square murk-style wells,
+custom fills/borders) — the same passthrough the retained
+`widgets::dropdownMenu` offers. `MenuResult` reports `activated`, the row `index`, its
+`id`, and — for nested rows — `targetId`, the full path of the activated
+child row.
 
 Immediate simple popup:
 
@@ -444,9 +610,17 @@ members).
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
+- `iconButton(id, glyph, size={}, font=nullptr, toggled=false, face=0)` →
+  clicked. Tactile hardware key for a Material/Lucide glyph from
+  `<snd/icons.h>`; raised light-grey face that recesses to a dark inset on
+  press. `toggled` holds the inset look; `font=nullptr` = the default
+  (Material) font; `face` themes the key colour.
 - `badge(text, fill=0)` — small tag ("VST3", "48k"); `fill=0` = translucent
   accent.
 - `sectionHeader(text)` — dim uppercase caption with a rule to the right.
+- `tooltip(text, maxWidth=400)` — JUCE-style tooltip for the previous item:
+  standard hover delay, wraps at `maxWidth` with auto height, palette-drawn.
+  The SND replacement for calling `ImGui::SetTooltip` directly.
 
 ### Menus
 
@@ -508,13 +682,17 @@ Shift drags 10× slower.
   (e.g. from incoming MIDI).
 - `patternGrid(id, bool* cells, rows, steps, size, playheadStep=-1)` → any cell
   changed. `cells` is a row-major `rows*steps` bool array. Drag paints,
-  alt-drag erases; `playheadStep` highlights a column.
+  alt-drag erases; `playheadStep` highlights a column. The overload taking a
+  `paint::PatternCellPainter` custom-draws each cell body (SND keeps
+  backdrop, playhead, border, focus, and the drag interaction).
 - `envelopeEditor(id, std::vector<EnvPoint>& pts, size, tensions=nullptr)` →
   editing. Breakpoints over 0..1 in both axes; drag to move, double-click empty
   space to add, right-click a point to delete. Endpoints stay pinned to x=0/1.
   Optional `std::vector<float>* tensions` (same length as points): per-segment
   bend -1..1; drag a segment's middle to curve it.
-- `xyPad(id, float* x, float* y, size)` → dragging. 2D pad over two 0..1 values.
+- `xyPad(id, float* x, float* y, size)` → dragging. 2D pad over two 0..1
+  values. The overload taking a `paint::XYPadPainter` custom-draws the body;
+  SND keeps the drag and focus ring.
 
 ### Graphs
 

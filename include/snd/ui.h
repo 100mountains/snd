@@ -15,9 +15,13 @@ namespace snd::ui {
 namespace paint {
 struct KnobPaintArgs;
 struct ButtonPaintArgs;
+struct XYPadPaintArgs;
+struct PatternCellPaintArgs;
 struct OutlineButtonStyle;
 using KnobPainter = std::function<void(const KnobPaintArgs&)>;
 using ButtonPainter = std::function<void(const ButtonPaintArgs&)>;
+using XYPadPainter = std::function<void(const XYPadPaintArgs&)>;
+using PatternCellPainter = std::function<void(const PatternCellPaintArgs&)>;
 } // namespace paint
 
 class Window {
@@ -165,7 +169,11 @@ struct SvgTexture {
     int w = 0, h = 0;
 };
 SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint = 0);
-void releaseTexture(ImTextureID id); // glDeleteTextures a loadSvgTexture id
+// Upload caller-provided straight-alpha RGBA8 pixels (row-major, w*h*4 bytes)
+// to a GL texture -- the raster-image path for decoded images or generated
+// bitmaps. Same lifetime rules as loadSvgTexture.
+SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h);
+void releaseTexture(ImTextureID id); // glDeleteTextures a loadSvgTexture/loadTextureRGBA id
 
 // --- The audio widget set ---------------------------------------------------
 // Themed controls for audio apps: knobs, switches, LEDs, meters, faders.
@@ -230,6 +238,13 @@ MenuResult popupMenu(const char* popupId, const std::vector<MenuItem>& items,
                      const MenuOptions& options = {});
 MenuResult dropdownMenu(const char* id, const char* currentLabel,
                         const std::vector<MenuItem>& items, int* selectedIndex,
+                        const ImVec2& size = ImVec2(0, 0),
+                        const MenuOptions& options = {});
+// Same dropdown with a styled combo face (parity with the retained
+// widgets::dropdownMenu style passthrough).
+MenuResult dropdownMenu(const char* id, const char* currentLabel,
+                        const std::vector<MenuItem>& items, int* selectedIndex,
+                        const paint::OutlineButtonStyle& buttonStyle,
                         const ImVec2& size = ImVec2(0, 0),
                         const MenuOptions& options = {});
 MenuResult contextMenu(const char* popupId, const std::vector<MenuItem>& items,
@@ -308,6 +323,12 @@ bool fader(const char* id, float* value, const ImVec2& size);
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 
+// JUCE-style tooltip for the previous item: shows after the standard hover
+// delay, wraps at `maxWidth` (auto height) like a TooltipWindow, and draws
+// with the palette rather than raw ImGui style. Call right after the item it
+// explains -- the SND replacement for ImGui::SetTooltip.
+void tooltip(const char* text, float maxWidth = 400.0f);
+
 // Dim uppercase caption with a rule to the right: section separators.
 void sectionHeader(const char* text);
 
@@ -328,6 +349,12 @@ bool keyboard(const char* id, KeyboardState& st, const ImVec2& size,
 // when any cell changed.
 bool patternGrid(const char* id, bool* cells, int rows, int steps,
                  const ImVec2& size, int playheadStep = -1);
+// Grid with a custom cell painter: SND draws the backdrop, playhead tint,
+// border, and focus; the painter draws each cell body (velocity gradients,
+// spans, chips...) from PatternCellPaintArgs. Interaction is unchanged.
+bool patternGrid(const char* id, bool* cells, int rows, int steps,
+                 const ImVec2& size, int playheadStep,
+                 const paint::PatternCellPainter& cellPainter);
 
 // Breakpoint envelope over 0..1 in both axes. Drag points, double-click
 // empty space to add, right-click a point to delete. Points stay x-sorted;
@@ -343,6 +370,10 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points,
 
 // 2D pad controlling two normalized values. Returns true while dragging.
 bool xyPad(const char* id, float* x, float* y, const ImVec2& size);
+// Custom-painted pad body (murk-style maps/pucks); SND keeps the drag,
+// hit target, and focus ring, exactly as the knob/button painter hooks do.
+bool xyPad(const char* id, float* x, float* y, const ImVec2& size,
+           const paint::XYPadPainter& painter);
 
 // Themed scrolling list; returns true when the selection changed.
 bool selectableList(const char* id, const std::vector<std::string>& items,

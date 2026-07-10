@@ -69,11 +69,10 @@ SvgBitmap rasterizeSvg(const char* svgText, int heightPx, ImU32 tint)
     return out;
 }
 
-SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint)
+SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
 {
     SvgTexture tex;
-    SvgBitmap bmp = rasterizeSvg(svgText, heightPx, tint);
-    if (bmp.rgba.empty())
+    if (!rgba || w <= 0 || h <= 0)
         return tex;
 
     GLuint id = 0;
@@ -84,13 +83,21 @@ SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, bmp.w, bmp.h, 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, bmp.rgba.data());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
+                 GL_UNSIGNED_BYTE, rgba);
 
     tex.id = (ImTextureID)(intptr_t)id;
-    tex.w = bmp.w;
-    tex.h = bmp.h;
+    tex.w = w;
+    tex.h = h;
     return tex;
+}
+
+SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint)
+{
+    SvgBitmap bmp = rasterizeSvg(svgText, heightPx, tint);
+    if (bmp.rgba.empty())
+        return {};
+    return loadTextureRGBA(bmp.rgba.data(), bmp.w, bmp.h);
 }
 
 void releaseTexture(ImTextureID id)

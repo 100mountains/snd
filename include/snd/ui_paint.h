@@ -47,6 +47,36 @@ struct ButtonPaintArgs {
     float fontScale = 0.90f;
 };
 
+struct XYPadPaintArgs {
+    ImDrawList* drawList = nullptr;
+    ImVec2 topLeft;
+    ImVec2 size;
+    float x = 0.0f; // normalized 0..1
+    float y = 0.0f; // normalized 0..1, 0 = bottom
+    const Palette* palette = nullptr;
+    const ControlState* state = nullptr;
+};
+
+// One call per cell, after SND draws the grid backdrop/playhead tint and
+// before the border/focus overlays. cellMin/cellMax carry the standard cell
+// inset; the grid rect plus row/step indices let a painter draw spans or
+// chips beyond its own cell (the draw list is not clipped per cell).
+struct PatternCellPaintArgs {
+    ImDrawList* drawList = nullptr;
+    ImVec2 gridTopLeft;
+    ImVec2 gridSize;
+    ImVec2 cellMin;
+    ImVec2 cellMax;
+    int row = 0;
+    int step = 0;
+    int rows = 0;
+    int steps = 0;
+    bool on = false;
+    int playheadStep = -1;
+    const Palette* palette = nullptr;
+    const ControlState* state = nullptr;
+};
+
 struct OutlineButtonStyle {
     ImU32 fill = 0;
     ImU32 hoverFill = 0;
@@ -94,6 +124,10 @@ ImVec4 toVec4(ImU32 c);
 float dbNorm(float linear, float floorDb);
 
 // Rotary sweep shared by SND knobs: frac 0 = 7 o'clock, frac 1 = 5 o'clock.
+// The endpoints are public so overlays drawn by consumers land exactly on the
+// arc the knob bodies draw (knobAngle(0)/knobAngle(1)).
+inline constexpr float kKnobA0 = -3.92699082f; // -225 deg
+inline constexpr float kKnobA1 = 0.78539816f;  // +45 deg
 float knobAngle(float frac);
 ImVec2 dirAt(float angle);
 
@@ -107,6 +141,18 @@ void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
                        const ImVec2& size, ImU32 topLeftColor,
                        ImU32 topRightColor, ImU32 bottomRightColor,
                        ImU32 bottomLeftColor);
+
+// Rounded rect filled with a vertical top->bottom gradient (ImDrawList has
+// no rounded multi-colour rect; the corner caps are 1px strips following the
+// corner circle, the straight body is one exact gradient quad).
+void drawGradientRect(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
+                      ImU32 top, ImU32 bottom, float rounding = 0.0f);
+
+// Arc stroked with a colour gradient from a0 to a1, sampled per segment
+// (murk-style two-colour value arcs).
+void drawGradientArc(ImDrawList* dl, const ImVec2& center, float radius,
+                     float a0, float a1, ImU32 colStart, ImU32 colEnd,
+                     float thickness, int segments = 32);
 
 void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                         const ImVec2& size, const char* text, ImU32 top,
@@ -126,6 +172,49 @@ void drawKnobModRing(ImDrawList* dl, const ImVec2& topLeft, float size,
 void drawDefaultKnob(const KnobPaintArgs& args);
 void drawKnobWithPainter(const KnobPaintArgs& args,
                          const KnobPainter& painter = {});
+
+// Randomise-window overlay ("ghost fences", murk's GhostOverlay): an
+// independent {lo, hi} window over a control with two separately grabbable
+// end dots and a padlock when locked out of randomisation. Unlike KnobMod
+// (one signed depth anchored to the current value) the two ends are
+// value-independent. Draw-only plus pure hit-tests: the caller owns the
+// overlay input mode, drag state, and click-vs-drag lock toggling.
+struct KnobWindow {
+    float lo = 0.0f;
+    float hi = 1.0f;
+    bool locked = false;
+};
+
+// Window arc just outside the knob circle (all styles, like the focus ring),
+// end dots at knobAngle(lo)/knobAngle(hi), padlock at the control's top-right
+// while locked. Call after the knob body with the same topLeft/size.
+// accent 0 = palette accent (the fence dims itself when locked); lockColor 0
+// = pal.meterHot; uiScale scales the fixed paddings for zoomed UIs.
+void drawKnobWindow(ImDrawList* dl, const ImVec2& topLeft, float size,
+                    const KnobWindow& win, const Palette& pal,
+                    ImU32 accent = 0, ImU32 lockColor = 0, float uiScale = 1.0f);
+
+// Which window end a press should grab: 0 = lo, 1 = hi, or -1 when the press
+// is outside the control rect grown by 6*uiScale px. Inside, the nearest end
+// by knob angle wins (murk knobProp semantics); callers keep click-vs-drag
+// lock toggling.
+int knobWindowHitEnd(const ImVec2& topLeft, float size, const KnobWindow& win,
+                     const ImVec2& pressPos, float uiScale = 1.0f);
+
+// The same window as an index bracket along a combo/dropdown's bottom edge.
+void drawComboWindow(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     const KnobWindow& win, const Palette& pal,
+                     ImU32 accent = 0, ImU32 lockColor = 0, float uiScale = 1.0f);
+
+// 0 / 1 / -1 as knobWindowHitEnd, with a 3*uiScale px grow and the press
+// mapped horizontally across the control width.
+int comboWindowHitEnd(const ImVec2& topLeft, const ImVec2& size,
+                      const KnobWindow& win, const ImVec2& pressPos,
+                      float uiScale = 1.0f);
+
+// Small padlock glyph filling mn..mx (the lock treatment the window overlays
+// use; also usable standalone on locked toggles or rows).
+void drawPadlock(ImDrawList* dl, const ImVec2& mn, const ImVec2& mx, ImU32 color);
 
 void drawToggle(ImDrawList* dl, const ImVec2& topLeft, float width, float height,
                 float anim, const Palette& pal, const ControlState& state);
@@ -204,9 +293,21 @@ void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
                      const Palette& pal, const ControlState& state);
+// Grid with custom cell bodies: SND draws backdrop, playhead tint, border,
+// and focus; `cellPainter` draws each cell from PatternCellPaintArgs.
+void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     const bool* cells, int rows, int steps, int playheadStep,
+                     const Palette& pal, const ControlState& state,
+                     const PatternCellPainter& cellPainter);
 
 void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float x, float y, const Palette& pal, const ControlState& state);
+void drawDefaultXYPad(const XYPadPaintArgs& args);
+// Body painter hook for xyPad faces (murk-style maps/pucks). The painter
+// draws the body with focus suppressed; SND draws the focus ring after, as
+// with the knob/button hooks.
+void drawXYPadWithPainter(const XYPadPaintArgs& args,
+                          const XYPadPainter& painter = {});
 
 void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   int firstNote, int octaves, int mouseNote, const bool* lit,

@@ -13,7 +13,10 @@ see [License](#license).
 - `snd::ui` — native window + Dear ImGui frame shell (GLFW/OpenGL underneath),
   frameless windows with app-drawn title bars, multi-window, file
   drag-and-drop, and a themed audio widget set (knobs, meters, faders,
-  keyboard, pattern grid, envelope editor, …). See `UI_PROGRAMMING_GUIDE.md`.
+  keyboard, pattern grid, envelope editor, graph surface, menus, …) in both
+  immediate and retained modes. The retained tree adds layout, keyboard
+  focus, and accessibility semantics; custom painter hooks re-skin controls
+  without forking behaviour. See `UI_PROGRAMMING_GUIDE.md`.
 - `snd::plugin` — VST3 + AU **hosting** (editor GUIs in native windows, MIDI,
   host transport) and a **client SDK**: write a `Processor` + ImGui editor once
   and build it as VST3, AU, and a standalone app. Multichannel buses, an
@@ -24,8 +27,8 @@ see [License](#license).
 - `snd::platform` — native file dialogs, per-OS config dir
 
 Mac, Linux, and Windows are supported. `DESIGN.md` records the architecture,
-`PROGRAMMING-GUIDE.md` the how-to, `AUDIT.md` the current architecture audit,
-and `docs/research/` the supporting format research.
+`PROGRAMMING-GUIDE.md` the how-to, and `AUDIT.md` the current architecture
+audit.
 
 ## Build & test
 

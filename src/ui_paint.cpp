@@ -45,8 +45,6 @@ float dbNorm(float linear, float floorDb)
     return std::clamp(1.0f - db / floorDb, 0.0f, 1.0f);
 }
 
-constexpr float kKnobA0 = -3.92699082f; // -225 deg
-constexpr float kKnobA1 = 0.78539816f;  // +45 deg
 
 float knobAngle(float frac)
 {
@@ -77,6 +75,60 @@ void drawGradientPanel(ImDrawList* dl, const ImVec2& topLeft,
     const ImVec2 mx(topLeft.x + size.x, topLeft.y + size.y);
     dl->AddRectFilledMultiColor(topLeft, mx, topLeftColor, topRightColor,
                                 bottomRightColor, bottomLeftColor);
+}
+
+void drawGradientRect(ImDrawList* dl, const ImVec2& mn, const ImVec2& mx,
+                      ImU32 top, ImU32 bottom, float rounding)
+{
+    if (!dl || mx.x <= mn.x || mx.y <= mn.y)
+        return;
+    const float h = mx.y - mn.y;
+    const float r = std::clamp(rounding, 0.0f,
+                               std::min((mx.x - mn.x) * 0.5f, h * 0.5f));
+    auto at = [&](float y) { return mix(top, bottom, (y - mn.y) / h); };
+
+    if (r <= 0.5f) {
+        dl->AddRectFilledMultiColor(mn, mx, top, top, bottom, bottom);
+        return;
+    }
+    dl->AddRectFilledMultiColor(ImVec2(mn.x, mn.y + r), ImVec2(mx.x, mx.y - r),
+                                at(mn.y + r), at(mn.y + r),
+                                at(mx.y - r), at(mx.y - r));
+    const int strips = std::max(2, (int)std::ceil(r));
+    for (int i = 0; i < strips; ++i) {
+        const float y0 = r * (float)i / (float)strips;
+        const float y1 = r * (float)(i + 1) / (float)strips;
+        const float dyMid = r - (y0 + y1) * 0.5f;
+        const float inset = r - std::sqrt(std::max(0.0f, r * r - dyMid * dyMid));
+        dl->AddRectFilledMultiColor(ImVec2(mn.x + inset, mn.y + y0),
+                                    ImVec2(mx.x - inset, mn.y + y1),
+                                    at(mn.y + y0), at(mn.y + y0),
+                                    at(mn.y + y1), at(mn.y + y1));
+        dl->AddRectFilledMultiColor(ImVec2(mn.x + inset, mx.y - y1),
+                                    ImVec2(mx.x - inset, mx.y - y0),
+                                    at(mx.y - y1), at(mx.y - y1),
+                                    at(mx.y - y0), at(mx.y - y0));
+    }
+}
+
+void drawGradientArc(ImDrawList* dl, const ImVec2& center, float radius,
+                     float a0, float a1, ImU32 colStart, ImU32 colEnd,
+                     float thickness, int segments)
+{
+    if (!dl || radius <= 0.0f || a1 == a0)
+        return;
+    segments = std::max(2, segments);
+    ImVec2 prev(center.x + std::cos(a0) * radius,
+                center.y + std::sin(a0) * radius);
+    for (int i = 1; i <= segments; ++i) {
+        const float t1 = (float)i / (float)segments;
+        const float a = a0 + (a1 - a0) * t1;
+        const ImVec2 p(center.x + std::cos(a) * radius,
+                       center.y + std::sin(a) * radius);
+        const float tMid = ((float)(i - 1) / (float)segments + t1) * 0.5f;
+        dl->AddLine(prev, p, mix(colStart, colEnd, tMid), thickness);
+        prev = p;
+    }
 }
 
 void drawAnimatedButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
@@ -309,6 +361,129 @@ void drawKnobModRing(ImDrawList* dl, const ImVec2& topLeft, float size,
         dl->AddCircleFilled(ImVec2(c.x + d.x * rArc, c.y + d.y * rArc),
                             lineW * 1.05f, col);
     }
+}
+
+void drawPadlock(ImDrawList* dl, const ImVec2& mn, const ImVec2& mx, ImU32 color)
+{
+    if (!dl)
+        return;
+    const float w = mx.x - mn.x, h = mx.y - mn.y;
+    const float bodyTopY = mn.y + h * 0.45f;
+    dl->AddRectFilled(ImVec2(mn.x, bodyTopY), mx, color, 1.5f);
+    const ImVec2 centre(mn.x + w * 0.5f, bodyTopY);
+    const float rx = w * 0.28f, ry = h * 0.405f; // shackle half-ellipse
+    dl->PathClear();
+    for (int i = 0; i <= 12; ++i) {
+        const float t = -1.57079633f + 3.14159265f * ((float)i / 12.0f);
+        dl->PathLineTo(ImVec2(centre.x + rx * std::sin(t),
+                              centre.y - ry * std::cos(t)));
+    }
+    dl->PathStroke(color, 0, 1.6f);
+}
+
+void drawKnobWindow(ImDrawList* dl, const ImVec2& topLeft, float size,
+                    const KnobWindow& win, const Palette& pal, ImU32 accent,
+                    ImU32 lockColor, float uiScale)
+{
+    if (!dl || size <= 0.0f)
+        return;
+    if (accent == 0)
+        accent = pal.accent;
+    if (lockColor == 0)
+        lockColor = pal.meterHot;
+    const ImU32 col = win.locked ? pal.textDim : accent;
+
+    const ImVec2 c(topLeft.x + size * 0.5f, topLeft.y + size * 0.5f);
+    const float radius = size * 0.5f + 2.5f * uiScale;
+    const float aLo = knobAngle(std::min(win.lo, win.hi));
+    const float aHi = knobAngle(std::max(win.lo, win.hi));
+    if (aHi > aLo) {
+        dl->PathArcTo(c, radius, aLo, aHi, 24);
+        dl->PathStroke(withAlpha(col, win.locked ? 0x59 : 0xD9), 0,
+                       2.0f * uiScale);
+    }
+    for (const float a : {aLo, aHi}) {
+        const ImVec2 d = dirAt(a);
+        dl->AddCircleFilled(ImVec2(c.x + d.x * radius, c.y + d.y * radius),
+                            2.8f * uiScale, col, 10);
+    }
+    if (win.locked)
+        drawPadlock(dl,
+                    ImVec2(topLeft.x + size - 9.0f * uiScale,
+                           topLeft.y - 1.0f * uiScale),
+                    ImVec2(topLeft.x + size,
+                           topLeft.y + (10.0f - 1.0f) * uiScale),
+                    lockColor);
+}
+
+int knobWindowHitEnd(const ImVec2& topLeft, float size, const KnobWindow& win,
+                     const ImVec2& pressPos, float uiScale)
+{
+    const float grow = 6.0f * uiScale;
+    if (pressPos.x < topLeft.x - grow || pressPos.x > topLeft.x + size + grow ||
+        pressPos.y < topLeft.y - grow || pressPos.y > topLeft.y + size + grow)
+        return -1;
+
+    // Press angle -> 0..1 along the knob sweep; outside the sweep snaps to
+    // the nearer endpoint (murk knobProp semantics).
+    constexpr float twoPi = 6.28318531f;
+    const ImVec2 c(topLeft.x + size * 0.5f, topLeft.y + size * 0.5f);
+    float ang = std::atan2(pressPos.y - c.y, pressPos.x - c.x);
+    while (ang < kKnobA0)
+        ang += twoPi;
+    while (ang > kKnobA0 + twoPi)
+        ang -= twoPi;
+    if (ang > kKnobA1)
+        ang = (ang - kKnobA1) < (kKnobA0 + twoPi - ang) ? kKnobA1 : kKnobA0;
+    const float t = (ang - kKnobA0) / (kKnobA1 - kKnobA0);
+    return std::abs(t - win.hi) < std::abs(t - win.lo) ? 1 : 0;
+}
+
+void drawComboWindow(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     const KnobWindow& win, const Palette& pal, ImU32 accent,
+                     ImU32 lockColor, float uiScale)
+{
+    if (!dl || size.x <= 0.0f || size.y <= 0.0f)
+        return;
+    if (accent == 0)
+        accent = pal.accent;
+    if (lockColor == 0)
+        lockColor = pal.meterHot;
+    const ImU32 col = win.locked ? pal.textDim : accent;
+
+    const float lo = std::clamp(std::min(win.lo, win.hi), 0.0f, 1.0f);
+    const float hi = std::clamp(std::max(win.lo, win.hi), 0.0f, 1.0f);
+    const float y = topLeft.y + size.y - 2.0f * uiScale;
+    const float x0 = topLeft.x + lo * size.x;
+    const float x1 = topLeft.x + hi * size.x;
+    dl->AddRectFilled(ImVec2(x0, y - 1.0f * uiScale),
+                      ImVec2(std::max(x0 + 2.0f * uiScale, x1),
+                             y + 2.0f * uiScale),
+                      withAlpha(col, win.locked ? 0x59 : 0xD9));
+    dl->AddRectFilled(ImVec2(x0 - 1.0f * uiScale, y - 6.0f * uiScale),
+                      ImVec2(x0 + 1.0f * uiScale, y + 2.0f * uiScale), col);
+    dl->AddRectFilled(ImVec2(x1 - 1.0f * uiScale, y - 6.0f * uiScale),
+                      ImVec2(x1 + 1.0f * uiScale, y + 2.0f * uiScale), col);
+    if (win.locked)
+        drawPadlock(dl,
+                    ImVec2(topLeft.x + size.x - 9.0f * uiScale,
+                           topLeft.y - 1.0f * uiScale),
+                    ImVec2(topLeft.x + size.x,
+                           topLeft.y + (10.0f - 1.0f) * uiScale),
+                    lockColor);
+}
+
+int comboWindowHitEnd(const ImVec2& topLeft, const ImVec2& size,
+                      const KnobWindow& win, const ImVec2& pressPos,
+                      float uiScale)
+{
+    const float grow = 3.0f * uiScale;
+    if (pressPos.x < topLeft.x - grow || pressPos.x > topLeft.x + size.x + grow ||
+        pressPos.y < topLeft.y - grow || pressPos.y > topLeft.y + size.y + grow)
+        return -1;
+    const float t = std::clamp((pressPos.x - topLeft.x) / std::max(1.0f, size.x),
+                               0.0f, 1.0f);
+    return std::abs(t - win.hi) < std::abs(t - win.lo) ? 1 : 0;
 }
 
 void drawDefaultKnob(const KnobPaintArgs& args)
@@ -1109,7 +1284,8 @@ void drawValueRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 
 void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      const bool* cells, int rows, int steps, int playheadStep,
-                     const Palette& pal, const ControlState& state)
+                     const Palette& pal, const ControlState& state,
+                     const PatternCellPainter& cellPainter)
 {
     if (!dl || !cells || rows <= 0 || steps <= 0)
         return;
@@ -1133,6 +1309,24 @@ void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
             ImVec2 b(topLeft.x + (c + 1) * cw - 1.5f,
                      topLeft.y + (r + 1) * ch - 1.5f);
             const bool on = cells[r * steps + c];
+            if (cellPainter) {
+                PatternCellPaintArgs args;
+                args.drawList = dl;
+                args.gridTopLeft = topLeft;
+                args.gridSize = size;
+                args.cellMin = a;
+                args.cellMax = b;
+                args.row = r;
+                args.step = c;
+                args.rows = rows;
+                args.steps = steps;
+                args.on = on;
+                args.playheadStep = playheadStep;
+                args.palette = &pal;
+                args.state = &state;
+                cellPainter(args);
+                continue;
+            }
             ImU32 col = on ? (c == playheadStep ? pal.text : pal.accent)
                            : withAlpha(pal.frameBright, (c / 4) % 2 ? 0x30 : 0x55);
             if (state.disabled)
@@ -1144,6 +1338,14 @@ void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
     dl->AddRect(topLeft, mx, pal.frameBright, 3.0f);
     if (state.focused && !state.disabled)
         drawFocusRing(dl, topLeft, mx, pal, 3.0f);
+}
+
+void drawPatternGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     const bool* cells, int rows, int steps, int playheadStep,
+                     const Palette& pal, const ControlState& state)
+{
+    drawPatternGrid(dl, topLeft, size, cells, rows, steps, playheadStep, pal,
+                    state, {});
 }
 
 void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
@@ -1175,6 +1377,35 @@ void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
     dl->AddRect(topLeft, mx, pal.frameBright, 3.0f);
     if (state.focused && !state.disabled)
         drawFocusRing(dl, topLeft, mx, pal, 3.0f);
+}
+
+void drawDefaultXYPad(const XYPadPaintArgs& args)
+{
+    if (!args.palette || !args.state)
+        return;
+    drawXYPad(args.drawList, args.topLeft, args.size, args.x, args.y,
+              *args.palette, *args.state);
+}
+
+void drawXYPadWithPainter(const XYPadPaintArgs& args, const XYPadPainter& painter)
+{
+    ControlState bodyState = args.state ? *args.state : ControlState{};
+    bodyState.focused = false;
+    XYPadPaintArgs bodyArgs = args;
+    bodyArgs.state = &bodyState;
+
+    if (painter)
+        painter(bodyArgs);
+    else
+        drawDefaultXYPad(bodyArgs);
+
+    if (args.drawList && args.palette && args.state &&
+        args.state->focused && !args.state->disabled) {
+        drawFocusRing(args.drawList, args.topLeft,
+                      ImVec2(args.topLeft.x + args.size.x,
+                             args.topLeft.y + args.size.y),
+                      *args.palette, 3.0f);
+    }
 }
 
 void drawKeyboard(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,

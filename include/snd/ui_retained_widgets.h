@@ -303,10 +303,12 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {240.0f, 96.0f},
-                      std::function<int()> playheadStep = {});
+                      std::function<int()> playheadStep = {},
+                      paint::PatternCellPainter cellPainter = {});
 Node::Ptr xyPad(NodeId id, std::string name, ValueBinding xBinding,
                 ValueBinding yBinding, PaintRenderer* renderer = nullptr,
-                Vec2 size = {120.0f, 120.0f});
+                Vec2 size = {120.0f, 120.0f},
+                paint::XYPadPainter painter = {});
 Node::Ptr keyboard(NodeId id, std::string name, int firstNote, int octaves,
                    std::function<void(uint8_t note, uint8_t velocity)> noteOn,
                    std::function<void(uint8_t note)> noteOff,
