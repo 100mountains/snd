@@ -187,6 +187,7 @@ add_library(snd STATIC
     src/platform.cpp
     src/state.cpp
     src/plugin_host.cpp
+    src/plugin_hosted.cpp
     src/plugin_graph.cpp
     src/plugin_host/vst3/vst3_format.cpp
     ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
