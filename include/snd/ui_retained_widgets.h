@@ -73,6 +73,8 @@ struct VisualStyle {
     bool panelBorder = false;
     float panelRounding = 0.0f; // house style: square (owner directive)
     bool canvasClip = true;
+    bool canvasBorder = true;    // draw the panelBorder frame around a canvas
+    bool canvasFocusRing = true; // draw the focus ring when a canvas is focused
     bool lit = false;
     std::vector<std::string> segments; // Segmented / CycleButton option labels
     bool ledBlink = false;             // LedButton: pulse the lit ring

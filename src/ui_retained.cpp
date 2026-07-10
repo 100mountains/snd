@@ -935,6 +935,11 @@ Node* Tree::hovered()
     return hoveredId_.empty() ? nullptr : find(hoveredId_);
 }
 
+const Node* Tree::pressed() const
+{
+    return pressedId_.empty() ? nullptr : find(pressedId_);
+}
+
 const Node* Tree::hovered() const
 {
     return hoveredId_.empty() ? nullptr : find(hoveredId_);

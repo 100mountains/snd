@@ -425,6 +425,8 @@ struct Window::Impl {
     int windowedW = 0, windowedH = 0;
     float clearColor[3] = {0.10f, 0.10f, 0.12f}; // setClearColor overrides
     int swapInterval = 1; // vsync; secondary windows set 0 so waits don't stack
+    bool mouseCaptured = false;
+    double captureX = 0.0, captureY = 0.0; // cursor pos to restore after capture
 
     static void dropCallback(GLFWwindow* w, int count, const char** paths)
     {
@@ -558,6 +560,22 @@ void Window::endFrame()
 void Window::setSwapInterval(int interval)
 {
     impl->swapInterval = interval;
+}
+
+void Window::setMouseCaptured(bool captured)
+{
+    if (!impl->window || captured == impl->mouseCaptured)
+        return;
+    if (captured) {
+        glfwGetCursorPos(impl->window, &impl->captureX, &impl->captureY);
+        glfwSetInputMode(impl->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        if (glfwRawMouseMotionSupported())
+            glfwSetInputMode(impl->window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+    } else {
+        glfwSetInputMode(impl->window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        glfwSetCursorPos(impl->window, impl->captureX, impl->captureY);
+    }
+    impl->mouseCaptured = captured;
 }
 
 void Window::setClearColor(unsigned int rgba)

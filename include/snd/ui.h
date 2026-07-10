@@ -46,6 +46,12 @@ public:
     // Render the ImGui frame and swap buffers.
     void endFrame();
 
+    // Relative-cursor mode for unbounded drags (knob/slider/tempo scrub):
+    // hides the cursor and lets pointer motion accumulate past the screen
+    // edge, then restores the cursor to where the drag began. Toggle it from
+    // the frame loop while Tree::pressed() is a value-dragging control.
+    void setMouseCaptured(bool captured);
+
     // Vsync for this window's swap (default 1). An app driving several
     // windows per frame sets 0 on the secondary ones so the waits don't
     // stack (the primary window's vsync already paces the loop).

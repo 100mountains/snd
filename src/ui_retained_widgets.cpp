@@ -1933,7 +1933,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         if (style.panelBorder)
             drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright,
                               style.panelRounding);
-        if (state.focused && !state.disabled)
+        if (style.canvasFocusRing && state.focused && !state.disabled)
             paint::drawFocusRing(drawList, topLeft(bounds), bottomRight(bounds),
                                  pal, style.panelRounding);
         break;
@@ -2199,7 +2199,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
                                pal.frameBright,
                                style.panelRounding);
-        if (state.focused && !state.disabled)
+        if (style.canvasFocusRing && state.focused && !state.disabled)
             paint::drawFocusRing(surface, topLeftDraw(bounds), bottomRightDraw(bounds),
                                  pal, style.panelRounding);
         break;
@@ -2397,6 +2397,13 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
     if (lastIt != lastMouseByTree.end()) {
         moveDelta = {localMouse.x - lastIt->second.x,
                      localMouse.y - lastIt->second.y};
+        // Entering/leaving relative-cursor mode (Window::setMouseCaptured)
+        // warps the OS cursor, which shows up here as one enormous jump.
+        // Ignore any single-frame delta bigger than half the viewport so a
+        // capture toggle can't spike the dragged value.
+        if (std::abs(moveDelta.x) > io.DisplaySize.x * 0.5f ||
+            std::abs(moveDelta.y) > io.DisplaySize.y * 0.5f)
+            moveDelta = {0.0f, 0.0f};
     }
     lastMouseByTree[&tree] = localMouse;
 
@@ -4899,8 +4906,15 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 if (state.active.kind == GraphHitKind::NodeBody ||
                     state.active.kind == GraphHitKind::NodeTitle ||
                     state.active.kind == GraphHitKind::NodePart) {
+                    // Opening an editor may spawn an OS window that grabs the
+                    // matching MouseUp, leaving this surface pressed -- then a
+                    // later MouseMove drags the node (it "sticks to the
+                    // mouse"). Drop the drag target now so no drag can start.
                     if (callbacks.onNodeDoubleClicked)
                         callbacks.onNodeDoubleClicked(state.active);
+                    state.active = {};
+                    state.panning = false;
+                    state.marqueeActive = false;
                     return true;
                 }
                 if (state.active.kind == GraphHitKind::Surface ||
@@ -5012,7 +5026,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
-        style.panelBorder = true;
+        style.panelBorder = false;     // owner: no grey frame around the graph
+        style.canvasFocusRing = false; // focus reads per-node, not a big ring
         style.canvasDraw = [&state, &nodes, &cables, graphStyle](
                                 ImDrawList& dl, const Node&,
                                 Rect bounds, const paint::ControlState& cs) {

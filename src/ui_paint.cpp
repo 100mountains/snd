@@ -1302,13 +1302,17 @@ void drawOutlineButton(draw::Surface& surface, draw::FontRef font,
     if (visible(fill))
         surface.fillRect(topLeft, mx, fill, r);
 
+    // engaged states fall back to the RESTING border, not accent: an accent
+    // fallback equals the usual accent fill and the border vanishes into it
+    // (owner: "borders disappear when pressed, leave borders in").
+    const ImU32 engagedDefault = visible(style.border) ? style.border : pal.accent;
     ImU32 border = style.border;
     if (state.hovered)
-        border = visible(style.hoverBorder) ? style.hoverBorder : pal.accent;
+        border = visible(style.hoverBorder) ? style.hoverBorder : engagedDefault;
     if (state.active)
-        border = visible(style.activeBorder) ? style.activeBorder : pal.accent;
+        border = visible(style.activeBorder) ? style.activeBorder : engagedDefault;
     if (state.selected)
-        border = visible(style.selectedBorder) ? style.selectedBorder : pal.accent;
+        border = visible(style.selectedBorder) ? style.selectedBorder : engagedDefault;
     if (state.disabled && visible(border))
         border = mix(border, pal.frameBright, 0.65f);
     if (visible(border))

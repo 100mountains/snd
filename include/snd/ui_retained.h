@@ -429,6 +429,11 @@ public:
     const Node* focused() const;
     Node* hovered();
     const Node* hovered() const;
+    // The node currently receiving a press (mouse held after MouseDown), or
+    // null. Value-dragging widgets are pressed for the whole drag, so a host
+    // can use this to enter relative-cursor mode while a knob/slider is
+    // being dragged (see Window::setMouseCaptured).
+    const Node* pressed() const;
 
     bool dispatch(const Event& event);
     bool performAction(const NodeId& id, Action action, double value = 0.0);
