@@ -2439,7 +2439,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     const draw::Vec2 hMax{b.x, a.y + hh};
     surface.fillRect(a, hMax, headerCol, corner);
     surface.fillRect(a, {a.x + 3.0f, hMax.y}, withAlpha(accentCol, 0xD1), 0.0f);
-    if (title && title[0] && fontSizePx > 0.0f) {
+    if (title && title[0] && fontSizePx >= 1.0f) { // sub-1px: skip, not assert
         const draw::Vec2 ts = surface.measureText(font, fontSizePx, title);
         surface.pushClip({a.x + 8.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
         surface.text(font, fontSizePx,
@@ -2460,7 +2460,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         surface.fillRect(a, b, IM_COL32(0, 0, 0, 115), corner);
         const char* tag = "BYPASS";
         const float tagSize = fontSizePx * 0.75f;
-        if (tagSize > 0.0f) {
+        if (tagSize >= 1.0f) {
             const draw::Vec2 ts = surface.measureText(font, tagSize, tag);
             surface.text(font, tagSize,
                          {b.x - 8.0f - ts.x, a.y + std::max(0.0f, hh - ts.y) * 0.5f},

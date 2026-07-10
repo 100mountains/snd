@@ -143,6 +143,8 @@ void ImGuiSurface::pathStroke(Color color, bool closed, float thickness)
 void ImGuiSurface::text(FontRef font, float sizePx, Vec2 pos, Color color,
                         const char* begin, const char* end)
 {
+    if (sizePx < 0.5f)
+        return; // invisible; ImGui asserts on font_size <= 0
     if (!drawList_ || !begin)
         return;
     ImFont* f = imFont(font);
@@ -155,6 +157,8 @@ void ImGuiSurface::text(FontRef font, float sizePx, Vec2 pos, Color color,
 Vec2 ImGuiSurface::measureText(FontRef font, float sizePx, const char* begin,
                                const char* end)
 {
+    if (sizePx < 0.5f)
+        return {};
     if (!begin)
         return {};
     ImFont* f = imFont(font);

@@ -586,6 +586,8 @@ void OpenGLSurface::pathStroke(Color color, bool closed, float thickness)
 void OpenGLSurface::text(FontRef font, float sizePx, Vec2 pos, Color color,
                          const char* begin, const char* end)
 {
+    if (sizePx < 0.5f)
+        return; // invisible at sub-half-pixel; keep the atlas sane
     std::vector<StbFontAtlas::TextVertex> verts;
     fonts_.appendText(verts, font, sizePx, pos, color, begin, end);
     drawTextured(verts);
@@ -594,6 +596,8 @@ void OpenGLSurface::text(FontRef font, float sizePx, Vec2 pos, Color color,
 Vec2 OpenGLSurface::measureText(FontRef font, float sizePx, const char* begin,
                                 const char* end)
 {
+    if (sizePx < 0.5f)
+        return {};
     return fonts_.measure(font, sizePx, begin, end);
 }
 

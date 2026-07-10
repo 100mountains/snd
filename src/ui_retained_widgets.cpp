@@ -4805,6 +4805,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                 !port.label.empty()) {
                                 // murk: name control-out sockets, 9px right-aligned
                                 const float ls = context.fontSizePx * 0.75f * zoomScale;
+                                if (ls < 1.0f)
+                                    continue;
                                 const draw::Vec2 ts = surface.measureText(
                                     context.font, ls, port.label.c_str());
                                 surface.text(context.font, ls,
