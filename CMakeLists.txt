@@ -171,6 +171,7 @@ add_library(snd STATIC
     src/audio.cpp
     src/midi.cpp
     src/ui.cpp
+    src/ui_glfw_shared.cpp
     src/ui_widgets.cpp
     src/ui_draw_gl.cpp
     src/ui_draw_imgui.cpp

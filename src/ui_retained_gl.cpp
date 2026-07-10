@@ -3,6 +3,7 @@
 #include "snd/platform.h"
 #include "snd/ui_retained_widgets.h"
 #include "ui_draw_gl.h"
+#include "ui_glfw_shared.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -21,9 +22,6 @@
 namespace snd::ui::retained {
 
 namespace {
-
-int gWindowCount = 0;
-GLFWwindow* gShareWindow = nullptr;
 
 draw::Color gDefaultClear = 0xFF1F1A18u;
 
@@ -290,7 +288,7 @@ GlWindow::~GlWindow()
 bool GlWindow::create(int width, int height, const std::string& title,
                       bool decorated)
 {
-    if (!glfwInit())
+    if (!snd::ui::detail::ensureGlfwInitialized())
         return false;
 
     glfwWindowHint(GLFW_DECORATED, decorated ? GLFW_TRUE : GLFW_FALSE);
@@ -305,15 +303,12 @@ bool GlWindow::create(int width, int height, const std::string& title,
 #endif
 
     impl_->window = glfwCreateWindow(width, height, title.c_str(), nullptr,
-                                     gShareWindow);
+                                     snd::ui::detail::sharedGlfwContext());
     if (!impl_->window) {
-        if (gWindowCount == 0)
-            glfwTerminate();
+        snd::ui::detail::terminateGlfwIfIdle();
         return false;
     }
-    if (!gShareWindow)
-        gShareWindow = impl_->window;
-    ++gWindowCount;
+    snd::ui::detail::registerGlfwWindow(impl_->window);
 
     glfwSetWindowUserPointer(impl_->window, impl_.get());
     glfwSetCursorPosCallback(impl_->window, Impl::cursorCallback);
@@ -346,12 +341,10 @@ void GlWindow::destroy()
     glfwMakeContextCurrent(impl_->window);
     impl_->surface.destroyGl();
     impl_->fonts.destroyGl();
-    if (impl_->window == gShareWindow)
-        gShareWindow = nullptr;
-    glfwDestroyWindow(impl_->window);
+    GLFWwindow* window = impl_->window;
+    glfwDestroyWindow(window);
     impl_->window = nullptr;
-    if (--gWindowCount == 0)
-        glfwTerminate();
+    snd::ui::detail::unregisterGlfwWindow(window);
 }
 
 bool GlWindow::shouldClose() const

@@ -3,6 +3,7 @@
 #include "snd/ui.h"
 #include "snd/platform.h"
 #include "snd/ui_paint.h"
+#include "ui_glfw_shared.h"
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -29,9 +30,6 @@
 namespace snd::ui {
 
 namespace {
-int gWindowCount = 0;             // glfwTerminate when the last one dies
-GLFWwindow* gShareWindow = nullptr; // GL object sharing (textures cross windows)
-
 // ImGui labels may carry an "##id" suffix; painted button text stops there.
 // Returns `label` unchanged when there is no suffix (no allocation), else the
 // visible prefix copied into `storage`.
@@ -434,7 +432,7 @@ Window::~Window() { destroy(); }
 
 bool Window::create(int width, int height, const std::string& title, bool decorated)
 {
-    if (!glfwInit())
+    if (!detail::ensureGlfwInitialized())
         return false;
 
     glfwWindowHint(GLFW_DECORATED, decorated ? GLFW_TRUE : GLFW_FALSE);
@@ -453,15 +451,13 @@ bool Window::create(int width, int height, const std::string& title, bool decora
 
     // share GL objects with the first window so textures work everywhere
     impl->window =
-        glfwCreateWindow(width, height, title.c_str(), nullptr, gShareWindow);
+        glfwCreateWindow(width, height, title.c_str(), nullptr,
+                         detail::sharedGlfwContext());
     if (!impl->window) {
-        if (gWindowCount == 0)
-            glfwTerminate();
+        detail::terminateGlfwIfIdle();
         return false;
     }
-    if (!gShareWindow)
-        gShareWindow = impl->window;
-    ++gWindowCount;
+    detail::registerGlfwWindow(impl->window);
 
     glfwSetWindowUserPointer(impl->window, impl.get());
     glfwSetDropCallback(impl->window, Impl::dropCallback);
@@ -488,12 +484,10 @@ void Window::destroy()
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext(impl->ctx);
     impl->ctx = nullptr;
-    if (impl->window == gShareWindow)
-        gShareWindow = nullptr;
-    glfwDestroyWindow(impl->window);
+    GLFWwindow* window = impl->window;
+    glfwDestroyWindow(window);
     impl->window = nullptr;
-    if (--gWindowCount == 0)
-        glfwTerminate();
+    detail::unregisterGlfwWindow(window);
 }
 
 bool Window::shouldClose() const
