@@ -560,9 +560,13 @@ MouseButton mapMouseButton(ImGuiMouseButton button)
 void fillModifiers(Event& event, const ImGuiIO& io)
 {
     event.shift = io.KeyShift;
-    event.ctrl = io.KeyCtrl;
+    // ImGui swaps Cmd<->Ctrl on macOS (ConfigMacOSXBehaviors, imgui.cpp
+    // AddKeyEvent). SND events carry the PHYSICAL keys on every backend --
+    // super is always the Cmd/Win key, matching the raw-GLFW GL path -- so
+    // un-swap here. Without this, cmd+wheel scrolled and CTRL zoomed.
+    event.ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
     event.alt = io.KeyAlt;
-    event.super = io.KeySuper;
+    event.super = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeySuper;
 }
 
 void appendUtf8(std::string& out, uint32_t codepoint)
