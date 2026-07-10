@@ -108,6 +108,18 @@ bool packFont(stbtt_pack_context& ctx, const LoadedFont& loaded, float sizePx,
     }
 
     out.sizePx = sizePx;
+    stbtt_fontinfo info;
+    if (stbtt_InitFont(&info, loaded.bytes.data(), 0)) {
+        int ascent = 0;
+        int descent = 0;
+        int lineGap = 0;
+        stbtt_GetFontVMetrics(&info, &ascent, &descent, &lineGap);
+        out.ascent = (float)ascent * stbtt_ScaleForPixelHeight(&info, sizePx);
+        (void)descent;
+        (void)lineGap;
+    } else {
+        out.ascent = sizePx;
+    }
     out.firstCodepoint = firstCodepoint;
     out.glyphCount = glyphCount;
     out.glyphs.assign((std::size_t)glyphCount, {});
@@ -249,6 +261,14 @@ float StbFontAtlas::glyphSize(FontRef font, uint32_t codepoint) const
     return requested->sizePx;
 }
 
+float StbFontAtlas::glyphAscent(FontRef font, uint32_t codepoint) const
+{
+    const Font* requested = fontFromRef(font);
+    if (requested == &base_ && glyphInFont(material_, codepoint))
+        return material_.ascent;
+    return requested->ascent > 0.0f ? requested->ascent : requested->sizePx;
+}
+
 Vec2 StbFontAtlas::measure(FontRef font, float sizePx, const char* begin,
                            const char* end) const
 {
@@ -304,10 +324,11 @@ void StbFontAtlas::appendText(std::vector<TextVertex>& vertices, FontRef font,
         if (!g)
             continue;
         const float scale = sizePx / glyphSize(font, cp);
+        const float baseline = y + glyphAscent(font, cp) * scale;
         const float x0 = x + g->x0 * scale;
-        const float y0 = y + g->y0 * scale;
+        const float y0 = baseline + g->y0 * scale;
         const float x1 = x + g->x1 * scale;
-        const float y1 = y + g->y1 * scale;
+        const float y1 = baseline + g->y1 * scale;
         vertices.push_back({x0, y0, g->s0, g->t0, color});
         vertices.push_back({x1, y0, g->s1, g->t0, color});
         vertices.push_back({x1, y1, g->s1, g->t1, color});

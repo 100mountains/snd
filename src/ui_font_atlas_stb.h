@@ -26,6 +26,7 @@ public:
 
     struct Font {
         float sizePx = 13.0f;
+        float ascent = 0.0f;
         int firstCodepoint = 32;
         int glyphCount = 0;
         std::vector<Glyph> glyphs;
@@ -51,6 +52,7 @@ private:
     const Font* fontFromRef(FontRef font) const;
     const Glyph* glyph(FontRef font, uint32_t codepoint) const;
     float glyphSize(FontRef font, uint32_t codepoint) const;
+    float glyphAscent(FontRef font, uint32_t codepoint) const;
 
     Font base_;
     Font material_;
