@@ -599,10 +599,12 @@ drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
 wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
 animated modes read the render-time clock.
 
-Six house skins ship as presets (`paint::GraphSkin`: `TechSquare`,
-`ClassicRounded`, `Blueprint`, `Console`, `Studio`, and `Neo` — a dark neon
-look with a conic pink→purple→blue rim that spins while a node is selected,
-purple→blue gradient cables, and a dual blue/pink glow).
+Nine house skins ship as presets (`paint::GraphSkin`): murk's five
+(`TechSquare`, `ClassicRounded`, `Blueprint`, `Console`, `Studio`) and the
+gradient family — `Neo` (dark neon, conic pink→purple→blue rim that spins
+while a node is selected, purple→blue cables), `Rainbow` (a full six-stop
+hue wheel), `Ember` (deep red → orange → gold fire), and `Redline` (black
+slab, hard corners, a red highlight sweeping the outline).
 `paint::graphSkinStyle(skin)` returns the full node/pin/wire
 `GraphSurfaceStyle` and `paint::graphSkinName(skin)` its menu label; the
 backdrop is an independent choice, so pick a `Backdrop` mode and pair it with
@@ -610,12 +612,14 @@ backdrop is an independent choice, so pick a `Backdrop` mode and pair it with
 skin/background picker is a loop over `paint::kGraphSkinCount` and the modes —
 consumers should not re-transcribe colour tables.
 
-Neo's effects are plain `GraphSurfaceStyle` fields any skin can opt into, all
-inert at 0: `rimA/rimB/rimC` + `rimSpinSeconds` (conic border sweep, replaces
-`border`/`selectedBorder`; selection spins it — the spin reads the
-`timeSeconds` argument on `drawModuleBox`, which the graph surface feeds from
-the render clock), `wireGradientStart/wireGradientEnd` (per-segment cable
-lerp), and `glowA/glowB` (soft offset halos behind the node body).
+The gradient effects are plain `GraphSurfaceStyle` fields any skin can opt
+into, all inert at 0: `rimA..rimF` + `rimSpinSeconds` (conic border sweep
+through up to six stops, replaces `border`/`selectedBorder`; selection spins
+it — the spin reads the `timeSeconds` argument on `drawModuleBox`, which the
+graph surface feeds from the render clock) and
+`wireGradientStart/wireGradientEnd` (per-segment cable lerp). `glowA/glowB`
+(soft halos behind the node body) exist but no preset uses them — the
+filled-stack approximation stays until a real blur pass replaces it.
 `headerStripe = false` drops the 3px header accent stripe for clean-slab
 skins; when on, the stripe starts below the corner arc so it never juts past
 rounded corners.

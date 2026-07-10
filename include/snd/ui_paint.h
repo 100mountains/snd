@@ -128,11 +128,12 @@ struct GraphSurfaceStyle {
     Backdrop backdrop = Backdrop::Grid;
     ImU32 backdropFill = 0;
 
-    // ── gradient/glow extras (inert at 0, so flat skins pay nothing) ──
+    // ── gradient extras (inert at 0, so flat skins pay nothing) ──
     // Conic rim: when rimA is set, the node outline is stroked as an angular
-    // rimA→rimB→rimC sweep in place of border/selectedBorder. Selected nodes
-    // spin the sweep (rimSpinSeconds per revolution, 0 = static); the spin
-    // reads the timeSeconds passed to drawModuleBox.
+    // sweep through the consecutive non-zero stops rimA..rimF (looping back
+    // to rimA) in place of border/selectedBorder. Selected nodes spin the
+    // sweep (rimSpinSeconds per revolution, 0 = static); the spin reads the
+    // timeSeconds passed to drawModuleBox.
     ImU32 rimA = 0;
     ImU32 rimB = 0;
     ImU32 rimC = 0;
@@ -143,19 +144,27 @@ struct GraphSurfaceStyle {
     ImU32 wireGradientStart = 0;
     ImU32 wireGradientEnd = 0;
     // Soft dual halo behind the node body, one colour per side (A left,
-    // B right); each colour carries its own peak alpha.
+    // B right); each colour carries its own peak alpha. A filled-stack
+    // approximation -- stays until a REAL blur (GL post pass) replaces it
+    // (owner); the current presets leave it off.
     ImU32 glowA = 0;
     ImU32 glowB = 0;
     // The 3px accent stripe down the header's left edge (murk chrome).
     // Skins that want a clean slab (Neo) turn it off.
     bool headerStripe = true;
+    // Extra rim stops (appended for aggregate stability): a 6-stop sweep is
+    // enough for a full hue wheel. First zero stop past rimC ends the list.
+    ImU32 rimD = 0;
+    ImU32 rimE = 0;
+    ImU32 rimF = 0;
 };
 
-// House node skins: murk's five (Bob GraphEditorPanel::specFor) plus Neo, a
-// dark neon look with a conic pink→purple→blue rim that spins on selection,
-// gradient cables, and a dual blue/pink glow (from the schema-ui-web "Turbo"
-// React Flow skin). Embedded as presets so consumers pick by name instead of
-// re-transcribing colour tables.
+// House node skins: murk's five (Bob GraphEditorPanel::specFor) plus the
+// gradient family -- Neo (dark neon, conic pink→purple→blue rim that spins
+// on selection, gradient cables; from the schema-ui-web "Turbo" React Flow
+// skin), Rainbow (full six-stop hue wheel), Ember (fire: deep red → orange
+// → gold), and Redline (black slab, red sweep). Embedded as presets so
+// consumers pick by name instead of re-transcribing colour tables.
 enum class GraphSkin {
     TechSquare, // murk default
     ClassicRounded,
@@ -163,8 +172,11 @@ enum class GraphSkin {
     Console,
     Studio,
     Neo, // house default
+    Rainbow,
+    Ember,
+    Redline,
 };
-inline constexpr int kGraphSkinCount = 6;
+inline constexpr int kGraphSkinCount = 9;
 const char* graphSkinName(GraphSkin skin); // murk's Skin menu label
 // Node/pin/wire style for a skin. Backdrop fields keep their defaults: murk
 // treats the canvas as an independent choice (its Bg menu) — pick a Backdrop

@@ -2249,6 +2249,9 @@ const char* graphSkinName(GraphSkin skin)
     case GraphSkin::Console: return "Console";
     case GraphSkin::Studio: return "Studio";
     case GraphSkin::Neo: return "Neo";
+    case GraphSkin::Rainbow: return "Rainbow";
+    case GraphSkin::Ember: return "Ember";
+    case GraphSkin::Redline: return "Redline";
     }
     return "Tech Square";
 }
@@ -2326,8 +2329,64 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         s.rimSpinSeconds = 4.0f; // Turbo: 4s linear infinite
         s.wireGradientStart = IM_COL32(0xae, 0x53, 0xba, 0xbf); // 75% opacity
         s.wireGradientEnd = IM_COL32(0x2a, 0x8a, 0xf6, 0xbf);
-        s.glowA = IM_COL32(0x2a, 0x8a, 0xf6, 0x4d); // rgba(42,138,246,.3)
-        s.glowB = IM_COL32(0xe9, 0x2a, 0x67, 0x4d); // rgba(233,42,103,.3)
+        // no glow: the filled-stack halo reads as fake blur (owner) -- the
+        // capability stays for when a real blur pass exists
+        break;
+    case GraphSkin::Rainbow:
+        // full six-stop hue wheel on a neutral dark slab; the wheel only
+        // spins while selected, like the rest of the gradient family
+        s.node = IM_COL32(0x14, 0x14, 0x1a, 0xff);
+        s.header = IM_COL32(0x1b, 0x1b, 0x22, 0xff);
+        s.border = IM_COL32(0x8a, 0x5c, 0xf6, 0xff); // fallback if rim cleared
+        s.text = IM_COL32(0xf2, 0xf3, 0xf7, 0xff);
+        s.accent = IM_COL32(0x4d, 0xb8, 0xff, 0xff);
+        s.selectedBorder = IM_COL32(0xff, 0xe9, 0x4d, 0xff);
+        s.corner = 8.0f;
+        s.headerStripe = false;
+        s.rimA = IM_COL32(0xff, 0x4d, 0x4d, 0xff); // red
+        s.rimB = IM_COL32(0xff, 0xb8, 0x4d, 0xff); // orange
+        s.rimC = IM_COL32(0xff, 0xe9, 0x4d, 0xff); // yellow
+        s.rimD = IM_COL32(0x4d, 0xff, 0x88, 0xff); // green
+        s.rimE = IM_COL32(0x4d, 0xb8, 0xff, 0xff); // blue
+        s.rimF = IM_COL32(0xb8, 0x4d, 0xff, 0xff); // violet
+        s.rimSpinSeconds = 6.0f;
+        s.wireGradientStart = IM_COL32(0xff, 0x4d, 0x4d, 0xd9); // red ->
+        s.wireGradientEnd = IM_COL32(0xb8, 0x4d, 0xff, 0xd9);   // violet
+        break;
+    case GraphSkin::Ember:
+        // fire: charcoal slab, deep-red -> orange -> gold sweep, warm text
+        s.node = IM_COL32(0x16, 0x10, 0x0c, 0xff);
+        s.header = IM_COL32(0x1d, 0x15, 0x10, 0xff);
+        s.border = IM_COL32(0xff, 0x6a, 0x00, 0xff); // fallback if rim cleared
+        s.text = IM_COL32(0xf6, 0xe8, 0xdc, 0xff);
+        s.accent = IM_COL32(0xff, 0x6a, 0x00, 0xff);
+        s.selectedBorder = IM_COL32(0xff, 0xd1, 0x66, 0xff);
+        s.corner = 4.0f;
+        s.headerStripe = false;
+        s.rimA = IM_COL32(0x8a, 0x1f, 0x0f, 0xff); // deep ember
+        s.rimB = IM_COL32(0xff, 0x6a, 0x00, 0xff); // orange
+        s.rimC = IM_COL32(0xff, 0xd1, 0x66, 0xff); // gold
+        s.rimSpinSeconds = 3.5f;
+        s.wireGradientStart = IM_COL32(0xff, 0x6a, 0x00, 0xd9);
+        s.wireGradientEnd = IM_COL32(0xff, 0xd1, 0x66, 0xd9);
+        break;
+    case GraphSkin::Redline:
+        // black and red: near-black slab, hard corners, a single red
+        // highlight sweeping the outline while selected
+        s.node = IM_COL32(0x0d, 0x0b, 0x0b, 0xff);
+        s.header = IM_COL32(0x14, 0x10, 0x10, 0xff);
+        s.border = IM_COL32(0xff, 0x3b, 0x30, 0xff); // fallback if rim cleared
+        s.text = IM_COL32(0xf2, 0xe9, 0xe9, 0xff);
+        s.accent = IM_COL32(0xff, 0x3b, 0x30, 0xff);
+        s.selectedBorder = IM_COL32(0xff, 0x3b, 0x30, 0xff);
+        s.corner = 0.0f;
+        s.headerStripe = false;
+        s.rimA = IM_COL32(0x3d, 0x0c, 0x0c, 0xff); // near-black red
+        s.rimB = IM_COL32(0xff, 0x3b, 0x30, 0xff); // the highlight
+        s.rimC = IM_COL32(0x8a, 0x1f, 0x1a, 0xff); // fade back down
+        s.rimSpinSeconds = 4.0f;
+        s.wireGradientStart = IM_COL32(0x8a, 0x1f, 0x1a, 0xd9);
+        s.wireGradientEnd = IM_COL32(0xff, 0x3b, 0x30, 0xd9);
         break;
     }
     return s;
@@ -2507,23 +2566,39 @@ void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
 
 namespace {
 
-// 3-stop looped angular palette: u 0..1 sweeps A→B→C→A (wraps).
-ImU32 conicStop3(ImU32 a, ImU32 b, ImU32 c, float u)
+// N-stop looped angular palette: u 0..1 sweeps stop0→…→stopN-1→stop0.
+ImU32 conicStopN(const ImU32* stops, int count, float u)
 {
+    if (count <= 0)
+        return 0;
+    if (count == 1)
+        return stops[0];
     u = u - std::floor(u);
-    const float seg = u * 3.0f;
-    if (seg < 1.0f)
-        return mix(a, b, seg);
-    if (seg < 2.0f)
-        return mix(b, c, seg - 1.0f);
-    return mix(c, a, seg - 2.0f);
+    const float seg = u * (float)count;
+    const int i = std::min((int)seg, count - 1);
+    return mix(stops[i], stops[(i + 1) % count], seg - (float)i);
 }
 
-// Stroke a rounded-rect outline as a conic 3-stop gradient about the rect
-// centre; phase rotates the sweep (1 = one revolution).
+// The style's rim stops: rimA..rimF, ended by the first zero past rimC.
+int rimStops(const GraphSurfaceStyle& style, ImU32 out[6])
+{
+    const ImU32 all[6] = {style.rimA, style.rimB, style.rimC,
+                          style.rimD, style.rimE, style.rimF};
+    int n = 0;
+    for (int i = 0; i < 6; ++i) {
+        if (i >= 3 && (all[i] & 0xFF000000u) == 0)
+            break;
+        if ((all[i] & 0xFF000000u) != 0)
+            out[n++] = all[i];
+    }
+    return n;
+}
+
+// Stroke a rounded-rect outline as a conic gradient through `stops` about
+// the rect centre; phase rotates the sweep (1 = one revolution).
 void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
-                    float corner, ImU32 ca, ImU32 cb, ImU32 cc, float phase,
-                    float thickness)
+                    float corner, const ImU32* stops, int stopCount,
+                    float phase, float thickness)
 {
     const float w = b.x - a.x;
     const float h = b.y - a.y;
@@ -2566,7 +2641,8 @@ void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
                            (pts[i].y + pts[i + 1].y) * 0.5f};
         const float u =
             std::atan2(m.y - c.y, m.x - c.x) / (2.0f * kPi) - phase;
-        surface.line(pts[i], pts[i + 1], conicStop3(ca, cb, cc, u), thickness);
+        surface.line(pts[i], pts[i + 1], conicStopN(stops, stopCount, u),
+                     thickness);
     }
 }
 
@@ -2722,13 +2798,15 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     // border last so it sits over the header edges; selected = murk amber 2px.
     // A conic rim (Neo-class skins) replaces both border and selectedBorder;
     // selection spins it instead of recolouring.
-    if ((style.rimA & 0xFF000000u) != 0) {
+    ImU32 rim[6];
+    const int rimCount = rimStops(style, rim);
+    if (rimCount > 0) {
         float phase = 0.0f;
         if (state.selected && style.rimSpinSeconds > 0.0f)
             phase = (float)std::fmod(timeSeconds / (double)style.rimSpinSeconds,
                                      1.0);
-        strokeConicRim(surface, a, b, corner, style.rimA, style.rimB,
-                       style.rimC, phase, 1.5f); // owner: tight; spin marks selection
+        strokeConicRim(surface, a, b, corner, rim, rimCount, phase,
+                       1.5f); // owner: tight; spin marks selection
     } else {
         surface.strokeRect(a, b, state.selected ? selectedCol : borderCol,
                            corner, state.selected ? 2.0f : 1.0f);
