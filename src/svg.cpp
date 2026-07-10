@@ -104,6 +104,11 @@ SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
     if (!rgba || w <= 0 || h <= 0)
         return tex;
 
+    GLint previousTexture = 0;
+    GLint previousUnpackAlignment = 4;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
+
     GLuint id = 0;
     glGenTextures(1, &id);
     glBindTexture(GL_TEXTURE_2D, id);
@@ -114,6 +119,8 @@ SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA,
                  GL_UNSIGNED_BYTE, rgba);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
 
     tex.id = (ImTextureID)(intptr_t)id;
     tex.w = w;
