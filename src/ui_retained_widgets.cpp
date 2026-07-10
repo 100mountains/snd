@@ -1711,9 +1711,12 @@ void PaintRenderer::render(const Tree& tree, const ImVec2& origin,
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
-    renderNode(tree.root(), &semMap, origin,
-               drawList ? drawList : ImGui::GetWindowDrawList(),
-               imGuiFrameContext());
+    ImDrawList* dl = drawList ? drawList : ImGui::GetWindowDrawList();
+    const auto context = imGuiFrameContext();
+    std::vector<const Node*> overlays;
+    renderNode(tree.root(), &semMap, origin, dl, context, &overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i) // grows as nested defer
+        renderNode(*overlays[i], &semMap, origin, dl, context, &overlays);
 }
 
 void PaintRenderer::render(const Node& root, ImDrawList* drawList) const
@@ -1724,9 +1727,12 @@ void PaintRenderer::render(const Node& root, ImDrawList* drawList) const
 void PaintRenderer::render(const Node& root, const ImVec2& origin,
                            ImDrawList* drawList) const
 {
-    renderNode(root, nullptr, origin,
-               drawList ? drawList : ImGui::GetWindowDrawList(),
-               imGuiFrameContext());
+    ImDrawList* dl = drawList ? drawList : ImGui::GetWindowDrawList();
+    const auto context = imGuiFrameContext();
+    std::vector<const Node*> overlays;
+    renderNode(root, nullptr, origin, dl, context, &overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i)
+        renderNode(*overlays[i], nullptr, origin, dl, context, &overlays);
 }
 
 void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
@@ -1736,21 +1742,99 @@ void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
-    renderNode(tree.root(), &semMap, origin, surface,
-               normalizedFrameContext(context));
+    const auto ctx = normalizedFrameContext(context);
+    std::vector<const Node*> overlays;
+    renderNode(tree.root(), &semMap, origin, surface, ctx, &overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i)
+        renderNode(*overlays[i], &semMap, origin, surface, ctx, &overlays);
 }
 
 void PaintRenderer::render(const Node& root, draw::Surface& surface,
                            const draw::FrameContext& context,
                            draw::Vec2 origin) const
 {
-    renderNode(root, nullptr, origin, surface, normalizedFrameContext(context));
+    const auto ctx = normalizedFrameContext(context);
+    std::vector<const Node*> overlays;
+    renderNode(root, nullptr, origin, surface, ctx, &overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i)
+        renderNode(*overlays[i], nullptr, origin, surface, ctx, &overlays);
+}
+
+void PaintRenderer::renderMain(const Tree& tree, const ImVec2& origin,
+                               ImDrawList* drawList) const
+{
+    SemanticMap semMap;
+    for (const SemanticNode& node : tree.semanticSnapshot())
+        semMap[node.id] = node;
+    std::vector<const Node*> deferred; // discarded: renderOverlays re-collects
+    renderNode(tree.root(), &semMap, origin,
+               drawList ? drawList : ImGui::GetWindowDrawList(),
+               imGuiFrameContext(), &deferred);
+}
+
+void PaintRenderer::renderOverlays(const Tree& tree, const ImVec2& origin,
+                                   ImDrawList* drawList) const
+{
+    SemanticMap semMap;
+    for (const SemanticNode& node : tree.semanticSnapshot())
+        semMap[node.id] = node;
+    ImDrawList* dl = drawList ? drawList : ImGui::GetWindowDrawList();
+    const auto context = imGuiFrameContext();
+    std::vector<const Node*> overlays;
+    collectOverlays(tree.root(), overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i)
+        renderNode(*overlays[i], &semMap, origin, dl, context, &overlays);
+}
+
+void PaintRenderer::renderMain(const Tree& tree, draw::Surface& surface,
+                               const draw::FrameContext& context,
+                               draw::Vec2 origin) const
+{
+    SemanticMap semMap;
+    for (const SemanticNode& node : tree.semanticSnapshot())
+        semMap[node.id] = node;
+    std::vector<const Node*> deferred;
+    renderNode(tree.root(), &semMap, origin, surface,
+               normalizedFrameContext(context), &deferred);
+}
+
+void PaintRenderer::renderOverlays(const Tree& tree, draw::Surface& surface,
+                                   const draw::FrameContext& context,
+                                   draw::Vec2 origin) const
+{
+    SemanticMap semMap;
+    for (const SemanticNode& node : tree.semanticSnapshot())
+        semMap[node.id] = node;
+    const auto ctx = normalizedFrameContext(context);
+    std::vector<const Node*> overlays;
+    collectOverlays(tree.root(), overlays);
+    for (std::size_t i = 0; i < overlays.size(); ++i)
+        renderNode(*overlays[i], &semMap, origin, surface, ctx, &overlays);
+}
+
+void PaintRenderer::collectOverlays(const Node& node,
+                                    std::vector<const Node*>& out) const
+{
+    if (!node.visible())
+        return;
+    const VisualStyle style = resolvedStyle(node);
+    if (style.popupState && !style.popupState->open)
+        return;
+    for (const auto& child : node.children()) {
+        if (!child->visible())
+            continue;
+        if (child->overlay())
+            out.push_back(child.get());
+        else
+            collectOverlays(*child, out);
+    }
 }
 
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                const ImVec2& origin,
                                ImDrawList* drawList,
-                               const draw::FrameContext& context) const
+                               const draw::FrameContext& context,
+                               std::vector<const Node*>* overlayQueue) const
 {
     if (!node.visible())
         return;
@@ -1988,13 +2072,19 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
 
-    for (const auto& child : node.children())
-        renderNode(*child, semantics, origin, drawList, context);
+    for (const auto& child : node.children()) {
+        if (overlayQueue && child->overlay() && child->visible()) {
+            overlayQueue->push_back(child.get()); // painted after the main pass
+            continue;
+        }
+        renderNode(*child, semantics, origin, drawList, context, overlayQueue);
+    }
 }
 
 void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                draw::Vec2 origin, draw::Surface& surface,
-                               const draw::FrameContext& context) const
+                               const draw::FrameContext& context,
+                               std::vector<const Node*>* overlayQueue) const
 {
     if (!node.visible())
         return;
@@ -2245,8 +2335,13 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
 
-    for (const auto& child : node.children())
-        renderNode(*child, semantics, origin, surface, context);
+    for (const auto& child : node.children()) {
+        if (overlayQueue && child->overlay() && child->visible()) {
+            overlayQueue->push_back(child.get()); // painted after the main pass
+            continue;
+        }
+        renderNode(*child, semantics, origin, surface, context, overlayQueue);
+    }
 }
 
 bool dispatchImGuiInput(Tree& tree, const ImVec2& origin)
@@ -3351,28 +3446,64 @@ ImU32 graphPortColor(const GraphPort& port, const GraphSurfaceStyle& style,
     }
 }
 
+// Which node edge a pin's node-local rect sits flush against: 0 none,
+// 1 left, 2 right. Pins that straddle the edge (murk's, centred on it) match
+// neither and keep the classic full-outline look; flush-inside pins render as
+// sockets (see drawGraphPort).
+int portFlushEdge(const GraphNode& node, const GraphPort& port)
+{
+    constexpr float eps = 0.5f;
+    if (std::abs(port.bounds.x) <= eps)
+        return 1;
+    if (std::abs(port.bounds.x + port.bounds.w - node.bounds.w) <= eps)
+        return 2;
+    return 0;
+}
+
 void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
-                   const GraphSurfaceStyle& style)
+                   const GraphSurfaceStyle& style, int flushEdge)
 {
     // murk PinComponent::paint, exact: kind colour reduced 1.5, black 0.45
     // outline, white 0.18 inner outline reduced 2; square or round per skin.
-    // Pins carry no hover/selected paint in murk.
+    // Pins carry no hover/selected paint in murk. A flush pin (square only)
+    // opens THROUGH the node border: its fill runs to the edge, covering the
+    // border segment beneath, and outline + inner lip skip that side, so the
+    // wire reads as plugging into a socket.
     const Palette& pal = palette();
     ImU32 col = port.invalidDrop ? pal.meterHot
                                  : graphPortColor(port, style, pal);
     if (!port.enabled)
         col = paint::mix(col, pal.textDim, 0.65f);
     (void)state;
-    const ImVec2 a(bounds.x + 1.5f, bounds.y + 1.5f);
-    const ImVec2 b(bounds.x + bounds.w - 1.5f, bounds.y + bounds.h - 1.5f);
+    if (!style.squarePins)
+        flushEdge = 0;
+    const ImVec2 a(bounds.x + (flushEdge == 1 ? 0.0f : 1.5f),
+                   bounds.y + 1.5f);
+    const ImVec2 b(bounds.x + bounds.w - (flushEdge == 2 ? 0.0f : 1.5f),
+                   bounds.y + bounds.h - 1.5f);
     const ImU32 outline = IM_COL32(0, 0, 0, 115);
     const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
         dl.AddRectFilled(a, b, col, 0.0f);
-        dl.AddRect(a, b, outline, 0.0f);
-        dl.AddRect(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(b.x - 2.0f, b.y - 2.0f),
-                   inner, 0.0f);
+        if (flushEdge == 0) {
+            dl.AddRect(a, b, outline, 0.0f);
+            dl.AddRect(ImVec2(a.x + 2.0f, a.y + 2.0f),
+                       ImVec2(b.x - 2.0f, b.y - 2.0f), inner, 0.0f);
+        } else {
+            const auto sides = [&](ImVec2 lo, ImVec2 hi, ImU32 c) {
+                dl.AddLine(lo, ImVec2(hi.x, lo.y), c, 1.0f);
+                dl.AddLine(ImVec2(lo.x, hi.y), hi, c, 1.0f);
+                if (flushEdge != 1)
+                    dl.AddLine(lo, ImVec2(lo.x, hi.y), c, 1.0f);
+                if (flushEdge != 2)
+                    dl.AddLine(ImVec2(hi.x, lo.y), hi, c, 1.0f);
+            };
+            sides(a, b, outline);
+            sides(ImVec2(a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f),
+                  ImVec2(b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f),
+                  inner);
+        }
     } else {
         const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
         const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
@@ -3384,7 +3515,7 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
 
 void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
-                   const GraphSurfaceStyle& style)
+                   const GraphSurfaceStyle& style, int flushEdge)
 {
     const Palette& pal = palette();
     ImU32 col = port.invalidDrop ? pal.meterHot
@@ -3392,15 +3523,33 @@ void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
     if (!port.enabled)
         col = paint::mix(col, pal.textDim, 0.65f);
     (void)state;
-    const draw::Vec2 a{bounds.x + 1.5f, bounds.y + 1.5f};
-    const draw::Vec2 b{bounds.x + bounds.w - 1.5f, bounds.y + bounds.h - 1.5f};
+    if (!style.squarePins)
+        flushEdge = 0;
+    const draw::Vec2 a{bounds.x + (flushEdge == 1 ? 0.0f : 1.5f),
+                       bounds.y + 1.5f};
+    const draw::Vec2 b{bounds.x + bounds.w - (flushEdge == 2 ? 0.0f : 1.5f),
+                       bounds.y + bounds.h - 1.5f};
     const ImU32 outline = IM_COL32(0, 0, 0, 115);
     const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
         surface.fillRect(a, b, col, 0.0f);
-        surface.strokeRect(a, b, outline, 0.0f);
-        surface.strokeRect({a.x + 2.0f, a.y + 2.0f}, {b.x - 2.0f, b.y - 2.0f},
-                           inner, 0.0f);
+        if (flushEdge == 0) {
+            surface.strokeRect(a, b, outline, 0.0f);
+            surface.strokeRect({a.x + 2.0f, a.y + 2.0f},
+                               {b.x - 2.0f, b.y - 2.0f}, inner, 0.0f);
+        } else {
+            const auto sides = [&](draw::Vec2 lo, draw::Vec2 hi, ImU32 c) {
+                surface.line(lo, {hi.x, lo.y}, c, 1.0f);
+                surface.line({lo.x, hi.y}, hi, c, 1.0f);
+                if (flushEdge != 1)
+                    surface.line(lo, {lo.x, hi.y}, c, 1.0f);
+                if (flushEdge != 2)
+                    surface.line({hi.x, lo.y}, hi, c, 1.0f);
+            };
+            sides(a, b, outline);
+            sides({a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f},
+                  {b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f}, inner);
+        }
     } else {
         const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
         const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
@@ -3659,6 +3808,115 @@ Node::Ptr column(NodeId id, float gap, Insets padding)
     layout.gap = gap;
     layout.padding = padding;
     return panel(std::move(id), layout, padding);
+}
+
+Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
+                   bool horizontal, bool invert, PaintRenderer* renderer,
+                   float thickness)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Group);
+    node->setFocusable(true);
+    node->setSemantics(named(Role::Group, std::move(name)));
+    node->setIntrinsicSize({thickness, thickness});
+    if (horizontal)
+        node->setSize(Length::fixed(thickness), Length::fill());
+    else
+        node->setSize(Length::fill(), Length::fixed(thickness));
+
+    if (renderer) {
+        const auto paintBar = [horizontal](draw::Surface& surface, Rect bounds,
+                                           const paint::ControlState& state) {
+            const Palette& pal = palette();
+            const ImU32 fill =
+                state.active    ? paint::withAlpha(pal.accent, 0x60)
+                : state.hovered ? paint::withAlpha(pal.accent, 0x38)
+                                : paint::withAlpha(pal.frameBright, 0x28);
+            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                             fill, 0.0f);
+            const ImU32 grip = paint::withAlpha(
+                pal.text, state.hovered || state.active ? 0x90 : 0x48);
+            const float cx = bounds.x + bounds.w * 0.5f;
+            const float cy = bounds.y + bounds.h * 0.5f;
+            for (int i = -1; i <= 1; ++i) { // three grip dots along the bar
+                const float ox = horizontal ? 0.0f : (float)i * 6.0f;
+                const float oy = horizontal ? (float)i * 6.0f : 0.0f;
+                surface.fillCircle({cx + ox, cy + oy}, 1.5f, grip);
+            }
+            if (state.focused && !state.disabled)
+                paint::drawFocusRing(surface, topLeftDraw(bounds),
+                                     bottomRightDraw(bounds), pal, 0.0f);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paintBar](draw::Surface& s, const Node&,
+                                             Rect b,
+                                             const paint::ControlState& st,
+                                             const draw::FrameContext&) {
+            paintBar(s, b, st);
+        };
+        style.canvasDraw = [paintBar](ImDrawList& dl, const Node&, Rect b,
+                                      const paint::ControlState& st) {
+            draw::ImGuiSurface surface(&dl);
+            paintBar(surface, b, st);
+        };
+        renderer->setStyle(sid, style);
+    }
+
+    struct DragState {
+        double startValue = 0.0;
+        Vec2 startPos{};
+        bool dragging = false;
+    };
+    auto drag = std::make_shared<DragState>();
+    node->setOnEvent([binding, horizontal, invert, drag](Node& n,
+                                                         const Event& e) {
+        const auto clamped = [&](double v) {
+            return std::clamp(v, binding.min, binding.max);
+        };
+        switch (e.type) {
+        case EventType::MouseDown:
+            if (e.button != MouseButton::Left || !binding.get)
+                return false;
+            drag->dragging = true;
+            drag->startValue = binding.get();
+            drag->startPos = e.position;
+            return true;
+        case EventType::MouseMove: {
+            if (!drag->dragging || !n.pressed())
+                return false;
+            const float d = horizontal ? e.position.x - drag->startPos.x
+                                       : e.position.y - drag->startPos.y;
+            if (binding.set)
+                binding.set(clamped(drag->startValue +
+                                    (invert ? -(double)d : (double)d)));
+            return true;
+        }
+        case EventType::MouseUp:
+            if (e.button == MouseButton::Left && drag->dragging) {
+                drag->dragging = false;
+                return true;
+            }
+            return false;
+        case EventType::KeyDown: {
+            if (!binding.get || !binding.set)
+                return false;
+            const double kb = binding.step >= 1.0 ? binding.step : 8.0;
+            double dir = 0.0;
+            if (e.key == (horizontal ? Key::Left : Key::Up))
+                dir = -1.0;
+            else if (e.key == (horizontal ? Key::Right : Key::Down))
+                dir = 1.0;
+            if (dir == 0.0)
+                return false;
+            binding.set(clamped(binding.get() + (invert ? -dir : dir) * kb));
+            return true;
+        }
+        default:
+            return false;
+        }
+    });
+    return node;
 }
 
 Node::Ptr gradientPanel(NodeId id, Vec2 size,
@@ -4542,21 +4800,58 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             return state.hovered.valid();
         }
 
-        if (event.type == EventType::MouseWheel && event.wheelDelta.y != 0.0f) {
-            const Vec2 before = screenToGraph(state.viewport, local);
-            const float prevZoom = std::max(0.05f, state.viewport.zoom);
-            const float factor = std::pow(1.12f, event.wheelDelta.y);
-            state.viewport.zoom = std::clamp(prevZoom * factor, 0.20f, 4.0f);
-            state.viewport.pan.x = local.x - before.x * state.viewport.zoom;
-            state.viewport.pan.y = local.y - before.y * state.viewport.zoom;
+        // Viewport navigation (owner keys): cmd+wheel zooms at the cursor,
+        // plain wheel scrolls (shift turns vertical into horizontal),
+        // cmd+arrows step-scroll, cmd/alt+left-drag or middle-drag pans.
+        if (event.type == EventType::MouseWheel &&
+            (event.wheelDelta.y != 0.0f || event.wheelDelta.x != 0.0f)) {
+            if (event.super && event.wheelDelta.y != 0.0f) {
+                const Vec2 before = screenToGraph(state.viewport, local);
+                const float prevZoom = std::max(0.05f, state.viewport.zoom);
+                const float factor = std::pow(1.12f, event.wheelDelta.y);
+                state.viewport.zoom = std::clamp(prevZoom * factor, 0.20f, 4.0f);
+                state.viewport.pan.x = local.x - before.x * state.viewport.zoom;
+                state.viewport.pan.y = local.y - before.y * state.viewport.zoom;
+            } else if (!event.super) {
+                const float step = 30.0f;
+                float dx = event.wheelDelta.x;
+                float dy = event.wheelDelta.y;
+                if (event.shift && dx == 0.0f) {
+                    dx = dy;
+                    dy = 0.0f;
+                }
+                state.viewport.pan.x += dx * step;
+                state.viewport.pan.y += dy * step;
+            }
             if (callbacks.onViewportChanged)
                 callbacks.onViewportChanged(state.viewport);
             return true;
         }
 
+        if (event.type == EventType::KeyDown && event.super) {
+            const float step = 60.0f;
+            Vec2 d{};
+            if (event.key == Key::Left)
+                d.x = step; // view left = content right
+            else if (event.key == Key::Right)
+                d.x = -step;
+            else if (event.key == Key::Up)
+                d.y = step;
+            else if (event.key == Key::Down)
+                d.y = -step;
+            if (d.x != 0.0f || d.y != 0.0f) {
+                state.viewport.pan.x += d.x;
+                state.viewport.pan.y += d.y;
+                if (callbacks.onViewportChanged)
+                    callbacks.onViewportChanged(state.viewport);
+                return true;
+            }
+        }
+
         if (event.type == EventType::MouseDown &&
             (event.button == MouseButton::Middle ||
-             (event.button == MouseButton::Left && event.alt))) {
+             (event.button == MouseButton::Left &&
+              (event.alt || event.super)))) {
             state.panning = true;
             state.active = makeGraphHit(GraphHitKind::Surface,
                                         screenToGraph(state.viewport, local));
@@ -4796,7 +5091,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                               sameGraphHit(state.cablePreviewStart, portHit)) ||
                                              (state.cablePreviewValid &&
                                               sameGraphHit(state.cablePreviewTarget, portHit));
-                        drawGraphPort(dl, pr, port, portState, graphStyle);
+                        drawGraphPort(dl, pr, port, portState, graphStyle,
+                                      portFlushEdge(graphNode, port));
                     }
                 };
                 drawPortList(graphNode.inputs);
@@ -4954,7 +5250,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                   sameGraphHit(state.cablePreviewStart, portHit)) ||
                                                  (state.cablePreviewValid &&
                                                   sameGraphHit(state.cablePreviewTarget, portHit));
-                            drawGraphPort(surface, pr, port, portState, graphStyle);
+                            drawGraphPort(surface, pr, port, portState, graphStyle,
+                                          portFlushEdge(graphNode, port));
                             if (port.kind == GraphPortKind::Control &&
                                 port.direction == GraphPortDirection::Output &&
                                 !port.label.empty()) {

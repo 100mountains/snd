@@ -490,6 +490,24 @@ this for you). When wiring render manually instead of `drawImGui`, call
 before hit-testing/paint, and `renderer.dismissOpenPopupsOutside(...)` on
 outside clicks.
 
+**Overlay z-order.** `PaintRenderer::render` paints overlay subtrees (popups,
+flyout panels) in a second pass after the whole main tree, so a menu can never
+sit under a later sibling. Hosts that composite their own layer between the
+tree and its popups (e.g. ImGui-bridged module editors over a background-list
+tree) use the split: `renderMain(...)` paints everything except overlays,
+`renderOverlays(...)` only them — put the overlays pass on top of your layer
+(`ImGui::GetForegroundDrawList()` in the bridged case).
+
+**Splitter.** `widgets::splitter(id, name, binding, horizontal, invert,
+renderer, thickness)` is a draggable pane divider: dragging (or arrow keys
+while focused) writes the adjacent pane's size through the `ValueBinding`,
+clamped to `[min, max]`; `invert` flips direction for far-edge-docked panes.
+The splitter is stateless — rebuild or re-layout off the bound value.
+
+**Window canvas colour.** `Window::setClearColor(IM_COL32(...))` sets the GL
+clear behind everything the app draws; apps painting their own chrome should
+set their canvas colour so padding/gaps don't show the library default.
+
 ## Menus
 
 Use SND menu primitives for action lists, dropdown/select controls, and
@@ -590,6 +608,18 @@ inert at 0: `rimA/rimB/rimC` + `rimSpinSeconds` (conic border sweep, replaces
 `timeSeconds` argument on `drawModuleBox`, which the graph surface feeds from
 the render clock), `wireGradientStart/wireGradientEnd` (per-segment cable
 lerp), and `glowA/glowB` (soft offset halos behind the node body).
+`headerStripe = false` drops the 3px header accent stripe for clean-slab
+skins; when on, the stripe starts below the corner arc so it never juts past
+rounded corners.
+
+Viewport navigation: plain mouse wheel scrolls the canvas (shift for
+horizontal), cmd+wheel zooms at the cursor, cmd/alt+left-drag or middle-drag
+pans, and cmd+arrow keys step-scroll while the surface is focused.
+
+Square pins whose node-local rect sits flush against the node's left or right
+edge render as SOCKETS: the fill runs to the edge over the node border and
+the outline skips that side, so a wire reads as plugging into the box. Pins
+that straddle the edge (murk's) keep the classic full outline.
 
 Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
 `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an

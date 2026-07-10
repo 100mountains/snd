@@ -2301,8 +2301,8 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
     case GraphSkin::Neo:
         // schema-ui-web "Turbo" (bob2/SKIN.md): near-black slab, conic
         // pink→purple→blue rim that spins while selected, purple→blue wires
-        // at 75%, dual blue/pink halo. Pins keep the murk kind colours but go
-        // round to suit the look.
+        // at 75%, dual blue/pink halo. Square pins in murk kind colours, no
+        // header stripe (owner picks).
         s.node = IM_COL32(0x11, 0x11, 0x11, 0xff);
         s.header = IM_COL32(0x16, 0x16, 0x16, 0xff);
         s.border = IM_COL32(0xa8, 0x53, 0xba, 0xff); // fallback if rim cleared
@@ -2310,7 +2310,7 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         s.accent = IM_COL32(0xa8, 0x53, 0xba, 0xff);
         s.selectedBorder = IM_COL32(0x2a, 0x8a, 0xf6, 0xff);
         s.corner = 10.0f;
-        s.squarePins = false;
+        s.headerStripe = false;
         s.rimA = IM_COL32(0xe9, 0x2a, 0x67, 0xff);
         s.rimB = IM_COL32(0xa8, 0x53, 0xba, 0xff);
         s.rimC = IM_COL32(0x2a, 0x8a, 0xf6, 0xff);
@@ -2678,15 +2678,22 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     surface.fillRect(a, b, nodeCol, corner);
 
     // header bar + 3px accent stripe + bold title (murk rounds the header
-    // rect with the same radius; stripe at 0.82 alpha)
+    // rect with the same radius; stripe at 0.82 alpha). Two owner-directed
+    // deviations from murk: the stripe starts below the corner arc so it
+    // can't jut past rounded corners, and the title sits 12px in (murk's 8
+    // crowds the stripe).
     const draw::Vec2 hMax{b.x, a.y + hh};
     surface.fillRect(a, hMax, headerCol, corner);
-    surface.fillRect(a, {a.x + 3.0f, hMax.y}, withAlpha(accentCol, 0xD1), 0.0f);
+    if (style.headerStripe) {
+        const float stripeTop = std::min(a.y + corner, hMax.y);
+        surface.fillRect({a.x, stripeTop}, {a.x + 3.0f, hMax.y},
+                         withAlpha(accentCol, 0xD1), 0.0f);
+    }
     if (title && title[0] && fontSizePx >= 1.0f) { // sub-1px: skip, not assert
         const draw::Vec2 ts = surface.measureText(font, fontSizePx, title);
-        surface.pushClip({a.x + 8.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
+        surface.pushClip({a.x + 12.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
         surface.text(font, fontSizePx,
-                     {a.x + 8.0f, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
+                     {a.x + 12.0f, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
                      textCol, title);
         surface.popClip();
     }
@@ -2703,7 +2710,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
             phase = (float)std::fmod(timeSeconds / (double)style.rimSpinSeconds,
                                      1.0);
         strokeConicRim(surface, a, b, corner, style.rimA, style.rimB,
-                       style.rimC, phase, state.selected ? 2.0f : 1.5f);
+                       style.rimC, phase, 1.5f); // owner: tight; spin marks selection
     } else {
         surface.strokeRect(a, b, state.selected ? selectedCol : borderCol,
                            corner, state.selected ? 2.0f : 1.0f);

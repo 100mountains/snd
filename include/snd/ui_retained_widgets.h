@@ -95,6 +95,8 @@ public:
 
     // Render a laid-out retained tree. The Tree overload uses the semantic
     // snapshot so focus/pressed/disabled states match the retained core.
+    // Overlay subtrees (popups, flyout panels) always paint AFTER the main
+    // tree, so a menu can never end up under later siblings.
     void render(const Tree& tree, ImDrawList* drawList = nullptr) const;
     void render(const Tree& tree, const ImVec2& origin,
                 ImDrawList* drawList = nullptr) const;
@@ -108,16 +110,38 @@ public:
                 const draw::FrameContext& context = {},
                 draw::Vec2 origin = {}) const;
 
+    // Phase split for hosts that composite their own layer between the tree
+    // and its popups (e.g. ImGui-bridged module editors): renderMain paints
+    // everything EXCEPT overlay subtrees, renderOverlays paints ONLY them.
+    // render() above is exactly renderMain + renderOverlays.
+    void renderMain(const Tree& tree, const ImVec2& origin,
+                    ImDrawList* drawList) const;
+    void renderOverlays(const Tree& tree, const ImVec2& origin,
+                        ImDrawList* drawList) const;
+    void renderMain(const Tree& tree, draw::Surface& surface,
+                    const draw::FrameContext& context = {},
+                    draw::Vec2 origin = {}) const;
+    void renderOverlays(const Tree& tree, draw::Surface& surface,
+                        const draw::FrameContext& context = {},
+                        draw::Vec2 origin = {}) const;
+
 private:
     using SemanticMap = std::unordered_map<NodeId, SemanticNode>;
 
     void renderNode(const Node& node, const SemanticMap* semantics,
                     const ImVec2& origin,
                     ImDrawList* drawList,
-                    const draw::FrameContext& context) const;
+                    const draw::FrameContext& context,
+                    std::vector<const Node*>* overlayQueue = nullptr) const;
     void renderNode(const Node& node, const SemanticMap* semantics,
                     draw::Vec2 origin, draw::Surface& surface,
-                    const draw::FrameContext& context) const;
+                    const draw::FrameContext& context,
+                    std::vector<const Node*>* overlayQueue = nullptr) const;
+    // Visible, open overlay subtree roots in tree order (recursing past
+    // non-overlay children only; nested overlays surface while their parent
+    // overlay renders).
+    void collectOverlays(const Node& node,
+                         std::vector<const Node*>& out) const;
     VisualStyle resolvedStyle(const Node& node) const;
 
     std::unordered_map<NodeId, VisualStyle> styles_;
@@ -380,6 +404,16 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasSurfaceDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
                  Role semanticRole = Role::Canvas);
+// A draggable divider between panes. Dragging (or Left/Right/Up/Down while
+// focused) writes the bound value — the adjacent pane's width (horizontal
+// splitter bar, dragged along X) or height — clamped to [binding.min,
+// binding.max]. `invert` flips the drag direction for panes docked at the
+// far edge (dragging left grows a right-docked panel). The host rebuilds or
+// re-lays-out off the bound value; the splitter itself is stateless.
+Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
+                   bool horizontal = true, bool invert = false,
+                   PaintRenderer* renderer = nullptr, float thickness = 6.0f);
+
 Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                        const std::vector<GraphNode>& nodes,
                        const std::vector<GraphCable>& cables,

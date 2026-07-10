@@ -142,6 +142,9 @@ struct GraphSurfaceStyle {
     // B right); each colour carries its own peak alpha.
     ImU32 glowA = 0;
     ImU32 glowB = 0;
+    // The 3px accent stripe down the header's left edge (murk chrome).
+    // Skins that want a clean slab (Neo) turn it off.
+    bool headerStripe = true;
 };
 
 // House node skins: murk's five (Bob GraphEditorPanel::specFor) plus Neo, a

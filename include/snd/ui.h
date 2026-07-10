@@ -46,6 +46,11 @@ public:
     // Render the ImGui frame and swap buffers.
     void endFrame();
 
+    // The GL clear behind everything the app draws (IM_COL32 packing).
+    // Apps that paint their own chrome should set their canvas colour here so
+    // padding/gaps don't show the library default.
+    void setClearColor(unsigned int rgba);
+
     void setTitle(const std::string& title);
     int width() const;
     int height() const;

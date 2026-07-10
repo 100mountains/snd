@@ -423,6 +423,7 @@ struct Window::Impl {
     std::vector<std::string> droppedFiles;
     int windowedX = 0, windowedY = 0; // frame to restore after fullscreen
     int windowedW = 0, windowedH = 0;
+    float clearColor[3] = {0.10f, 0.10f, 0.12f}; // setClearColor overrides
 
     static void dropCallback(GLFWwindow* w, int count, const char** paths)
     {
@@ -545,10 +546,18 @@ void Window::endFrame()
     int w, h;
     glfwGetFramebufferSize(impl->window, &w, &h);
     glViewport(0, 0, w, h);
-    glClearColor(0.10f, 0.10f, 0.12f, 1.0f);
+    glClearColor(impl->clearColor[0], impl->clearColor[1], impl->clearColor[2],
+                 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     glfwSwapBuffers(impl->window);
+}
+
+void Window::setClearColor(unsigned int rgba)
+{
+    impl->clearColor[0] = (float)(rgba & 0xFFu) / 255.0f;
+    impl->clearColor[1] = (float)((rgba >> 8) & 0xFFu) / 255.0f;
+    impl->clearColor[2] = (float)((rgba >> 16) & 0xFFu) / 255.0f;
 }
 
 void Window::setTitle(const std::string& title)
