@@ -844,17 +844,24 @@ const Node* Tree::hitTest(Vec2 point) const
 
 bool Tree::focus(const NodeId& id)
 {
+    return focus(id, true);
+}
+
+bool Tree::focus(const NodeId& id, bool focusVisible)
+{
     Node* next = find(id);
     if (!next || !next->focusable_ || !isInteractive(*next))
         return false;
 
-    if (focusedId_ == id)
+    if (focusedId_ == id) {
+        next->setFocused(true, focusVisible); // may promote/demote visibility
         return true;
+    }
 
     if (Node* prev = focused())
         prev->setFocused(false, false);
     focusedId_ = id;
-    next->setFocused(true, true);
+    next->setFocused(true, focusVisible);
     return true;
 }
 

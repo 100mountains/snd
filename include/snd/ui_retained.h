@@ -419,6 +419,10 @@ public:
     const Node* hitTest(Vec2 point) const;
 
     bool focus(const NodeId& id);
+    // focusVisible=false routes keyboard input to the node without drawing
+    // the focus treatment (e.g. a menu's key anchor before the user
+    // navigates).
+    bool focus(const NodeId& id, bool focusVisible);
     bool clearFocus();
     bool focusNext(bool reverse = false);
     Node* focused();

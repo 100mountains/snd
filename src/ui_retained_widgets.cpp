@@ -471,24 +471,43 @@ void anchorOverlayPopup(Tree& tree, Node& popup)
 void syncPopupFocus(Tree& tree, Node& popup, PopupMenuState& state)
 {
     const Node* focused = tree.focused();
+    // Focus inside a flyout panel: leave that level's navigation alone.
+    if (focused && focused->parent() && focused->parent() != &popup &&
+        popup.find(focused->id()) != nullptr)
+        return;
+
     const int focusedIndex = focusedMenuChild(popup, focused);
+    const bool highlightValid =
+        state.highlightedIndex >= 0 &&
+        state.highlightedIndex < (int)popup.childCount() &&
+        focusableMenuChild(popup.child((std::size_t)state.highlightedIndex));
+
     if (focusedIndex >= 0) {
-        state.highlightedIndex = focusedIndex;
+        if (highlightValid && state.highlightedIndex != focusedIndex) {
+            // the keyboard moved the highlight; move visible focus with it
+            if (Node* child = popup.child((std::size_t)state.highlightedIndex))
+                tree.focus(child->id(), true);
+        } else if (highlightValid && !focused->focusVisible()) {
+            // the invisible anchor was picked by the first key press
+            tree.focus(focused->id(), true);
+        } else if (!highlightValid && focused->focusVisible()) {
+            state.highlightedIndex = focusedIndex;
+        }
         return;
     }
 
-    if (state.highlightedIndex < 0 ||
-        state.highlightedIndex >= (int)popup.childCount() ||
-        !focusableMenuChild(popup.child((std::size_t)state.highlightedIndex))) {
-        state.highlightedIndex = checkedMenuChild(popup);
-        if (state.highlightedIndex < 0)
-            state.highlightedIndex = firstFocusableMenuChild(popup);
+    if (highlightValid) {
+        if (Node* child = popup.child((std::size_t)state.highlightedIndex))
+            tree.focus(child->id(), true);
+        return;
     }
 
-    if (state.highlightedIndex >= 0) {
-        if (Node* child = popup.child((std::size_t)state.highlightedIndex))
-            tree.focus(child->id());
-    }
+    // murk menus open with NOTHING highlighted: focus the first row only as
+    // an invisible keyboard anchor so Up/Down/Escape route into the menu.
+    const int anchor = firstFocusableMenuChild(popup);
+    if (anchor >= 0)
+        if (Node* child = popup.child((std::size_t)anchor))
+            tree.focus(child->id(), false);
 }
 
 Key mapKey(ImGuiKey key)
@@ -2631,8 +2650,13 @@ Node::Ptr makeMenuItemNode(NodeId id, MenuItem item,
                 const Node* menu = n.parent();
                 if (!menu)
                     return false;
-                const int next = nextFocusableMenuChild(
-                    *menu, focusIndex, event.key == Key::Down ? 1 : -1);
+                // nothing highlighted yet: the first key press lights this
+                // row (the invisible anchor) instead of skipping past it
+                const int next =
+                    state->highlightedIndex < 0
+                        ? focusIndex
+                        : nextFocusableMenuChild(
+                              *menu, focusIndex, event.key == Key::Down ? 1 : -1);
                 if (next >= 0) {
                     state->highlightedIndex = next;
                     return true;
