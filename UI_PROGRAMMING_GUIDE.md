@@ -599,12 +599,15 @@ drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
 wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
 animated modes read the render-time clock.
 
-Nine house skins ship as presets (`paint::GraphSkin`): murk's five
+Fifteen house skins ship as presets (`paint::GraphSkin`): murk's five
 (`TechSquare`, `ClassicRounded`, `Blueprint`, `Console`, `Studio`) and the
-gradient family — `Neo` (dark neon, conic pink→purple→blue rim that spins
-while a node is selected, purple→blue cables), `Rainbow` (a full six-stop
-hue wheel), `Ember` (deep red → orange → gold fire), and `Redline` (black
-slab, hard corners, a red highlight sweeping the outline).
+gradient family, each a full theme — its own slab/header/text tints, pin
+triple, wire gradient and weight, rim sweep, and spin character: `Neo`
+(Turbo neon), `Rainbow` (six-stop hue wheel), `Ember` (fire), `Redline`
+(black slab, red highlight sweep, razor wires), `Glacier` (ice), `Acid`
+(toxic green, fat wires), `Vapor` (vaporwave pastels, round pins), `Gold`
+(brass on black), `Ghost` (pure greyscale), and `Ultraviolet` (UV to
+magenta).
 `paint::graphSkinStyle(skin)` returns the full node/pin/wire
 `GraphSurfaceStyle` and `paint::graphSkinName(skin)` its menu label; the
 backdrop is an independent choice, so pick a `Backdrop` mode and pair it with

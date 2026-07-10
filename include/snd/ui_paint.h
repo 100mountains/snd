@@ -160,11 +160,13 @@ struct GraphSurfaceStyle {
 };
 
 // House node skins: murk's five (Bob GraphEditorPanel::specFor) plus the
-// gradient family -- Neo (dark neon, conic pink→purple→blue rim that spins
-// on selection, gradient cables; from the schema-ui-web "Turbo" React Flow
-// skin), Rainbow (full six-stop hue wheel), Ember (fire: deep red → orange
-// → gold), and Redline (black slab, red sweep). Embedded as presets so
-// consumers pick by name instead of re-transcribing colour tables.
+// gradient family, each a FULL theme (slab, header, text, pins, wire
+// gradient + weight, rim, spin): Neo (Turbo neon), Rainbow (six-stop hue
+// wheel), Ember (fire), Redline (black + red sweep), Glacier (ice), Acid
+// (toxic green), Vapor (vaporwave pastels, round pins), Gold (brass on
+// black), Ghost (greyscale highlight sweep), Ultraviolet (UV to magenta).
+// Embedded as presets so consumers pick by name instead of re-transcribing
+// colour tables.
 enum class GraphSkin {
     TechSquare, // murk default
     ClassicRounded,
@@ -175,8 +177,14 @@ enum class GraphSkin {
     Rainbow,
     Ember,
     Redline,
+    Glacier,
+    Acid,
+    Vapor,
+    Gold,
+    Ghost,
+    Ultraviolet,
 };
-inline constexpr int kGraphSkinCount = 9;
+inline constexpr int kGraphSkinCount = 15;
 const char* graphSkinName(GraphSkin skin); // murk's Skin menu label
 // Node/pin/wire style for a skin. Backdrop fields keep their defaults: murk
 // treats the canvas as an independent choice (its Bg menu) — pick a Backdrop

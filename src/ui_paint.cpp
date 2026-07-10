@@ -2252,6 +2252,12 @@ const char* graphSkinName(GraphSkin skin)
     case GraphSkin::Rainbow: return "Rainbow";
     case GraphSkin::Ember: return "Ember";
     case GraphSkin::Redline: return "Redline";
+    case GraphSkin::Glacier: return "Glacier";
+    case GraphSkin::Acid: return "Acid";
+    case GraphSkin::Vapor: return "Vapor";
+    case GraphSkin::Gold: return "Gold";
+    case GraphSkin::Ghost: return "Ghost";
+    case GraphSkin::Ultraviolet: return "Ultraviolet";
     }
     return "Tech Square";
 }
@@ -2313,9 +2319,11 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
     case GraphSkin::Neo:
         // schema-ui-web "Turbo" (bob2/SKIN.md): near-black slab, conic
         // pink→purple→blue rim that spins while selected, purple→blue wires
-        // at 75%, dual blue/pink halo. Square pins in murk kind colours, no
-        // header stripe (owner picks).
+        // at 75%, pins in the Turbo triple, no header stripe (owner picks).
         s.node = IM_COL32(0x11, 0x11, 0x11, 0xff);
+        s.pinAudio = IM_COL32(0xe9, 0x2a, 0x67, 0xff);
+        s.pinMidi = IM_COL32(0xa8, 0x53, 0xba, 0xff);
+        s.pinControl = IM_COL32(0x2a, 0x8a, 0xf6, 0xff);
         s.header = IM_COL32(0x16, 0x16, 0x16, 0xff);
         s.border = IM_COL32(0xa8, 0x53, 0xba, 0xff); // fallback if rim cleared
         s.text = IM_COL32(0xf3, 0xf4, 0xf6, 0xff);
@@ -2333,10 +2341,14 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         // capability stays for when a real blur pass exists
         break;
     case GraphSkin::Rainbow:
-        // full six-stop hue wheel on a neutral dark slab; the wheel only
-        // spins while selected, like the rest of the gradient family
-        s.node = IM_COL32(0x14, 0x14, 0x1a, 0xff);
-        s.header = IM_COL32(0x1b, 0x1b, 0x22, 0xff);
+        // full six-stop hue wheel; the THEME carries through -- green/violet/
+        // yellow pins, red→violet wires with extra weight, violet-dark slab
+        s.node = IM_COL32(0x15, 0x13, 0x1c, 0xff);
+        s.header = IM_COL32(0x1c, 0x1a, 0x24, 0xff);
+        s.pinAudio = IM_COL32(0x4d, 0xff, 0x88, 0xff);
+        s.pinMidi = IM_COL32(0xb8, 0x4d, 0xff, 0xff);
+        s.pinControl = IM_COL32(0xff, 0xe9, 0x4d, 0xff);
+        s.wireThickness = 2.4f;
         s.border = IM_COL32(0x8a, 0x5c, 0xf6, 0xff); // fallback if rim cleared
         s.text = IM_COL32(0xf2, 0xf3, 0xf7, 0xff);
         s.accent = IM_COL32(0x4d, 0xb8, 0xff, 0xff);
@@ -2354,8 +2366,13 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         s.wireGradientEnd = IM_COL32(0xb8, 0x4d, 0xff, 0xd9);   // violet
         break;
     case GraphSkin::Ember:
-        // fire: charcoal slab, deep-red -> orange -> gold sweep, warm text
+        // fire: charcoal slab, deep-red -> orange -> gold sweep, warm text,
+        // ember pin triple, thick glowing wires
         s.node = IM_COL32(0x16, 0x10, 0x0c, 0xff);
+        s.pinAudio = IM_COL32(0xff, 0x6a, 0x00, 0xff);
+        s.pinMidi = IM_COL32(0xff, 0xd1, 0x66, 0xff);
+        s.pinControl = IM_COL32(0xb3, 0x40, 0x2a, 0xff);
+        s.wireThickness = 2.6f;
         s.header = IM_COL32(0x1d, 0x15, 0x10, 0xff);
         s.border = IM_COL32(0xff, 0x6a, 0x00, 0xff); // fallback if rim cleared
         s.text = IM_COL32(0xf6, 0xe8, 0xdc, 0xff);
@@ -2372,8 +2389,12 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         break;
     case GraphSkin::Redline:
         // black and red: near-black slab, hard corners, a single red
-        // highlight sweeping the outline while selected
+        // highlight sweeping the outline, red pin family, razor-thin wires
         s.node = IM_COL32(0x0d, 0x0b, 0x0b, 0xff);
+        s.pinAudio = IM_COL32(0xff, 0x3b, 0x30, 0xff);
+        s.pinMidi = IM_COL32(0x8a, 0x1f, 0x1a, 0xff);
+        s.pinControl = IM_COL32(0xf2, 0xe9, 0xe9, 0xff);
+        s.wireThickness = 1.6f;
         s.header = IM_COL32(0x14, 0x10, 0x10, 0xff);
         s.border = IM_COL32(0xff, 0x3b, 0x30, 0xff); // fallback if rim cleared
         s.text = IM_COL32(0xf2, 0xe9, 0xe9, 0xff);
@@ -2387,6 +2408,135 @@ GraphSurfaceStyle graphSkinStyle(GraphSkin skin)
         s.rimSpinSeconds = 4.0f;
         s.wireGradientStart = IM_COL32(0x8a, 0x1f, 0x1a, 0xd9);
         s.wireGradientEnd = IM_COL32(0xff, 0x3b, 0x30, 0xd9);
+        break;
+    case GraphSkin::Glacier:
+        // ice: deep blue-black slab, white→blue rim like light through ice,
+        // cold pin blues, hairline frozen wires
+        s.node = IM_COL32(0x0c, 0x12, 0x18, 0xff);
+        s.header = IM_COL32(0x10, 0x1a, 0x24, 0xff);
+        s.border = IM_COL32(0x7f, 0xd4, 0xff, 0xff);
+        s.text = IM_COL32(0xe8, 0xf4, 0xfb, 0xff);
+        s.accent = IM_COL32(0x7f, 0xd4, 0xff, 0xff);
+        s.selectedBorder = IM_COL32(0xd9, 0xf2, 0xff, 0xff);
+        s.corner = 6.0f;
+        s.headerStripe = false;
+        s.pinAudio = IM_COL32(0x7f, 0xd4, 0xff, 0xff);
+        s.pinMidi = IM_COL32(0xb0, 0xe6, 0xff, 0xff);
+        s.pinControl = IM_COL32(0x4a, 0x9f, 0xd9, 0xff);
+        s.wireThickness = 1.5f;
+        s.rimA = IM_COL32(0xd9, 0xf2, 0xff, 0xff);
+        s.rimB = IM_COL32(0x7f, 0xd4, 0xff, 0xff);
+        s.rimC = IM_COL32(0x3a, 0x86, 0xc9, 0xff);
+        s.rimSpinSeconds = 5.0f;
+        s.wireGradientStart = IM_COL32(0xd9, 0xf2, 0xff, 0xd9);
+        s.wireGradientEnd = IM_COL32(0x7f, 0xd4, 0xff, 0xd9);
+        break;
+    case GraphSkin::Acid:
+        // toxic: black-green slab, acid rim, everything drips green, fat
+        // corrosive wires
+        s.node = IM_COL32(0x0a, 0x12, 0x0a, 0xff);
+        s.header = IM_COL32(0x0f, 0x1a, 0x0e, 0xff);
+        s.border = IM_COL32(0x8a, 0xff, 0x3d, 0xff);
+        s.text = IM_COL32(0xe4, 0xf7, 0xd9, 0xff);
+        s.accent = IM_COL32(0x8a, 0xff, 0x3d, 0xff);
+        s.selectedBorder = IM_COL32(0xc8, 0xff, 0x5e, 0xff);
+        s.corner = 0.0f;
+        s.headerStripe = false;
+        s.pinAudio = IM_COL32(0x8a, 0xff, 0x3d, 0xff);
+        s.pinMidi = IM_COL32(0xc8, 0xff, 0x5e, 0xff);
+        s.pinControl = IM_COL32(0x3d, 0xa8, 0x5c, 0xff);
+        s.wireThickness = 2.6f;
+        s.rimA = IM_COL32(0x2e, 0x7a, 0x1f, 0xff);
+        s.rimB = IM_COL32(0x8a, 0xff, 0x3d, 0xff);
+        s.rimC = IM_COL32(0xc8, 0xff, 0x5e, 0xff);
+        s.rimSpinSeconds = 3.0f;
+        s.wireGradientStart = IM_COL32(0x8a, 0xff, 0x3d, 0xd9);
+        s.wireGradientEnd = IM_COL32(0xc8, 0xff, 0x5e, 0xd9);
+        break;
+    case GraphSkin::Vapor:
+        // vaporwave: dusk-purple slab, pink→violet→cyan pastels, ROUND pins,
+        // dreamy slow sweep
+        s.node = IM_COL32(0x16, 0x12, 0x1f, 0xff);
+        s.header = IM_COL32(0x1d, 0x17, 0x29, 0xff);
+        s.border = IM_COL32(0xff, 0x71, 0xce, 0xff);
+        s.text = IM_COL32(0xf4, 0xee, 0xfb, 0xff);
+        s.accent = IM_COL32(0xff, 0x71, 0xce, 0xff);
+        s.selectedBorder = IM_COL32(0x01, 0xcd, 0xfe, 0xff);
+        s.corner = 10.0f;
+        s.headerStripe = false;
+        s.squarePins = false; // soft look: round pins
+        s.pinAudio = IM_COL32(0xff, 0x71, 0xce, 0xff);
+        s.pinMidi = IM_COL32(0xb9, 0x67, 0xff, 0xff);
+        s.pinControl = IM_COL32(0x01, 0xcd, 0xfe, 0xff);
+        s.rimA = IM_COL32(0xff, 0x71, 0xce, 0xff);
+        s.rimB = IM_COL32(0xb9, 0x67, 0xff, 0xff);
+        s.rimC = IM_COL32(0x01, 0xcd, 0xfe, 0xff);
+        s.rimSpinSeconds = 7.0f;
+        s.wireGradientStart = IM_COL32(0xff, 0x71, 0xce, 0xcc);
+        s.wireGradientEnd = IM_COL32(0x01, 0xcd, 0xfe, 0xcc);
+        break;
+    case GraphSkin::Gold:
+        // brass on black: warm near-black slab, champagne sweep, brass pins
+        s.node = IM_COL32(0x13, 0x10, 0x09, 0xff);
+        s.header = IM_COL32(0x1a, 0x15, 0x0c, 0xff);
+        s.border = IM_COL32(0xe6, 0xb8, 0x4a, 0xff);
+        s.text = IM_COL32(0xf7, 0xf0, 0xdc, 0xff);
+        s.accent = IM_COL32(0xe6, 0xb8, 0x4a, 0xff);
+        s.selectedBorder = IM_COL32(0xff, 0xe0, 0x8a, 0xff);
+        s.corner = 2.0f;
+        s.headerStripe = false;
+        s.pinAudio = IM_COL32(0xe6, 0xb8, 0x4a, 0xff);
+        s.pinMidi = IM_COL32(0xff, 0xe0, 0x8a, 0xff);
+        s.pinControl = IM_COL32(0xa8, 0x87, 0x32, 0xff);
+        s.rimA = IM_COL32(0x8a, 0x6a, 0x1f, 0xff);
+        s.rimB = IM_COL32(0xe6, 0xb8, 0x4a, 0xff);
+        s.rimC = IM_COL32(0xff, 0xe0, 0x8a, 0xff);
+        s.rimSpinSeconds = 5.0f;
+        s.wireGradientStart = IM_COL32(0xe6, 0xb8, 0x4a, 0xd9);
+        s.wireGradientEnd = IM_COL32(0xff, 0xe0, 0x8a, 0xd9);
+        break;
+    case GraphSkin::Ghost:
+        // greyscale minimal: a white highlight sweeping a grey outline,
+        // grey pin ramp, hairline wires -- no colour anywhere
+        s.node = IM_COL32(0x10, 0x10, 0x10, 0xff);
+        s.header = IM_COL32(0x16, 0x16, 0x16, 0xff);
+        s.border = IM_COL32(0xd9, 0xd9, 0xd9, 0xff);
+        s.text = IM_COL32(0xf2, 0xf2, 0xf2, 0xff);
+        s.accent = IM_COL32(0xd9, 0xd9, 0xd9, 0xff);
+        s.selectedBorder = IM_COL32(0xff, 0xff, 0xff, 0xff);
+        s.corner = 0.0f;
+        s.headerStripe = false;
+        s.pinAudio = IM_COL32(0xf2, 0xf2, 0xf2, 0xff);
+        s.pinMidi = IM_COL32(0xa8, 0xa8, 0xa8, 0xff);
+        s.pinControl = IM_COL32(0x6b, 0x6b, 0x6b, 0xff);
+        s.wireThickness = 1.5f;
+        s.rimA = IM_COL32(0x2e, 0x2e, 0x2e, 0xff);
+        s.rimB = IM_COL32(0xf2, 0xf2, 0xf2, 0xff);
+        s.rimC = IM_COL32(0x6b, 0x6b, 0x6b, 0xff);
+        s.rimSpinSeconds = 4.0f;
+        s.wireGradientStart = IM_COL32(0xf2, 0xf2, 0xf2, 0xb3);
+        s.wireGradientEnd = IM_COL32(0x8a, 0x8a, 0x8a, 0xb3);
+        break;
+    case GraphSkin::Ultraviolet:
+        // UV: deep violet slab, purple→magenta sweep, purple pin family
+        s.node = IM_COL32(0x12, 0x0a, 0x1c, 0xff);
+        s.header = IM_COL32(0x18, 0x0f, 0x26, 0xff);
+        s.border = IM_COL32(0x9b, 0x4d, 0xff, 0xff);
+        s.text = IM_COL32(0xef, 0xe6, 0xfa, 0xff);
+        s.accent = IM_COL32(0x9b, 0x4d, 0xff, 0xff);
+        s.selectedBorder = IM_COL32(0xd4, 0xa6, 0xff, 0xff);
+        s.corner = 4.0f;
+        s.headerStripe = false;
+        s.pinAudio = IM_COL32(0x9b, 0x4d, 0xff, 0xff);
+        s.pinMidi = IM_COL32(0xff, 0x4d, 0xd2, 0xff);
+        s.pinControl = IM_COL32(0x6a, 0x3a, 0xb8, 0xff);
+        s.wireThickness = 2.2f;
+        s.rimA = IM_COL32(0x4a, 0x1a, 0x8a, 0xff);
+        s.rimB = IM_COL32(0x9b, 0x4d, 0xff, 0xff);
+        s.rimC = IM_COL32(0xff, 0x4d, 0xd2, 0xff);
+        s.rimSpinSeconds = 4.5f;
+        s.wireGradientStart = IM_COL32(0x9b, 0x4d, 0xff, 0xd9);
+        s.wireGradientEnd = IM_COL32(0xff, 0x4d, 0xd2, 0xd9);
         break;
     }
     return s;
