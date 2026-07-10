@@ -1999,7 +1999,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                              style.panelRounding);
         if (style.panelBorder)
             surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
-                               pal.frameBright, 4.0f);
+                               pal.frameBright, style.panelRounding);
         break;
     case VisualKind::Text:
         drawText(surface, font, fontSize, bounds, nodeName(node, sem),

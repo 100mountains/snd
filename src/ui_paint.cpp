@@ -1509,9 +1509,8 @@ void drawMenuItem(draw::Surface& surface, draw::FontRef font,
                              {x - 3.0f, centerY + 5.0f},
                              {x + 3.0f, centerY}, arrowCol);
     }
-
-    if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, mx, pal, 3.0f);
+    // No focus ring on menu rows: keyboard focus reads as the stronger fill
+    // (one visual per row, owner directive).
 }
 
 void drawMenuItem(ImDrawList* dl, ImFont* font, ImFont* iconFont,
