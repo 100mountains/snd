@@ -4622,10 +4622,20 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 nodeState.hovered = state.hovered.nodeId == graphNode.id;
                 nodeState.focused = sameGraphHit(state.focused, nodeHit);
                 nodeState.disabled = graphNode.disabled;
-                paint::drawModuleBox(&dl, ImGui::GetFont(), topLeft(nodeRect),
-                                     sizeOf(nodeRect), graphNode.title.c_str(),
-                                     palette(), nodeState, graphNode.bypassed,
-                                     graphNode.error, graphStyle);
+                const float zoomScale = std::max(0.05f, state.viewport.zoom);
+                {
+                    draw::ImGuiSurface boxSurface(&dl);
+                    paint::drawModuleBox(boxSurface,
+                                         draw::fontRef(ImGui::GetFont()),
+                                         ImGui::GetFontSize() * 0.90f * zoomScale,
+                                         topLeftDraw({nodeRect.x, nodeRect.y,
+                                                      nodeRect.w, nodeRect.h}),
+                                         sizeOfDraw({nodeRect.x, nodeRect.y,
+                                                     nodeRect.w, nodeRect.h}),
+                                         graphNode.title.c_str(), palette(),
+                                         nodeState, graphNode.bypassed,
+                                         graphNode.error, graphStyle);
+                }
 
                 auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                     for (const GraphPort& port : ports) {
@@ -4678,7 +4688,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     partHit.partId = part.id;
                     partState.focused = sameGraphHit(state.focused, partHit);
                     partState.selected = partState.focused;
-                    drawGraphPart(dl, ImGui::GetFont(), partRect, part, partState);
+                    {
+                        draw::ImGuiSurface partSurface(&dl);
+                        drawGraphPart(partSurface, draw::fontRef(ImGui::GetFont()),
+                                      ImGui::GetFontSize() * zoomScale, partRect,
+                                      part, partState);
+                    }
                 }
             }
 
@@ -4772,8 +4787,9 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     nodeState.hovered = state.hovered.nodeId == graphNode.id;
                     nodeState.focused = sameGraphHit(state.focused, nodeHit);
                     nodeState.disabled = graphNode.disabled;
+                    const float zoomScale = std::max(0.05f, state.viewport.zoom);
                     paint::drawModuleBox(surface, context.font,
-                                         context.fontSizePx * 0.90f,
+                                         context.fontSizePx * 0.90f * zoomScale,
                                          topLeftDraw(nodeRect), sizeOfDraw(nodeRect),
                                          graphNode.title.c_str(), palette(), nodeState,
                                          graphNode.bypassed, graphNode.error, graphStyle);
@@ -4829,7 +4845,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                         partHit.partId = part.id;
                         partState.focused = sameGraphHit(state.focused, partHit);
                         partState.selected = partState.focused;
-                        drawGraphPart(surface, context.font, context.fontSizePx,
+                        drawGraphPart(surface, context.font,
+                                      context.fontSizePx * zoomScale,
                                       partRect, part, partState);
                     }
                 }

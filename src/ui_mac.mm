@@ -21,6 +21,20 @@ void nativeDragImpl(GLFWwindow* window)
         [nsWindow performWindowDragWithEvent:event];
 }
 
+// Frameless windows need the resizable style bit or AppKit refuses both the
+// native fullscreen Space transition and smooth zoom; GLFW leaves borderless
+// windows non-resizable on macOS. Keeping the mask borderless preserves the
+// app-drawn title bar.
+void macPrepareFramelessImpl(GLFWwindow* window)
+{
+    NSWindow* nsWindow = glfwGetCocoaWindow(window);
+    if (!nsWindow)
+        return;
+    [nsWindow setStyleMask:[nsWindow styleMask] | NSWindowStyleMaskResizable];
+    [nsWindow setCollectionBehavior:[nsWindow collectionBehavior] |
+                                    NSWindowCollectionBehaviorFullScreenPrimary];
+}
+
 // Mac zoom for frameless windows: fill the screen's visible frame, keeping
 // the app-drawn title bar; toggling restores each window's saved frame. GLFW's
 // own maximize is a no-op for borderless Cocoa windows, so we do it directly.

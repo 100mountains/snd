@@ -430,6 +430,10 @@ struct Window::Impl {
 Window::Window() : impl(new Impl) {}
 Window::~Window() { destroy(); }
 
+#if defined(__APPLE__)
+void macPrepareFramelessImpl(GLFWwindow* window); // ui_mac.mm
+#endif
+
 bool Window::create(int width, int height, const std::string& title, bool decorated)
 {
     if (!detail::ensureGlfwInitialized())
@@ -461,6 +465,10 @@ bool Window::create(int width, int height, const std::string& title, bool decora
 
     glfwSetWindowUserPointer(impl->window, impl.get());
     glfwSetDropCallback(impl->window, Impl::dropCallback);
+#if defined(__APPLE__)
+    if (!decorated)
+        macPrepareFramelessImpl(impl->window); // zoom + fullscreen Space work
+#endif
     glfwMakeContextCurrent(impl->window);
     glfwSwapInterval(1);
 
