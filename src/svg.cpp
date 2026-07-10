@@ -111,6 +111,11 @@ SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
 
     GLuint id = 0;
     glGenTextures(1, &id);
+    if (id == 0) {
+        glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
+        return tex;
+    }
     glBindTexture(GL_TEXTURE_2D, id);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -141,7 +146,11 @@ void releaseTexture(ImTextureID id)
     if (id == ImTextureID_Invalid)
         return;
     GLuint gl = (GLuint)(intptr_t)id;
+    GLint previousTexture = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
     glDeleteTextures(1, &gl);
+    if ((GLuint)previousTexture == gl)
+        glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 } // namespace snd::ui
