@@ -114,12 +114,12 @@ struct GraphSurfaceStyle {
     ImU32 text = 0;
     ImU32 accent = 0;
     ImU32 selectedBorder = 0;
-    float corner = 5.0f;
+    float corner = 0.0f; // murk TechSquare default
     bool squarePins = false;
     ImU32 pinAudio = 0;
     ImU32 pinMidi = 0;
     ImU32 pinControl = 0;
-    float wireThickness = 2.6f;
+    float wireThickness = 2.0f; // murk PathStrokeType(2.0)
     bool wireDroop = false;
     Backdrop backdrop = Backdrop::Grid;
     ImU32 backdropFill = 0;
@@ -460,11 +460,16 @@ void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const GraphSurfaceStyle& style = {});
 // Draws module chrome only. GraphNode/ModuleBox internals such as meters,
 // readouts, toggles, actions, and ports remain structured UI parts.
+// murk NodeBox::paint, exact: body + per-skin corner, selected 0xffffc24a
+// border, 24px header (scale via headerH) with a 3px accent stripe and bold
+// title, 1px black underline, BYPASS veil + tag. Pass headerH pre-scaled by
+// the viewport zoom.
 void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                    draw::Vec2 topLeft, draw::Vec2 size, const char* title,
                    const Palette& pal, const ControlState& state,
                    bool bypassed = false, bool error = false,
-                   const GraphSurfaceStyle& style = {});
+                   const GraphSurfaceStyle& style = {},
+                   float headerH = 24.0f);
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                    const ImVec2& size, const char* title, const Palette& pal,
                    const ControlState& state, bool bypassed = false,

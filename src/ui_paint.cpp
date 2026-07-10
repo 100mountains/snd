@@ -2378,28 +2378,21 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
                const Palette& pal, const ControlState& state,
                ImU32 color, float thickness, const GraphSurfaceStyle& style)
 {
+    // murk drawWires: one 2px drooping stroke, nothing else -- no endpoint
+    // dots, halos, or hover states. Colour comes from the caller (audio /
+    // midi / control at murk's alphas); default = audio 0x7fd1ae @ 0.85.
     if (color == 0)
-        color = pal.accent;
-    color = state.disabled ? mix(color, pal.frameBright, 0.70f) : color;
-    if (state.hovered)
-        color = mix(color, IM_COL32(255, 255, 255, 255), 0.18f);
+        color = withAlpha(IM_COL32(0x7f, 0xd1, 0xae, 255), 0xD9);
+    if (state.disabled)
+        color = mix(color, pal.frameBright, 0.70f);
 
     draw::Vec2 c1;
     draw::Vec2 c2;
     graphCableControls(from, to, style, c1, c2);
-    const float baseThickness =
+    const float lineW =
         thickness > 0.0f ? thickness
-                         : style.wireThickness > 0.0f ? style.wireThickness : 2.6f;
-    const float lineW = std::max(1.0f, baseThickness + (state.selected ? 1.4f : 0.0f));
-
-    if (state.selected || state.focused)
-        surface.bezierCubic(from, c1, c2, to, withAlpha(pal.text, 0x80),
-                            lineW + 3.0f, 24);
+                         : style.wireThickness > 0.0f ? style.wireThickness : 2.0f;
     surface.bezierCubic(from, c1, c2, to, color, lineW, 24);
-
-    const float r = state.selected || state.hovered ? 4.0f : 3.0f;
-    surface.fillCircle(from, r, color, 16);
-    surface.fillCircle(to, r, color, 16);
 }
 
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
@@ -2417,66 +2410,71 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                    draw::Vec2 topLeft, draw::Vec2 size, const char* title,
                    const Palette& pal,
                    const ControlState& state, bool bypassed, bool error,
-                   const GraphSurfaceStyle& style)
+                   const GraphSurfaceStyle& style, float headerH)
 {
-    const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
-    const float r = std::max(0.0f, style.corner);
-    ImU32 body = graphColor(style.node,
-                            state.selected ? mix(pal.frame, pal.accent, 0.18f)
-                                           : pal.frame);
-    if (state.hovered && !state.disabled)
-        body = mix(body, pal.frameBright, 0.35f);
-    if (state.disabled || bypassed)
-        body = mix(body, IM_COL32(0, 0, 0, 255), 0.35f);
+    // murk NodeBox::paint, exact (GraphEditorPanel.cpp:411-467). Fallback
+    // colours are murk's Tech Square skin so the box reads murk even with an
+    // empty style.
+    const auto col = [](ImU32 preferred, ImU32 fallback) {
+        return (preferred & 0xFF000000u) != 0 ? preferred : fallback;
+    };
+    const ImU32 nodeCol = col(style.node, IM_COL32(0x1b, 0x1f, 0x25, 255));
+    const ImU32 headerCol = col(style.header, IM_COL32(0x25, 0x2b, 0x33, 255));
+    const ImU32 borderCol = col(style.border, IM_COL32(0x45, 0x4b, 0x55, 255));
+    const ImU32 textCol = col(style.text, IM_COL32(0xdf, 0xe6, 0xe2, 255));
+    const ImU32 accentCol = col(style.accent, IM_COL32(0xff, 0x4d, 0x48, 255));
+    const ImU32 selectedCol =
+        col(style.selectedBorder, IM_COL32(0xff, 0xc2, 0x4a, 255));
 
-    surface.fillRect(topLeft, mx, body, r);
-    const draw::Vec2 titleMax{mx.x, std::min(mx.y, topLeft.y + 26.0f)};
-    ImU32 titleFill = graphColor(style.header, mix(pal.frame, pal.frameBright, 0.35f));
-    if (error)
-        titleFill = mix(titleFill, pal.meterHot, 0.35f);
-    if (bypassed)
-        titleFill = mix(titleFill, pal.textDim, 0.20f);
-    surface.fillRect(topLeft, titleMax, titleFill, r, draw::kRoundCornersTop);
+    // r = local bounds reduced 1.0
+    const draw::Vec2 a{topLeft.x + 1.0f, topLeft.y + 1.0f};
+    const draw::Vec2 b{topLeft.x + size.x - 1.0f, topLeft.y + size.y - 1.0f};
+    const float corner = std::max(0.0f, style.corner);
+    const float hh = std::min(std::max(0.0f, headerH), b.y - a.y);
 
-    const ImU32 border = state.selected ? graphColor(style.selectedBorder, pal.accent)
-                        : error          ? pal.meterHot
-                                         : graphColor(style.border, pal.frameBright);
-    surface.strokeRect(topLeft, mx, border, r, state.selected ? 2.0f : 1.0f);
-    const ImU32 accent = graphColor(style.accent, pal.accent);
-    if (state.selected || visible(style.accent)) {
-        surface.fillRect({topLeft.x + 3.0f, topLeft.y + 30.0f},
-                         {topLeft.x + 6.0f, mx.y - 6.0f},
-                         accent, std::min(2.0f, r));
-    }
+    surface.fillRect(a, b, nodeCol, corner);
 
-    const char* label = title ? title : "";
-    if (label[0] && fontSizePx > 0.0f) {
-        draw::Vec2 ts = surface.measureText(font, fontSizePx, label);
-        const draw::Vec2 p{
-            topLeft.x + 10.0f,
-            topLeft.y + std::max(0.0f, titleMax.y - topLeft.y - ts.y) * 0.5f};
-        surface.pushClip({topLeft.x + 8.0f, topLeft.y},
-                         {mx.x - 8.0f, titleMax.y}, true);
-        surface.text(font, fontSizePx, p,
-                     state.disabled ? pal.textDim : graphColor(style.text, pal.text),
-                     label);
+    // header bar + 3px accent stripe + bold title (murk rounds the header
+    // rect with the same radius; stripe at 0.82 alpha)
+    const draw::Vec2 hMax{b.x, a.y + hh};
+    surface.fillRect(a, hMax, headerCol, corner);
+    surface.fillRect(a, {a.x + 3.0f, hMax.y}, withAlpha(accentCol, 0xD1), 0.0f);
+    if (title && title[0] && fontSizePx > 0.0f) {
+        const draw::Vec2 ts = surface.measureText(font, fontSizePx, title);
+        surface.pushClip({a.x + 8.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
+        surface.text(font, fontSizePx,
+                     {a.x + 8.0f, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
+                     textCol, title);
         surface.popClip();
     }
+    // 1px black separator under the header (black @ 0.42)
+    surface.fillRect({a.x, hMax.y}, {b.x, hMax.y + 1.0f},
+                     IM_COL32(0, 0, 0, 107), 0.0f);
+
+    // border last so it sits over the header edges; selected = murk amber 2px
+    surface.strokeRect(a, b, state.selected ? selectedCol : borderCol, corner,
+                       state.selected ? 2.0f : 1.0f);
 
     if (bypassed) {
-        const ImU32 slash = withAlpha(pal.textDim, 0x92);
-        surface.line({topLeft.x + 9.0f, mx.y - 9.0f},
-                     {mx.x - 9.0f, topLeft.y + 9.0f}, slash, 1.5f);
+        // murk: dim the whole box 0.45 black + bold BYPASS tag in the header
+        surface.fillRect(a, b, IM_COL32(0, 0, 0, 115), corner);
+        const char* tag = "BYPASS";
+        const float tagSize = fontSizePx * 0.75f;
+        if (tagSize > 0.0f) {
+            const draw::Vec2 ts = surface.measureText(font, tagSize, tag);
+            surface.text(font, tagSize,
+                         {b.x - 8.0f - ts.x, a.y + std::max(0.0f, hh - ts.y) * 0.5f},
+                         IM_COL32(0xff, 0x9e, 0x3d, 255), tag);
+        }
     }
-    if (error) {
-        const draw::Vec2 c{mx.x - 13.0f, topLeft.y + 13.0f};
-        surface.fillTriangle({c.x, c.y - 6.0f},
-                             {c.x - 6.0f, c.y + 5.0f},
-                             {c.x + 6.0f, c.y + 5.0f},
-                             pal.meterHot);
+    if (error) { // SND semantic murk has no equivalent for; small hot triangle
+        const draw::Vec2 c{b.x - 12.0f, a.y + hh + 10.0f};
+        surface.fillTriangle({c.x, c.y - 5.0f}, {c.x - 5.0f, c.y + 4.0f},
+                             {c.x + 5.0f, c.y + 4.0f}, pal.meterHot);
     }
     if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, mx, pal, r);
+        drawFocusRing(surface, topLeft, {topLeft.x + size.x, topLeft.y + size.y},
+                      pal, corner);
 }
 
 void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
@@ -2489,7 +2487,7 @@ void drawModuleBox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     draw::ImGuiSurface surface(dl);
     drawModuleBox(surface, draw::fontRef(font), ImGui::GetFontSize() * 0.90f,
                   draw::toDrawVec2(topLeft), draw::toDrawVec2(size), title,
-                  pal, state, bypassed, error, style);
+                  pal, state, bypassed, error, style, 24.0f);
 }
 
 void drawSectionHeader(draw::Surface& surface, draw::FontRef font,

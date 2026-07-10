@@ -3182,14 +3182,14 @@ ImU32 graphPortColor(const GraphPort& port, const GraphSurfaceStyle& style,
     auto use = [](ImU32 preferred, ImU32 fallback) {
         return (preferred & 0xFF000000u) != 0 ? preferred : fallback;
     };
-    switch (port.kind) {
+    switch (port.kind) { // murk audioCol / midiCol / ctrlCol
     case GraphPortKind::Audio:
-        return use(style.pinAudio, pal.accent);
+        return use(style.pinAudio, IM_COL32(0x7f, 0xd1, 0xae, 255));
     case GraphPortKind::Midi:
-        return use(style.pinMidi, pal.meterHot);
+        return use(style.pinMidi, IM_COL32(0xd9, 0x8a, 0xd9, 255));
     case GraphPortKind::Control:
     case GraphPortKind::Parameter:
-        return use(style.pinControl, pal.meterMid);
+        return use(style.pinControl, IM_COL32(0xe0, 0xb0, 0x20, 255));
     case GraphPortKind::Event:
     case GraphPortKind::Unknown:
     default:
@@ -3201,38 +3201,30 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
                    const GraphSurfaceStyle& style)
 {
+    // murk PinComponent::paint, exact: kind colour reduced 1.5, black 0.45
+    // outline, white 0.18 inner outline reduced 2; square or round per skin.
+    // Pins carry no hover/selected paint in murk.
     const Palette& pal = palette();
-    const ImVec2 c(bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f);
     ImU32 col = port.invalidDrop ? pal.meterHot
-                : port.connected ? graphPortColor(port, style, pal)
-                                 : pal.frameBright;
+                                 : graphPortColor(port, style, pal);
     if (!port.enabled)
         col = paint::mix(col, pal.textDim, 0.65f);
-    if (state.hovered || state.selected) {
-        if (style.squarePins)
-            dl.AddRect(ImVec2(bounds.x - 2.0f, bounds.y - 2.0f),
-                       ImVec2(bounds.x + bounds.w + 2.0f,
-                              bounds.y + bounds.h + 2.0f),
-                       state.selected ? pal.text : pal.accent, 0.0f, 0, 1.4f);
-        else
-            dl.AddCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
-                         state.selected ? pal.text : pal.accent, 0, 1.4f);
-    }
+    (void)state;
+    const ImVec2 a(bounds.x + 1.5f, bounds.y + 1.5f);
+    const ImVec2 b(bounds.x + bounds.w - 1.5f, bounds.y + bounds.h - 1.5f);
+    const ImU32 outline = IM_COL32(0, 0, 0, 115);
+    const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
-        dl.AddRectFilled(topLeft(bounds), bottomRight(bounds), col, 0.0f);
-        dl.AddRect(topLeft(bounds), bottomRight(bounds),
-                   paint::withAlpha(IM_COL32(0, 0, 0, 255), 0x73), 0.0f);
-        dl.AddRect(ImVec2(bounds.x + 1.0f, bounds.y + 1.0f),
-                   ImVec2(bounds.x + bounds.w - 1.0f,
-                          bounds.y + bounds.h - 1.0f),
-                   paint::withAlpha(IM_COL32(255, 255, 255, 255), 0x2E), 0.0f);
+        dl.AddRectFilled(a, b, col, 0.0f);
+        dl.AddRect(a, b, outline, 0.0f);
+        dl.AddRect(ImVec2(a.x + 2.0f, a.y + 2.0f), ImVec2(b.x - 2.0f, b.y - 2.0f),
+                   inner, 0.0f);
     } else {
-        dl.AddCircleFilled(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
-                           col, 16);
-    }
-    if (port.direction == GraphPortDirection::Output) {
-        dl.AddLine(ImVec2(c.x - 2.5f, c.y), ImVec2(c.x + 2.5f, c.y),
-                   paint::withAlpha(pal.text, 0xB0), 1.0f);
+        const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
+        const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
+        dl.AddCircleFilled(c, r, col);
+        dl.AddCircle(c, r, outline);
+        dl.AddCircle(c, r - 2.0f, inner);
     }
 }
 
@@ -3241,38 +3233,26 @@ void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
                    const GraphSurfaceStyle& style)
 {
     const Palette& pal = palette();
-    const draw::Vec2 c{bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f};
     ImU32 col = port.invalidDrop ? pal.meterHot
-                : port.connected ? graphPortColor(port, style, pal)
-                                 : pal.frameBright;
+                                 : graphPortColor(port, style, pal);
     if (!port.enabled)
         col = paint::mix(col, pal.textDim, 0.65f);
-    if (state.hovered || state.selected) {
-        if (style.squarePins)
-            surface.strokeRect({bounds.x - 2.0f, bounds.y - 2.0f},
-                               {bounds.x + bounds.w + 2.0f,
-                                bounds.y + bounds.h + 2.0f},
-                               state.selected ? pal.text : pal.accent,
-                               0.0f, 1.4f);
-        else
-            surface.strokeCircle(c, std::max(bounds.w, bounds.h) * 0.5f + 2.0f,
-                                 state.selected ? pal.text : pal.accent, 0, 1.4f);
-    }
+    (void)state;
+    const draw::Vec2 a{bounds.x + 1.5f, bounds.y + 1.5f};
+    const draw::Vec2 b{bounds.x + bounds.w - 1.5f, bounds.y + bounds.h - 1.5f};
+    const ImU32 outline = IM_COL32(0, 0, 0, 115);
+    const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
-        surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds), col);
-        surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
-                           paint::withAlpha(IM_COL32(0, 0, 0, 255), 0x73));
-        surface.strokeRect({bounds.x + 1.0f, bounds.y + 1.0f},
-                           {bounds.x + bounds.w - 1.0f,
-                            bounds.y + bounds.h - 1.0f},
-                           paint::withAlpha(IM_COL32(255, 255, 255, 255), 0x2E));
+        surface.fillRect(a, b, col, 0.0f);
+        surface.strokeRect(a, b, outline, 0.0f);
+        surface.strokeRect({a.x + 2.0f, a.y + 2.0f}, {b.x - 2.0f, b.y - 2.0f},
+                           inner, 0.0f);
     } else {
-        surface.fillCircle(c, std::max(3.0f, std::min(bounds.w, bounds.h) * 0.36f),
-                           col, 16);
-    }
-    if (port.direction == GraphPortDirection::Output) {
-        surface.line({c.x - 2.5f, c.y}, {c.x + 2.5f, c.y},
-                     paint::withAlpha(pal.text, 0xB0), 1.0f);
+        const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
+        const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
+        surface.fillCircle(c, r, col);
+        surface.strokeCircle(c, r, outline);
+        surface.strokeCircle(c, r - 2.0f, inner);
     }
 }
 
@@ -4603,7 +4583,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                  ImVec2(bounds.x + toLocal.x,
                                         bounds.y + toLocal.y), palette(),
                                  previewState,
-                                 state.cablePreviewValid ? graphStyle.accent
+                                 state.cablePreviewValid ? IM_COL32(255, 255, 255, 179)
                                                          : palette().meterHot,
                                  graphStyle.wireThickness, graphStyle);
             }
@@ -4634,7 +4614,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                      nodeRect.w, nodeRect.h}),
                                          graphNode.title.c_str(), palette(),
                                          nodeState, graphNode.bypassed,
-                                         graphNode.error, graphStyle);
+                                         graphNode.error, graphStyle,
+                                         24.0f * zoomScale);
                 }
 
                 auto drawPortList = [&](const std::vector<GraphPort>& ports) {
@@ -4710,9 +4691,9 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 r.x += bounds.x;
                 r.y += bounds.y;
                 dl.AddRectFilled(topLeft(r), bottomRight(r),
-                                 paint::withAlpha(palette().accent, 0x22), 2.0f);
+                                 IM_COL32(0xff, 0xc2, 0x4a, 0x1F), 0.0f);
                 dl.AddRect(topLeft(r), bottomRight(r),
-                           paint::withAlpha(palette().accent, 0xB0), 2.0f);
+                           IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
             }
         };
         style.canvasSurfaceDraw =
@@ -4768,7 +4749,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                      {bounds.x + fromLocal.x, bounds.y + fromLocal.y},
                                      {bounds.x + toLocal.x, bounds.y + toLocal.y},
                                      palette(), previewState,
-                                     state.cablePreviewValid ? graphStyle.accent
+                                     state.cablePreviewValid ? IM_COL32(255, 255, 255, 179)
                                                              : palette().meterHot,
                                      graphStyle.wireThickness, graphStyle);
                 }
@@ -4792,7 +4773,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                          context.fontSizePx * 0.90f * zoomScale,
                                          topLeftDraw(nodeRect), sizeOfDraw(nodeRect),
                                          graphNode.title.c_str(), palette(), nodeState,
-                                         graphNode.bypassed, graphNode.error, graphStyle);
+                                         graphNode.bypassed, graphNode.error, graphStyle,
+                                         24.0f * zoomScale);
 
                     auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                         for (const GraphPort& port : ports) {
@@ -4818,6 +4800,23 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                  (state.cablePreviewValid &&
                                                   sameGraphHit(state.cablePreviewTarget, portHit));
                             drawGraphPort(surface, pr, port, portState, graphStyle);
+                            if (port.kind == GraphPortKind::Control &&
+                                port.direction == GraphPortDirection::Output &&
+                                !port.label.empty()) {
+                                // murk: name control-out sockets, 9px right-aligned
+                                const float ls = context.fontSizePx * 0.75f * zoomScale;
+                                const draw::Vec2 ts = surface.measureText(
+                                    context.font, ls, port.label.c_str());
+                                surface.text(context.font, ls,
+                                             {pr.x - 3.0f - ts.x,
+                                              pr.y + (pr.h - ts.y) * 0.5f},
+                                             paint::withAlpha(
+                                                 (graphStyle.text & 0xFF000000u)
+                                                     ? graphStyle.text
+                                                     : IM_COL32(0xdf, 0xe6, 0xe2, 255),
+                                                 0xC7),
+                                             port.label.c_str());
+                            }
                         }
                     };
                     drawPortList(graphNode.inputs);
@@ -4864,9 +4863,9 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     r.x += bounds.x;
                     r.y += bounds.y;
                     surface.fillRect(topLeftDraw(r), bottomRightDraw(r),
-                                     paint::withAlpha(palette().accent, 0x22), 2.0f);
+                                     IM_COL32(0xff, 0xc2, 0x4a, 0x1F), 0.0f);
                     surface.strokeRect(topLeftDraw(r), bottomRightDraw(r),
-                                       paint::withAlpha(palette().accent, 0xB0), 2.0f);
+                                       IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
                 }
             };
         renderer->setStyle(sid, style);
