@@ -55,8 +55,9 @@ struct FontRef { /* opaque handle */ }; // wraps ImFont first; stb atlas later
 class Surface {
 public:
     // exactly the 17 measured operations, SND-named, e.g.:
-    virtual void fillRect(Vec2 mn, Vec2 mx, Color c, float rounding = 0) = 0;
-    virtual void strokeRect(...) = 0;
+    virtual void fillRect(Vec2 mn, Vec2 mx, Color c, float rounding = 0,
+                          CornerFlags corners = kRoundCornersAll) = 0;
+    virtual void strokeRect(...) = 0; // same corner mask support
     virtual void fillRectMultiColor(...) = 0;   // 4-corner gradient
     virtual void fillCircle/strokeCircle/line/polyline/fillTriangle(...) = 0;
     virtual void bezierCubic(...) = 0;
@@ -151,8 +152,9 @@ documented, matching what ImGui provides today.
    ImGuiSurface adapter, RecordingSurface, painter-args `surface` fields, and
    headless recording/custom-painter proof tests. Keep public ImDrawList paint
    signatures intact.
-2. **S1B — paint migration (implemented for SND-owned paint helpers and
-   retained renderer surface traversal).** Port
+2. **S1B — paint migration (implemented for SND-owned paint helpers,
+   retained renderer surface traversal, and neutral rounded-corner masks).**
+   Port
    `paint::` internals toward `Surface&` (mechanical, ~1,300 lines) while
    preserving existing public ImDrawList helper signatures as forwarding
    wrappers. Immediate widgets and PaintRenderer construct/use ImGuiSurface

@@ -177,7 +177,11 @@ and `paint::drawGradientArc(center, radius, a0, a1, colStart, colEnd,
 thickness, segments)` strokes a two-colour arc sampled per segment — the
 murk-style panel bodies and gradient value arcs custom painters need. Shared
 paint helpers keep existing `ImDrawList*` overloads and add
-`draw::Surface&` overloads where the body is renderer-neutral.
+`draw::Surface&` overloads where the body is renderer-neutral. The neutral
+surface supports per-corner rounded rectangles through masks such as
+`draw::kRoundCornersTop` and `draw::kRoundCornersBottom`, so surface-only
+painters can match keys, tabs, title strips, and module chrome without falling
+back to ImDrawList flags.
 
 Widget layers must provide accessibility semantics. Icon-only controls need an
 accessible name and action; sliders/knobs/faders need range, value, value text,

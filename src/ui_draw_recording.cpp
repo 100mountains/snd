@@ -7,13 +7,15 @@ namespace snd::ui::draw {
 
 void RecordingSurface::push(RecordedOp op) { ops_.push_back(std::move(op)); }
 
-void RecordingSurface::fillRect(Vec2 min, Vec2 max, Color color, float rounding)
+void RecordingSurface::fillRect(Vec2 min, Vec2 max, Color color,
+                                float rounding, CornerFlags corners)
 {
-    push({"fillRect", {min, max}, {color}, rounding});
+    push({"fillRect", {min, max}, {color}, rounding, (float)corners});
 }
 
 void RecordingSurface::strokeRect(Vec2 min, Vec2 max, Color color,
-                                  float rounding, float thickness)
+                                  float rounding, float thickness,
+                                  CornerFlags corners)
 {
     RecordedOp op;
     op.name = "strokeRect";
@@ -21,6 +23,7 @@ void RecordingSurface::strokeRect(Vec2 min, Vec2 max, Color color,
     op.colors = {color};
     op.a = rounding;
     op.b = thickness;
+    op.c = (float)corners;
     push(std::move(op));
 }
 

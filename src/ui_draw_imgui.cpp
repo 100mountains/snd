@@ -5,18 +5,44 @@
 
 namespace snd::ui::draw {
 
-void ImGuiSurface::fillRect(Vec2 min, Vec2 max, Color color, float rounding)
+namespace {
+
+ImDrawFlags toImDrawCornerFlags(CornerFlags corners)
+{
+    if (corners == 0)
+        return ImDrawFlags_RoundCornersNone;
+    if ((corners & kRoundCornersAll) == kRoundCornersAll)
+        return ImDrawFlags_RoundCornersAll;
+
+    ImDrawFlags flags = 0;
+    if (corners & kRoundCornerTopLeft)
+        flags |= ImDrawFlags_RoundCornersTopLeft;
+    if (corners & kRoundCornerTopRight)
+        flags |= ImDrawFlags_RoundCornersTopRight;
+    if (corners & kRoundCornerBottomRight)
+        flags |= ImDrawFlags_RoundCornersBottomRight;
+    if (corners & kRoundCornerBottomLeft)
+        flags |= ImDrawFlags_RoundCornersBottomLeft;
+    return flags;
+}
+
+} // namespace
+
+void ImGuiSurface::fillRect(Vec2 min, Vec2 max, Color color, float rounding,
+                            CornerFlags corners)
 {
     if (drawList_)
-        drawList_->AddRectFilled(toImVec2(min), toImVec2(max), color, rounding);
+        drawList_->AddRectFilled(toImVec2(min), toImVec2(max), color, rounding,
+                                 toImDrawCornerFlags(corners));
 }
 
 void ImGuiSurface::strokeRect(Vec2 min, Vec2 max, Color color,
-                              float rounding, float thickness)
+                              float rounding, float thickness,
+                              CornerFlags corners)
 {
     if (drawList_)
-        drawList_->AddRect(toImVec2(min), toImVec2(max), color, rounding, 0,
-                           thickness);
+        drawList_->AddRect(toImVec2(min), toImVec2(max), color, rounding,
+                           toImDrawCornerFlags(corners), thickness);
 }
 
 void ImGuiSurface::fillRectMultiColor(Vec2 min, Vec2 max, Color topLeft,

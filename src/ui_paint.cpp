@@ -1888,11 +1888,10 @@ void drawKeyboard(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
         int note = firstNote + (w / 7) * 12 + whiteSemi[w % 7];
         draw::Vec2 a{topLeft.x + w * ww, topLeft.y};
         draw::Vec2 b{topLeft.x + (w + 1) * ww - 1.0f, topLeft.y + size.y};
-        // The neutral surface has all-corner rounded rects only; split the key
-        // so pure backends preserve the square top and rounded-feeling bottom.
-        surface.fillRect(a, {b.x, b.y - 2.0f}, isDown(note) ? litWhite : whiteUp);
-        surface.fillRect({a.x, b.y - 4.0f}, b, isDown(note) ? litWhite : whiteUp, 2.0f);
-        surface.strokeRect(a, b, IM_COL32(40, 42, 50, 255), 2.0f);
+        surface.fillRect(a, b, isDown(note) ? litWhite : whiteUp, 2.0f,
+                         draw::kRoundCornersBottom);
+        surface.strokeRect(a, b, IM_COL32(40, 42, 50, 255), 2.0f, 1.0f,
+                           draw::kRoundCornersBottom);
     }
 
     for (int w = 0; w < whites; ++w) {
@@ -1903,9 +1902,10 @@ void drawKeyboard(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
         float bx = topLeft.x + (w + 1) * ww - bw * 0.5f;
         draw::Vec2 a{bx, topLeft.y};
         draw::Vec2 b{bx + bw, topLeft.y + bh};
-        surface.fillRect(a, {b.x, b.y - 2.0f}, isDown(note) ? litBlack : blackUp);
-        surface.fillRect({a.x, b.y - 4.0f}, b, isDown(note) ? litBlack : blackUp, 2.0f);
-        surface.strokeRect(a, b, IM_COL32(0, 0, 0, 255), 2.0f);
+        surface.fillRect(a, b, isDown(note) ? litBlack : blackUp, 2.0f,
+                         draw::kRoundCornersBottom);
+        surface.strokeRect(a, b, IM_COL32(0, 0, 0, 255), 2.0f, 1.0f,
+                           draw::kRoundCornersBottom);
     }
 
     if (state.focused && !state.disabled)
@@ -2226,9 +2226,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         titleFill = mix(titleFill, pal.meterHot, 0.35f);
     if (bypassed)
         titleFill = mix(titleFill, pal.textDim, 0.20f);
-    surface.fillRect(topLeft, titleMax, titleFill, r);
-    if (r > 0.0f)
-        surface.fillRect({topLeft.x, titleMax.y - r}, titleMax, titleFill);
+    surface.fillRect(topLeft, titleMax, titleFill, r, draw::kRoundCornersTop);
 
     const ImU32 border = state.selected ? graphColor(style.selectedBorder, pal.accent)
                         : error          ? pal.meterHot

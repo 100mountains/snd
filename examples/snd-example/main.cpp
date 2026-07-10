@@ -445,7 +445,8 @@ static bool selftestRetainedUi()
     };
 
     snd::ui::draw::RecordingSurface recording;
-    recording.fillRect({1.0f, 2.0f}, {3.0f, 4.0f}, 0x01020304u, 2.0f);
+    recording.fillRect({1.0f, 2.0f}, {3.0f, 4.0f}, 0x01020304u, 2.0f,
+                       snd::ui::draw::kRoundCornersBottom);
     recording.line({0.0f, 0.0f}, {4.0f, 5.0f}, 0xAABBCCDDu, 1.5f);
     const char* textSample = "abc";
     recording.text({}, 12.0f, {1.0f, 1.0f}, 0x10111213u,
@@ -497,6 +498,16 @@ static bool selftestRetainedUi()
     snd::ui::paint::drawFader(controlRecording, {0.0f, 40.0f},
                               {18.0f, 50.0f}, 0.65f, recPal, helperState);
 
+    snd::ui::draw::RecordingSurface keyboardRecording;
+    snd::ui::paint::drawKeyboard(keyboardRecording, {0.0f, 0.0f},
+                                 {84.0f, 30.0f}, 60, 1, -1, nullptr,
+                                 recPal, helperState);
+    snd::ui::draw::RecordingSurface moduleRecording;
+    snd::ui::paint::drawModuleBox(moduleRecording, {}, 12.0f,
+                                  {0.0f, 36.0f}, {72.0f, 44.0f},
+                                  "OSC", recPal, helperState, false,
+                                  false, {});
+
     snd::ui::draw::RecordingSurface bridgeRecording;
     snd::ui::paint::ControlState bridgeState;
     snd::ui::paint::ButtonPaintArgs bridgeArgs;
@@ -520,6 +531,8 @@ static bool selftestRetainedUi()
     const auto& gridOps = gridRecording.ops();
     const auto& bodyOps = bodyRecording.ops();
     const auto& controlOps = controlRecording.ops();
+    const auto& keyboardOps = keyboardRecording.ops();
+    const auto& moduleOps = moduleRecording.ops();
     const auto& bridgeOps = bridgeRecording.ops();
 
     r::PaintRenderer surfaceRenderer;
@@ -577,6 +590,7 @@ static bool selftestRetainedUi()
         closeEnough(ops[0].points[0].x, 1.0f) &&
         closeEnough(ops[0].points[1].y, 4.0f) &&
         closeEnough(ops[0].a, 2.0f) &&
+        closeEnough(ops[0].b, (float)snd::ui::draw::kRoundCornersBottom) &&
         ops[1].name == "line" && ops[1].colors[0] == 0xAABBCCDDu &&
         closeEnough(ops[1].a, 1.5f) &&
         ops[2].name == "text" && ops[2].text == "ab" &&
@@ -635,6 +649,16 @@ static bool selftestRetainedUi()
         controlOps[13].name == "strokeRect" &&
         controlOps[14].name == "fillRect" &&
         controlOps[19].name == "line" &&
+        keyboardOps.size() >= 2 &&
+        keyboardOps[0].name == "fillRect" &&
+        closeEnough(keyboardOps[0].b,
+                    (float)snd::ui::draw::kRoundCornersBottom) &&
+        keyboardOps[1].name == "strokeRect" &&
+        closeEnough(keyboardOps[1].c,
+                    (float)snd::ui::draw::kRoundCornersBottom) &&
+        moduleOps.size() >= 2 &&
+        moduleOps[1].name == "fillRect" &&
+        closeEnough(moduleOps[1].b, (float)snd::ui::draw::kRoundCornersTop) &&
         bridgePainterSawSurface && bridgeOps.size() == 1 &&
         bridgeOps[0].name == "fillRect" &&
         bridgeOps[0].colors[0] == 0x55667788u &&

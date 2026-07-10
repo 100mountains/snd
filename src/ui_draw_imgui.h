@@ -25,10 +25,12 @@ public:
     ImDrawList* drawList() const { return drawList_; }
 
     void fillRect(Vec2 min, Vec2 max, Color color,
-                  float rounding = 0.0f) override;
+                  float rounding = 0.0f,
+                  CornerFlags corners = kRoundCornersAll) override;
     void strokeRect(Vec2 min, Vec2 max, Color color,
                     float rounding = 0.0f,
-                    float thickness = 1.0f) override;
+                    float thickness = 1.0f,
+                    CornerFlags corners = kRoundCornersAll) override;
     void fillRectMultiColor(Vec2 min, Vec2 max, Color topLeft, Color topRight,
                             Color bottomRight, Color bottomLeft) override;
     void fillCircle(Vec2 center, float radius, Color color,

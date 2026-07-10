@@ -31,15 +31,33 @@ struct FrameContext {
     bool pointerValid = false;
 };
 
+using CornerFlags = uint32_t;
+inline constexpr CornerFlags kRoundCornerTopLeft = 1u << 0;
+inline constexpr CornerFlags kRoundCornerTopRight = 1u << 1;
+inline constexpr CornerFlags kRoundCornerBottomRight = 1u << 2;
+inline constexpr CornerFlags kRoundCornerBottomLeft = 1u << 3;
+inline constexpr CornerFlags kRoundCornersTop =
+    kRoundCornerTopLeft | kRoundCornerTopRight;
+inline constexpr CornerFlags kRoundCornersBottom =
+    kRoundCornerBottomLeft | kRoundCornerBottomRight;
+inline constexpr CornerFlags kRoundCornersLeft =
+    kRoundCornerTopLeft | kRoundCornerBottomLeft;
+inline constexpr CornerFlags kRoundCornersRight =
+    kRoundCornerTopRight | kRoundCornerBottomRight;
+inline constexpr CornerFlags kRoundCornersAll =
+    kRoundCornersTop | kRoundCornersBottom;
+
 class Surface {
 public:
     virtual ~Surface() = default;
 
     virtual void fillRect(Vec2 min, Vec2 max, Color color,
-                          float rounding = 0.0f) = 0;
+                          float rounding = 0.0f,
+                          CornerFlags corners = kRoundCornersAll) = 0;
     virtual void strokeRect(Vec2 min, Vec2 max, Color color,
                             float rounding = 0.0f,
-                            float thickness = 1.0f) = 0;
+                            float thickness = 1.0f,
+                            CornerFlags corners = kRoundCornersAll) = 0;
     virtual void fillRectMultiColor(Vec2 min, Vec2 max, Color topLeft,
                                     Color topRight, Color bottomRight,
                                     Color bottomLeft) = 0;
