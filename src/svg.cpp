@@ -69,6 +69,35 @@ SvgBitmap rasterizeSvg(const char* svgText, int heightPx, ImU32 tint)
     return out;
 }
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#define STBI_NO_STDIO
+#include "stb_image.h"
+
+SvgBitmap decodeImage(const unsigned char* bytes, int byteCount)
+{
+    SvgBitmap bmp;
+    if (!bytes || byteCount <= 0)
+        return bmp;
+    int w = 0, h = 0, comp = 0;
+    unsigned char* px = stbi_load_from_memory(bytes, byteCount, &w, &h, &comp, 4);
+    if (!px)
+        return bmp;
+    bmp.rgba.assign(px, px + (size_t)w * (size_t)h * 4);
+    bmp.w = w;
+    bmp.h = h;
+    stbi_image_free(px);
+    return bmp;
+}
+
+SvgTexture loadImageTexture(const unsigned char* bytes, int byteCount)
+{
+    SvgBitmap bmp = decodeImage(bytes, byteCount);
+    if (bmp.rgba.empty())
+        return {};
+    return loadTextureRGBA(bmp.rgba.data(), bmp.w, bmp.h);
+}
+
 SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
 {
     SvgTexture tex;

@@ -38,6 +38,9 @@ ImDrawList is the first implementation.
   and `drawImGui`.
 - Types throughout: `ImVec2`, `ImU32`, `ImFont*`, `ImTextureID`.
 
+These counts are an implementation compass, not a frozen contract. Re-run the
+count before S1 because UI files are moving quickly.
+
 ## Design
 
 ### 1. `snd::ui::draw` — types and Surface
@@ -212,7 +215,7 @@ documented, matching what ImGui provides today.
 
 Implementation is HELD until the owner schedules it. S1 is the large diff and
 should land in a quiet window between bob2 parity rounds, coordinated through
-Lumen, with bob2 warned before the paint signature change even though their
+Lumen, with bob2 warned before paint-header seam changes even though their
 painters keep compiling via the compatibility contract.
 
 — Iris

@@ -225,6 +225,7 @@ target_include_directories(snd
         ${pffft_SOURCE_DIR}/src
         ${pffft_SOURCE_DIR}/include/pffft
         ${nanosvg_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
 )
 
 target_link_libraries(snd PUBLIC glfw sdk_hosting nfd FLAC)

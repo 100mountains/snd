@@ -2236,7 +2236,7 @@ media_done:;
 #endif
 
     // ── [23/24] SVG rasterize (nanosvg -> RGBA; the GL-free path) ────────────
-    printf("[23/24] svg raster:      ");
+    printf("[23/24] svg + png:       ");
     bool ok23 = false;
     {
         const char* svg =
@@ -2251,6 +2251,18 @@ media_done:;
             // opaque tinted (red) centre, transparent corner: coverage + tint
             ok23 = px(8, 8, 3) > 200 && px(8, 8, 0) > 200 && px(8, 8, 1) < 40 &&
                    px(0, 0, 3) < 40;
+        }
+        if (ok23) { // PNG decode (stb_image, GL-free): 2x1 red + half-alpha green
+            static const unsigned char png[] = {
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+                0, 0, 0, 2, 0, 0, 0, 1, 8, 6, 0, 0, 0, 244, 34, 127, 138,
+                0, 0, 0, 15, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240,
+                31, 8, 27, 0, 16, 121, 3, 126, 125, 99, 206, 215, 0, 0, 0, 0,
+                73, 69, 78, 68, 174, 66, 96, 130};
+            auto img = snd::ui::decodeImage(png, (int)sizeof png);
+            ok23 = img.w == 2 && img.h == 1 && img.rgba.size() == 8 &&
+                   img.rgba[0] == 255 && img.rgba[1] == 0 && img.rgba[3] == 255 &&
+                   img.rgba[5] == 255 && img.rgba[7] == 128;
         }
         printf(ok23 ? "PASS\n" : "FAIL\n");
     }

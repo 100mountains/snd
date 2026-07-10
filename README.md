@@ -82,6 +82,6 @@ arrange one.
 
 Copyright 2026 100mountains. The dependencies SND fetches keep their own
 licences (mostly permissive: ImGui, GLFW, miniaudio, PFFFT, NFD, libFLAC,
-imgui-knobs, nanosvg, AudioUnitSDK). One to note: the **VST3 SDK** is
+imgui-knobs, nanosvg, stb_image, AudioUnitSDK). One to note: the **VST3 SDK** is
 GPLv3-or-Steinberg — if you build VST3 targets, your use of that SDK is governed
 by Steinberg's terms, separately from SND's licence.

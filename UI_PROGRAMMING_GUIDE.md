@@ -136,7 +136,7 @@ snd::ui::iconButton("brush", ICON_LC_BRUSH, {0, 0},
 `MenuItem::icon` takes the same glyph strings; `MenuOptions::iconFont`
 switches the font a menu draws them with.
 
-## SVG assets
+## SVG and image assets
 
 `<snd/ui.h>` includes a small SVG pipeline (nanosvg) for logos and vector
 art that must stay crisp at any size or DPI:
@@ -152,11 +152,13 @@ art that must stay crisp at any size or DPI:
 Width follows the source aspect ratio; a parse failure returns an empty
 bitmap / invalid texture id.
 
-For raster pixels from any other source (a decoded image, a generated
-bitmap), `loadTextureRGBA(rgba, w, h)` uploads straight-alpha RGBA8 directly
-and returns the same texture struct; release with `releaseTexture`. SND does
-not ship an image decoder — decode with your own dependency or embed pixels
-at build time, then upload here.
+PNG decoding is built in (vendored stb_image, PNG-only build):
+`decodeImage(bytes, byteCount)` → `SvgBitmap` is GL-free/headless like
+`rasterizeSvg`, and `loadImageTexture(bytes, byteCount)` decodes and uploads
+in one call. For raster pixels from any other source (a generated bitmap,
+another decoder), `loadTextureRGBA(rgba, w, h)` uploads straight-alpha RGBA8
+directly. All three return the same texture struct; release with
+`releaseTexture`.
 
 ## Shared paint and semantics
 

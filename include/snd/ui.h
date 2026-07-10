@@ -151,7 +151,7 @@ bool ledButton(const char* id, const char* glyph, bool* on, bool blink = false,
                const ImVec2& size = ImVec2(0, 0), ImFont* font = nullptr,
                ImU32 ledColor = 0, ImU32 face = 0);
 
-// --- SVG assets -> bitmap / GPU texture -------------------------------------
+// --- SVG + image assets -> bitmap / GPU texture -----------------------------
 // Parse + rasterize an SVG document (nanosvg) so vector logos/icons stay crisp
 // at any size or DPI. Rasterizes heightPx tall; width follows the source
 // aspect. tint != 0 multiplies every texel (recolour a monochrome glyph, or
@@ -169,6 +169,12 @@ struct SvgTexture {
     int w = 0, h = 0;
 };
 SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint = 0);
+// Decode a PNG held in memory to straight-alpha RGBA8 (vendored stb_image,
+// PNG-only build). GL-free and headless-safe like rasterizeSvg; rgba is
+// empty on a decode failure.
+SvgBitmap decodeImage(const unsigned char* bytes, int byteCount);
+// Decode + upload in one call. Same lifetime rules as loadSvgTexture.
+SvgTexture loadImageTexture(const unsigned char* bytes, int byteCount);
 // Upload caller-provided straight-alpha RGBA8 pixels (row-major, w*h*4 bytes)
 // to a GL texture -- the raster-image path for decoded images or generated
 // bitmaps. Same lifetime rules as loadSvgTexture.
