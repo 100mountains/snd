@@ -3871,22 +3871,21 @@ Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
     if (renderer) {
         const auto paintBar = [horizontal](draw::Surface& surface, Rect bounds,
                                            const paint::ControlState& state) {
+            // a plain 1px line (owner: no thick handle); the node itself
+            // stays a few px wide so it is still easy to grab
             const Palette& pal = palette();
-            const ImU32 fill =
-                state.active    ? paint::withAlpha(pal.accent, 0x60)
-                : state.hovered ? paint::withAlpha(pal.accent, 0x38)
-                                : paint::withAlpha(pal.frameBright, 0x28);
-            surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
-                             fill, 0.0f);
-            const ImU32 grip = paint::withAlpha(
-                pal.text, state.hovered || state.active ? 0x90 : 0x48);
-            const float cx = bounds.x + bounds.w * 0.5f;
-            const float cy = bounds.y + bounds.h * 0.5f;
-            for (int i = -1; i <= 1; ++i) { // three grip dots along the bar
-                const float ox = horizontal ? 0.0f : (float)i * 6.0f;
-                const float oy = horizontal ? (float)i * 6.0f : 0.0f;
-                surface.fillCircle({cx + ox, cy + oy}, 1.5f, grip);
-            }
+            const ImU32 col =
+                state.active || state.hovered
+                    ? pal.accent
+                    : paint::withAlpha(pal.frameBright, 0x60);
+            const float cx = std::round(bounds.x + bounds.w * 0.5f);
+            const float cy = std::round(bounds.y + bounds.h * 0.5f);
+            if (horizontal)
+                surface.line({cx, bounds.y}, {cx, bounds.y + bounds.h}, col,
+                             1.0f);
+            else
+                surface.line({bounds.x, cy}, {bounds.x + bounds.w, cy}, col,
+                             1.0f);
             if (state.focused && !state.disabled)
                 paint::drawFocusRing(surface, topLeftDraw(bounds),
                                      bottomRightDraw(bounds), pal, 0.0f);

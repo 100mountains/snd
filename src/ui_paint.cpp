@@ -2602,11 +2602,6 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
                             GraphSurfaceStyle::Backdrop::AuroraMosaic);
         surface.popClip();
         surface.fillRect(topLeft, mx, IM_COL32(0, 0, 0, 102), style.corner);
-        surface.strokeRect(topLeft, mx,
-                           state.focused ? pal.accent : pal.frameBright,
-                           style.corner);
-        if (state.focused && !state.disabled)
-            drawFocusRing(surface, topLeft, mx, pal, style.corner);
         return;
     }
 
@@ -2642,10 +2637,6 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
 
     if (style.backdrop == GraphSurfaceStyle::Backdrop::Flat ||
         style.backdrop == GraphSurfaceStyle::Backdrop::Mosaic) {
-        surface.strokeRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright,
-                           style.corner);
-        if (state.focused && !state.disabled)
-            drawFocusRing(surface, topLeft, mx, pal, style.corner);
         return;
     }
 
@@ -2659,11 +2650,6 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
         for (float y = topLeft.y; y < mx.y; y += 38.0f)
             surface.line({topLeft.x, y}, {mx.x, y}, green, 1.0f);
         surface.popClip();
-        surface.strokeRect(topLeft, mx,
-                           state.focused ? pal.accent : pal.frameBright,
-                           style.corner);
-        if (state.focused && !state.disabled)
-            drawFocusRing(surface, topLeft, mx, pal, style.corner);
         return;
     }
 
@@ -2695,10 +2681,6 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
         if (y >= topLeft.y)
             surface.line({topLeft.x, y}, {mx.x, y}, majorCol, 1.0f);
 
-    surface.strokeRect(topLeft, mx, state.focused ? pal.accent : pal.frameBright,
-                       style.corner);
-    if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, mx, pal, style.corner);
 }
 
 void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
