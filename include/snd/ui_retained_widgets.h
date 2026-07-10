@@ -455,7 +455,8 @@ Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
                             Vec2 size = {30.0f, 30.0f},
                             paint::OutlineButtonStyle style = {},
                             bool selected = false,
-                            IconFont font = IconFont::Material);
+                            IconFont font = IconFont::Material,
+                            bool actOnPress = false);
 Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,

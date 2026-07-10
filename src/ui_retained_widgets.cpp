@@ -5058,7 +5058,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                  ImVec2(bounds.x + toLocal.x,
                                         bounds.y + toLocal.y), palette(),
                                  cableState, cable.invalid ? palette().meterHot : cable.color,
-                                 graphStyle.wireThickness, graphStyle);
+                                 graphStyle.wireThickness, graphStyle,
+                                 std::max(0.05f, state.viewport.zoom));
             }
 
             if (state.cablePreviewActive) {
@@ -5079,7 +5080,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                  previewState,
                                  state.cablePreviewValid ? IM_COL32(255, 255, 255, 179)
                                                          : palette().meterHot,
-                                 graphStyle.wireThickness, graphStyle);
+                                 graphStyle.wireThickness, graphStyle,
+                                 std::max(0.05f, state.viewport.zoom));
             }
 
             for (const GraphNode& graphNode : nodes) {
@@ -5227,7 +5229,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                      {bounds.x + toLocal.x, bounds.y + toLocal.y},
                                      palette(), cableState,
                                      cable.invalid ? palette().meterHot : cable.color,
-                                     graphStyle.wireThickness, graphStyle);
+                                     graphStyle.wireThickness, graphStyle,
+                                 std::max(0.05f, state.viewport.zoom));
                 }
 
                 if (state.cablePreviewActive) {
@@ -5247,7 +5250,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                      palette(), previewState,
                                      state.cablePreviewValid ? IM_COL32(255, 255, 255, 179)
                                                              : palette().meterHot,
-                                     graphStyle.wireThickness, graphStyle);
+                                     graphStyle.wireThickness, graphStyle,
+                                 std::max(0.05f, state.viewport.zoom));
                 }
 
                 for (const GraphNode& graphNode : nodes) {
@@ -5478,11 +5482,35 @@ Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
                             std::function<void(Node&)> onActivate,
                             PaintRenderer* renderer, Vec2 size,
                             paint::OutlineButtonStyle style, bool selected,
-                            IconFont font)
+                            IconFont font, bool actOnPress)
 {
     NodeId sid = id;
-    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    auto node = button(std::move(id), std::move(name),
+                       actOnPress ? std::function<void(Node&)>{}
+                                  : std::move(onActivate),
+                       nullptr);
     node->setIntrinsicSize(size);
+    if (actOnPress && onActivate) {
+        // Transport feel: fire on mouse DOWN (and Enter/Space), not on
+        // release -- no click latency. The default release-activation stays
+        // silent because no onActivate is installed; onEvent runs before the
+        // tree's own key mapping so Enter/Space still work.
+        auto cb = std::make_shared<std::function<void(Node&)>>(
+            std::move(onActivate));
+        node->setOnEvent([cb](Node& n, const Event& e) {
+            if (e.type == EventType::MouseDown &&
+                e.button == MouseButton::Left) {
+                (*cb)(n);
+                return true;
+            }
+            if (e.type == EventType::KeyDown &&
+                (e.key == Key::Enter || e.key == Key::Space)) {
+                (*cb)(n);
+                return true;
+            }
+            return false;
+        });
+    }
     if (renderer) {
         VisualStyle vs;
         vs.kind = VisualKind::OutlineIconButton;

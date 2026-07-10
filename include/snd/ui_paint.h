@@ -96,6 +96,10 @@ struct OutlineButtonStyle {
     ImU32 text = 0;
     float rounding = 0.0f;
     float fontScale = 0.90f;
+    // Stroke weights: resting border and the active/selected ("engaged")
+    // border. Thicken engagedThickness for a chunkier latched look.
+    float borderThickness = 1.0f;
+    float engagedThickness = 1.6f;
 };
 
 struct GraphSurfaceStyle {
@@ -495,14 +499,19 @@ void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                    const ImVec2& pan, float zoom, const Palette& pal,
                    const ControlState& state,
                    const GraphSurfaceStyle& style = {});
+// `zoom` scales the gravity constants (bulge/sag minimums) so a wire keeps
+// its graph-space shape at any viewport zoom -- pass the viewport zoom when
+// the endpoints are in zoomed screen space, and 1 when they are graph-space.
+// This keeps the drawn curve identical to the hit-tested one (hit testing
+// samples in graph space).
 void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
                const Palette& pal, const ControlState& state,
                ImU32 color = 0, float thickness = 2.6f,
-               const GraphSurfaceStyle& style = {});
+               const GraphSurfaceStyle& style = {}, float zoom = 1.0f);
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const Palette& pal, const ControlState& state,
                ImU32 color = 0, float thickness = 2.6f,
-               const GraphSurfaceStyle& style = {});
+               const GraphSurfaceStyle& style = {}, float zoom = 1.0f);
 // Draws module chrome only. GraphNode/ModuleBox internals such as meters,
 // readouts, toggles, actions, and ports remain structured UI parts.
 // murk NodeBox::paint, exact: body + per-skin corner, selected 0xffffc24a

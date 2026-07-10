@@ -1313,7 +1313,9 @@ void drawOutlineButton(draw::Surface& surface, draw::FontRef font,
         border = mix(border, pal.frameBright, 0.65f);
     if (visible(border))
         surface.strokeRect(topLeft, mx, border, r,
-                           state.active || state.selected ? 1.6f : 1.0f);
+                           state.active || state.selected
+                               ? style.engagedThickness
+                               : style.borderThickness);
 
     if (text && text[0] && fontSizePx > 0.0f) {
         const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
@@ -2064,13 +2066,20 @@ ImU32 hsvToRgbColor(float h, float s, float v)
 
 void graphCableControls(draw::Vec2 from, draw::Vec2 to,
                         const GraphSurfaceStyle& style,
-                        draw::Vec2& c1, draw::Vec2& c2)
+                        draw::Vec2& c1, draw::Vec2& c2, float zoom)
 {
-    const float dx = std::max(style.wireDroop ? 40.0f : 38.0f,
+    // The fixed constants are murk's, in GRAPH units -- scale them by the
+    // viewport zoom when the endpoints are zoomed screen space, or wires
+    // balloon into huge curls as everything else shrinks (the |dx| term
+    // scales itself).
+    const float z = zoom > 0.0f ? zoom : 1.0f;
+    const float dx = std::max((style.wireDroop ? 40.0f : 38.0f) * z,
                               std::abs(to.x - from.x) *
                                   (style.wireDroop ? 0.50f : 0.52f));
     const float sag = style.wireDroop
-                          ? std::min(80.0f, 22.0f + std::abs(to.x - from.x) * 0.18f)
+                          ? std::min(80.0f * z,
+                                     22.0f * z +
+                                         std::abs(to.x - from.x) * 0.18f)
                           : 0.0f;
     c1 = {from.x + dx, from.y + sag};
     c2 = {to.x - dx, to.y + sag};
@@ -2078,16 +2087,14 @@ void graphCableControls(draw::Vec2 from, draw::Vec2 to,
 
 void graphCableControls(const ImVec2& from, const ImVec2& to,
                         const GraphSurfaceStyle& style,
-                        ImVec2& c1, ImVec2& c2)
+                        ImVec2& c1, ImVec2& c2, float zoom)
 {
-    const float dx = std::max(style.wireDroop ? 40.0f : 38.0f,
-                              std::abs(to.x - from.x) *
-                                  (style.wireDroop ? 0.50f : 0.52f));
-    const float sag = style.wireDroop
-                          ? std::min(80.0f, 22.0f + std::abs(to.x - from.x) * 0.18f)
-                          : 0.0f;
-    c1 = ImVec2(from.x + dx, from.y + sag);
-    c2 = ImVec2(to.x - dx, to.y + sag);
+    draw::Vec2 a;
+    draw::Vec2 b;
+    graphCableControls(draw::toDrawVec2(from), draw::toDrawVec2(to), style, a,
+                       b, zoom);
+    c1 = ImVec2(a.x, a.y);
+    c2 = ImVec2(b.x, b.y);
 }
 
 } // namespace
@@ -2592,7 +2599,8 @@ void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
 
 void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
                const Palette& pal, const ControlState& state,
-               ImU32 color, float thickness, const GraphSurfaceStyle& style)
+               ImU32 color, float thickness, const GraphSurfaceStyle& style,
+               float zoom)
 {
     // murk drawWires: one 2px drooping stroke, nothing else -- no endpoint
     // dots, halos, or hover states. Colour comes from the caller (audio /
@@ -2604,7 +2612,7 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
 
     draw::Vec2 c1;
     draw::Vec2 c2;
-    graphCableControls(from, to, style, c1, c2);
+    graphCableControls(from, to, style, c1, c2, zoom);
     const float lineW =
         thickness > 0.0f ? thickness
                          : style.wireThickness > 0.0f ? style.wireThickness : 2.0f;
@@ -2639,13 +2647,14 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
 
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const Palette& pal, const ControlState& state,
-               ImU32 color, float thickness, const GraphSurfaceStyle& style)
+               ImU32 color, float thickness, const GraphSurfaceStyle& style,
+               float zoom)
 {
     if (!dl)
         return;
     draw::ImGuiSurface surface(dl);
     drawCable(surface, draw::toDrawVec2(from), draw::toDrawVec2(to), pal, state,
-              color, thickness, style);
+              color, thickness, style, zoom);
 }
 
 void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
