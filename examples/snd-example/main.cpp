@@ -517,6 +517,7 @@ static bool selftestRetainedUi()
     bridgeArgs.palette = &recPal;
     bridgeArgs.state = &bridgeState;
     bridgeArgs.surface = &bridgeRecording;
+    bridgeArgs.fontSizePx = 12.0f;
     bool bridgePainterSawSurface = false;
     snd::ui::paint::drawButtonWithPainter(
         bridgeArgs, [&](const snd::ui::paint::ButtonPaintArgs& args) {
@@ -527,6 +528,25 @@ static bool selftestRetainedUi()
                                         args.topLeft.y + args.size.y},
                                        0x55667788u, 2.5f);
         });
+
+    snd::ui::draw::RecordingSurface defaultBridgeRecording;
+    snd::ui::paint::ButtonPaintArgs defaultBridgeArgs;
+    defaultBridgeArgs.drawList = nullptr;
+    defaultBridgeArgs.topLeft = ImVec2(2.0f, 3.0f);
+    defaultBridgeArgs.size = ImVec2(44.0f, 18.0f);
+    defaultBridgeArgs.text = "Plain";
+    defaultBridgeArgs.palette = &recPal;
+    defaultBridgeArgs.state = &bridgeState;
+    defaultBridgeArgs.surface = &defaultBridgeRecording;
+    defaultBridgeArgs.fontSizePx = 12.0f;
+    bool defaultBridgeSawFont = false;
+    snd::ui::paint::drawButtonWithPainter(
+        defaultBridgeArgs, [&](const snd::ui::paint::ButtonPaintArgs& args) {
+            defaultBridgeSawFont = args.drawList == nullptr &&
+                                   args.surface != nullptr &&
+                                   closeEnough(args.fontSizePx, 12.0f);
+            snd::ui::paint::drawDefaultButton(args);
+        });
     const auto& helperOps = helperRecording.ops();
     const auto& gridOps = gridRecording.ops();
     const auto& bodyOps = bodyRecording.ops();
@@ -534,6 +554,7 @@ static bool selftestRetainedUi()
     const auto& keyboardOps = keyboardRecording.ops();
     const auto& moduleOps = moduleRecording.ops();
     const auto& bridgeOps = bridgeRecording.ops();
+    const auto& defaultBridgeOps = defaultBridgeRecording.ops();
 
     r::PaintRenderer surfaceRenderer;
     auto surfaceRoot = w::column("surface.root", 3.0f, r::Insets::all(2.0f));
@@ -666,6 +687,11 @@ static bool selftestRetainedUi()
         closeEnough(bridgeOps[0].points[1].x, 12.0f) &&
         closeEnough(bridgeOps[0].points[1].y, 15.0f) &&
         closeEnough(bridgeOps[0].a, 2.5f) &&
+        defaultBridgeSawFont &&
+        defaultBridgeOps.size() >= 3 &&
+        defaultBridgeOps[0].name == "fillRect" &&
+        defaultBridgeOps[2].name == "text" &&
+        defaultBridgeOps[2].text == "Plain" &&
         retainedOps.size() >= 20 &&
         hasRetainedOp("fillRect") &&
         hasRetainedOp("strokeRect") &&

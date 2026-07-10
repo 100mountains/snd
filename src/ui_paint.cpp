@@ -29,6 +29,22 @@ void drawMenuCheck(ImDrawList* dl, const ImVec2& center, ImU32 color)
     draw::ImGuiSurface surface(dl);
     drawMenuCheck(surface, draw::toDrawVec2(center), color);
 }
+
+draw::FontRef effectiveButtonFont(const ButtonPaintArgs& args)
+{
+    if (args.fontRef.handle)
+        return args.fontRef;
+    return draw::fontRef(args.font);
+}
+
+float effectiveButtonFontSize(const ButtonPaintArgs& args)
+{
+    if (args.fontSizePx > 0.0f)
+        return args.fontSizePx;
+    if (args.drawList && args.font)
+        return ImGui::GetFontSize() * args.fontScale;
+    return 0.0f;
+}
 } // namespace
 
 ImU32 mix(ImU32 a, ImU32 b, float t)
@@ -1330,10 +1346,8 @@ void drawDefaultButton(const ButtonPaintArgs& args)
     if (!args.palette || !args.state)
         return;
     if (args.surface) {
-        const float fontSize = (args.drawList && args.font)
-                                   ? ImGui::GetFontSize() * args.fontScale
-                                   : 0.0f;
-        drawButton(*args.surface, draw::fontRef(args.font), fontSize,
+        drawButton(*args.surface, effectiveButtonFont(args),
+                   effectiveButtonFontSize(args),
                    draw::toDrawVec2(args.topLeft), draw::toDrawVec2(args.size),
                    args.text, *args.palette, *args.state);
     } else {
@@ -1354,6 +1368,8 @@ void drawButtonWithPainter(const ButtonPaintArgs& args,
     ButtonPaintArgs bodyArgs = args;
     bodyArgs.state = &bodyState;
     bodyArgs.surface = surface;
+    bodyArgs.fontRef = effectiveButtonFont(args);
+    bodyArgs.fontSizePx = effectiveButtonFontSize(args);
 
     if (painter)
         painter(bodyArgs);

@@ -1,5 +1,7 @@
 #include "snd/ui_retained_widgets.h"
 
+#include "ui_draw_imgui.h"
+
 #include "imgui.h"
 
 #include <algorithm>
@@ -1475,6 +1477,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
     const Palette& pal = palette();
     const Rect bounds = offset(node.bounds(), origin);
     paint::ControlState state = controlState(node, sem, origin);
+    draw::ImGuiSurface surface(drawList);
     if (style.popupState && !style.popupState->open)
         return;
 
@@ -1539,6 +1542,20 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             style.canvasDraw(*drawList, node, bounds, state);
             if (style.canvasClip)
                 drawList->PopClipRect();
+        } else if (style.canvasSurfaceDraw) {
+            draw::FrameContext context;
+            context.font = draw::fontRef(ImGui::GetFont());
+            context.iconFontLucide = draw::fontRef(iconFont(style.iconFont));
+            context.fontSizePx = ImGui::GetFontSize();
+            context.timeSeconds = ImGui::GetTime();
+            const ImVec2 mouse = ImGui::GetIO().MousePos;
+            context.pointer = {mouse.x, mouse.y};
+            context.pointerValid = true;
+            if (style.canvasClip)
+                surface.pushClip(topLeftDraw(bounds), bottomRightDraw(bounds), true);
+            style.canvasSurfaceDraw(surface, node, bounds, state, context);
+            if (style.canvasClip)
+                surface.popClip();
         }
         if (style.panelBorder)
             drawList->AddRect(topLeft(bounds), bottomRight(bounds), pal.frameBright, 3.0f);
@@ -1558,6 +1575,9 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         args.palette = &pal;
         args.state = &state;
         args.fontScale = style.fontScale > 0.0f ? style.fontScale : 0.90f;
+        args.fontRef = draw::fontRef(args.font);
+        args.fontSizePx = ImGui::GetFontSize() * args.fontScale;
+        args.surface = &surface;
         paint::drawButtonWithPainter(args, style.buttonPainter);
         break;
     }
@@ -1653,6 +1673,7 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         args.accent = style.accent;
         args.palette = &pal;
         args.state = &state;
+        args.surface = &surface;
         if (style.knobMod)
             args.mod = style.knobMod();
         paint::drawKnobWithPainter(args, style.knobPainter);
@@ -1795,6 +1816,8 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
             args.state = &state;
             args.fontScale = style.fontScale > 0.0f ? style.fontScale : 0.90f;
             args.surface = &surface;
+            args.fontRef = font;
+            args.fontSizePx = fontSize * args.fontScale;
             paint::drawButtonWithPainter(args, style.buttonPainter);
         } else {
             paint::drawButton(surface, font,

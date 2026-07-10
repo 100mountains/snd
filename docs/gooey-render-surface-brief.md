@@ -114,6 +114,9 @@ currently expose `ImDrawList* drawList`. bob2's murk-parity painters are heavy
 ImDrawList users. Contract migration:
 
 - Args gain `draw::Surface* surface` alongside `drawList`.
+- Button args also carry neutral `draw::FontRef fontRef` and
+  `float fontSizePx`, so surface-only custom button painters can compose
+  `paint::drawDefaultButton(args)` without requiring an ImGui font pointer.
 - Under the ImGui backend `drawList` stays populated — every existing painter
   keeps working unchanged.
 - A painter that uses only `surface` is "Gooey-pure"; the pure backend may run

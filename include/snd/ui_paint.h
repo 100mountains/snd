@@ -48,6 +48,8 @@ struct ButtonPaintArgs {
     const ControlState* state = nullptr;
     float fontScale = 0.90f;
     draw::Surface* surface = nullptr;
+    draw::FontRef fontRef;
+    float fontSizePx = 0.0f;
 };
 
 struct XYPadPaintArgs {

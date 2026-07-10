@@ -207,9 +207,11 @@ Painter args now carry both `drawList` and `surface`. Under the ImGui backend
 both are populated, so existing ImDrawList painters keep working. Prefer
 `a.surface` for new draw-only bodies; a painter that uses only
 `snd::ui::draw::Surface` can run on a non-ImGui retained renderer later. The
-default knob, button, toggle, LED, meter, fader, XY pad, pattern-grid, menu,
-row, graph, focus, and gradient helpers use the surface path when one is
-supplied.
+button painter args also carry `fontRef` and `fontSizePx` so surface-only
+button faces can call `paint::drawDefaultButton(a)` and keep their label text.
+The default knob, button, toggle, LED, meter, fader, XY pad, pattern-grid,
+menu, row, graph, focus, and gradient helpers use the surface path when one
+is supplied.
 
 Immediate example:
 
