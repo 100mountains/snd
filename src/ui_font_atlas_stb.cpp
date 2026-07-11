@@ -315,6 +315,27 @@ Vec2 StbFontAtlas::measure(FontRef font, float sizePx, const char* begin,
     return {std::max(maxX, x), y};
 }
 
+// ── surface-free text measurement (ui_draw.h): a process-wide stb atlas built
+// once for CPU glyph metrics (no GL upload), so layout can size text before any
+// renderer/surface exists. Same ProggyClean the GL renderer draws with. ───────
+namespace {
+const StbFontAtlas& measurementAtlas()
+{
+    static StbFontAtlas atlas;
+    static const bool built = atlas.build(nullptr);
+    (void)built;
+    return atlas;
+}
+} // namespace
+
+Vec2 measureText(float sizePx, const char* begin, const char* end)
+{
+    if (sizePx < 0.5f || !begin)
+        return {};
+    const StbFontAtlas& atlas = measurementAtlas();
+    return atlas.measure(atlas.defaultFontRef(), sizePx, begin, end);
+}
+
 void StbFontAtlas::appendText(std::vector<TextVertex>& vertices, FontRef font,
                               float sizePx, Vec2 pos, Color color,
                               const char* begin, const char* end) const

@@ -118,4 +118,18 @@ public:
     }
 };
 
+// ── surface-free primitives for build-time layout (no ImGui) ─────────────────
+// Native text measurement via a lazily-built stb glyph atlas (CPU metrics only,
+// no GL). For sizing done before any Surface exists. Matches what the GL
+// renderer draws because both use the same ProggyClean atlas.
+Vec2 measureText(float sizePx, const char* begin, const char* end = nullptr);
+
+// The house UI metrics, so editors size layout without querying a toolkit.
+// ProggyClean at its native 13px; frame = font + 2*FramePadding.y(3);
+// line = font + ItemSpacing.y(4).
+inline constexpr float kUiFontPx = 13.0f;
+inline constexpr float kUiFrameHeight = 19.0f;
+inline constexpr float kUiLineHeight = 17.0f;
+inline constexpr float kUiItemSpacingX = 4.0f;
+
 } // namespace snd::ui::draw
