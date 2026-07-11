@@ -1,8 +1,10 @@
 #include "ui_glfw_shared.h"
+#include "snd/ui.h"
 
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 namespace snd::ui::detail {
@@ -48,3 +50,24 @@ void terminateGlfwIfIdle()
 }
 
 } // namespace snd::ui::detail
+
+namespace snd::ui {
+
+// GLFW's clipboard is process-global; the window handle is only a context
+// token, so any live window works and none means no clipboard yet.
+std::string getClipboardText()
+{
+    GLFWwindow* window = detail::sharedGlfwContext();
+    if (!window)
+        return {};
+    const char* text = glfwGetClipboardString(window);
+    return text ? std::string(text) : std::string();
+}
+
+void setClipboardText(const std::string& text)
+{
+    if (GLFWwindow* window = detail::sharedGlfwContext())
+        glfwSetClipboardString(window, text.c_str());
+}
+
+} // namespace snd::ui

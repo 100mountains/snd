@@ -433,4 +433,10 @@ struct FileBrowserState {
 bool fileBrowser(const char* id, FileBrowserState& st, const ImVec2& size,
                  std::string* outPath, const char* extensions = nullptr);
 
+// ── system clipboard (native, GLFW-backed off the shared window) ─────────────
+// The platform owns the window, so it owns clipboard I/O. Modules call these
+// instead of any toolkit clipboard; get returns "" when no window/clipboard.
+std::string getClipboardText();
+void setClipboardText(const std::string& text);
+
 } // namespace snd::ui
