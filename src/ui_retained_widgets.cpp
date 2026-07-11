@@ -4900,6 +4900,197 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
     return node;
 }
 
+namespace {
+
+// Per-node text-field edit state (caret/selection + the value at focus, for
+// Esc). Keyed by NodeId so it survives tree rebuilds.
+struct TextFieldEdit {
+    int cursor = 0;
+    int anchor = 0; // == cursor when there's no selection
+    std::string preEdit;
+};
+std::unordered_map<NodeId, TextFieldEdit>& textFieldEdits()
+{
+    static std::unordered_map<NodeId, TextFieldEdit> m;
+    return m;
+}
+int clampCaret(int c, const std::string& s)
+{
+    return std::clamp(c, 0, (int)s.size());
+}
+// caret byte-index nearest to a local x (0 = field left inset), measuring
+// prefixes with the current ImGui font (available in onEvent + render).
+int caretFromX(const std::string& s, float localX, float fontSize)
+{
+    ImFont* f =
+        ImGui::GetCurrentContext() ? ImGui::GetFont() : nullptr;
+    if (!f)
+        return (int)s.size(); // no live frame: caret at end
+    float best = 1e9f;
+    int bestI = 0;
+    for (int i = 0; i <= (int)s.size(); ++i) {
+        const ImVec2 w = f->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, s.c_str(),
+                                          s.c_str() + i);
+        const float d = std::abs(w.x - localX);
+        if (d < best) { best = d; bestI = i; }
+    }
+    return bestI;
+}
+
+} // namespace
+
+Node::Ptr textField(NodeId id, std::string* text, PaintRenderer* renderer,
+                    Vec2 size, std::string placeholder,
+                    std::function<void(const std::string&)> onCommit)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider); // text-entry control
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+    Semantics sem = named(Role::Slider, placeholder.empty() ? "Text field"
+                                                            : placeholder);
+    sem.description = "Editable text field";
+    node->setSemantics(sem);
+
+    constexpr float kPadX = 7.0f;
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasClip = true;
+        style.canvasFocusRing = false; // the field draws its own focus border
+        style.canvasSurfaceDraw =
+            [sid, text, placeholder](draw::Surface& surface, const Node&,
+                                     Rect bounds, const paint::ControlState& st,
+                                     const draw::FrameContext& context) {
+                const Palette& pal = palette();
+                const draw::Vec2 tl{bounds.x, bounds.y};
+                const draw::Vec2 br{bounds.x + bounds.w, bounds.y + bounds.h};
+                surface.fillRect(tl, br, pal.frame, 0.0f);
+                surface.strokeRect(tl, br,
+                                   st.focused ? pal.accent : pal.frameBright, 0.0f);
+                const float fs =
+                    context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f;
+                const float ty = std::round(bounds.y + (bounds.h - fs) * 0.5f);
+                const float tx = bounds.x + kPadX;
+                surface.pushClip({bounds.x + 2.0f, bounds.y}, {br.x - 2.0f, br.y},
+                                 true);
+                const std::string& s = *text;
+                if (s.empty() && !st.focused && !placeholder.empty()) {
+                    surface.text(context.font, fs, {tx, ty}, pal.textDim,
+                                 placeholder.c_str());
+                } else {
+                    const auto it = textFieldEdits().find(sid);
+                    if (st.focused && it != textFieldEdits().end() &&
+                        it->second.cursor != it->second.anchor) {
+                        const int a =
+                            std::min(it->second.cursor, it->second.anchor);
+                        const int b =
+                            std::max(it->second.cursor, it->second.anchor);
+                        const draw::Vec2 wa = surface.measureText(
+                            context.font, fs, s.substr(0, (size_t)a).c_str());
+                        const draw::Vec2 wb = surface.measureText(
+                            context.font, fs, s.substr(0, (size_t)b).c_str());
+                        surface.fillRect({tx + wa.x, ty}, {tx + wb.x, ty + fs},
+                                         paint::withAlpha(pal.accent, 0x55),
+                                         0.0f);
+                    }
+                    if (!s.empty())
+                        surface.text(context.font, fs, {tx, ty}, pal.text,
+                                     s.c_str());
+                    if (st.focused && it != textFieldEdits().end() &&
+                        std::fmod(context.timeSeconds, 1.0) < 0.55) {
+                        const draw::Vec2 wc = surface.measureText(
+                            context.font, fs,
+                            s.substr(0, (size_t)clampCaret(it->second.cursor, s))
+                                .c_str());
+                        const float cx = std::round(tx + wc.x);
+                        surface.line({cx, ty}, {cx, ty + fs}, pal.text, 1.0f);
+                    }
+                }
+                surface.popClip();
+            };
+        renderer->setStyle(sid, style);
+    }
+
+    node->setOnEvent([sid, text, onCommit, kPadX](Node& n, const Event& e) {
+        TextFieldEdit& ed = textFieldEdits()[sid];
+        const auto selMin = [&] { return std::min(ed.cursor, ed.anchor); };
+        const auto selMax = [&] { return std::max(ed.cursor, ed.anchor); };
+        const auto deleteSel = [&] {
+            if (ed.cursor == ed.anchor)
+                return false;
+            const int a = selMin(), b = selMax();
+            text->erase((size_t)a, (size_t)(b - a));
+            ed.cursor = ed.anchor = a;
+            return true;
+        };
+        switch (e.type) {
+        case EventType::MouseDown: {
+            if (e.button != MouseButton::Left)
+                return false;
+            ed.preEdit = *text;
+            const float fs =
+                ImGui::GetCurrentContext() ? ImGui::GetFontSize() : 13.0f;
+            const float localX = e.position.x - (n.bounds().x + kPadX);
+            ed.cursor = ed.anchor =
+                caretFromX(*text, std::max(0.0f, localX), fs);
+            return true;
+        }
+        case EventType::TextInput:
+            if (e.text.empty())
+                return false;
+            deleteSel();
+            text->insert((size_t)clampCaret(ed.cursor, *text), e.text);
+            ed.cursor = clampCaret(ed.cursor + (int)e.text.size(), *text);
+            ed.anchor = ed.cursor;
+            return true;
+        case EventType::KeyDown:
+            switch (e.key) {
+            case Key::Left:
+                ed.cursor = clampCaret(ed.cursor - 1, *text);
+                if (!e.shift) ed.anchor = ed.cursor;
+                return true;
+            case Key::Right:
+                ed.cursor = clampCaret(ed.cursor + 1, *text);
+                if (!e.shift) ed.anchor = ed.cursor;
+                return true;
+            case Key::Home:
+                ed.cursor = 0;
+                if (!e.shift) ed.anchor = 0;
+                return true;
+            case Key::End:
+                ed.cursor = (int)text->size();
+                if (!e.shift) ed.anchor = ed.cursor;
+                return true;
+            case Key::Backspace:
+                if (!deleteSel() && ed.cursor > 0) {
+                    text->erase((size_t)(ed.cursor - 1), 1);
+                    ed.cursor = ed.anchor = ed.cursor - 1;
+                }
+                return true;
+            case Key::Delete:
+                if (!deleteSel() && ed.cursor < (int)text->size())
+                    text->erase((size_t)ed.cursor, 1);
+                return true;
+            case Key::Enter:
+                if (onCommit) onCommit(*text);
+                return true;
+            case Key::Escape:
+                *text = ed.preEdit;
+                ed.cursor = ed.anchor = clampCaret(ed.cursor, *text);
+                return true;
+            default:
+                return false;
+            }
+        default:
+            return false;
+        }
+    });
+    return node;
+}
+
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
                  PaintRenderer* renderer, bool focusable, Role semanticRole)

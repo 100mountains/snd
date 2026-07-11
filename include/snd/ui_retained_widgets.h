@@ -431,6 +431,16 @@ Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
                    bool horizontal = true, bool invert = false,
                    PaintRenderer* renderer = nullptr, float thickness = 6.0f);
 
+// A single-line retained text field editing a caller-owned string in place:
+// caret + selection, printable keys via the TextInput event, Left/Right
+// (Shift extends selection), Home/End, Backspace/Delete, Enter commits
+// (fires onCommit), Esc reverts to the value at focus time. Click to focus +
+// place the caret. Pure retained -- no ImGui InputText bridge.
+Node::Ptr textField(NodeId id, std::string* text,
+                    PaintRenderer* renderer = nullptr,
+                    Vec2 size = {160.0f, 24.0f}, std::string placeholder = {},
+                    std::function<void(const std::string&)> onCommit = {});
+
 // A vertical scroll container: add children to it and they stack as a column
 // at their natural height, clipped to the view with a wheel-driven, draggable
 // scrollbar when they overflow. `gap`/`padding` apply to the column; the node

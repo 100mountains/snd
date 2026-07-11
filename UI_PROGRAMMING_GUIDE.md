@@ -511,6 +511,12 @@ height, centred, never moves) in the outline-button chrome — border-first,
 transport row reads as one family. The tactile `iconButton` remains as the
 raised-key alternative; its face is palette-derived and its glyph is pinned.
 
+**Text field.** `widgets::textField(id, std::string* text, renderer, size,
+placeholder, onCommit)` is a single-line retained editor: caret + selection,
+printable keys via the `TextInput` event, Left/Right (Shift extends), Home/
+End, Backspace/Delete, Enter fires `onCommit`, Esc reverts to the value at
+focus. Click to focus and place the caret. No ImGui `InputText` bridge.
+
 **Scroll view.** `widgets::scrollView(id, gap, padding, renderer)` is a
 vertical scroll container: add children and they stack as a column at their
 natural height, clipped to the view, with a wheel-driven draggable scrollbar
