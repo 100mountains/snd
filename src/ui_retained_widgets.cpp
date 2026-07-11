@@ -534,8 +534,8 @@ void syncPopupFocus(Tree& tree, Node& popup, PopupMenuState& state)
         return;
     }
 
-    // murk menus open with NOTHING highlighted: focus the first row only as
-    // an invisible keyboard anchor so Up/Down/Escape route into the menu.
+    // Menus open with no highlighted row: focus the first row only as an
+    // invisible keyboard anchor so Up/Down/Escape route into the menu.
     const int anchor = firstFocusableMenuChild(popup);
     if (anchor >= 0)
         if (Node* child = popup.child((std::size_t)anchor))
@@ -2543,7 +2543,7 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
         tree.cancelPress();
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-        // murk opens context menus on right mouse-DOWN, not on release
+        // Context menus open on right mouse-down, not on release.
         Event event = pointerEvent(EventType::ContextMenu, localMouse, {},
                                    MouseButton::Right, io);
         event.clickCount = 1;
@@ -3563,7 +3563,7 @@ ImU32 graphPortColor(const GraphPort& port, const GraphSurfaceStyle& style,
     auto use = [](ImU32 preferred, ImU32 fallback) {
         return (preferred & 0xFF000000u) != 0 ? preferred : fallback;
     };
-    switch (port.kind) { // murk audioCol / midiCol / ctrlCol
+    switch (port.kind) {
     case GraphPortKind::Audio:
         return use(style.pinAudio, IM_COL32(0x7f, 0xd1, 0xae, 255));
     case GraphPortKind::Midi:
@@ -3579,8 +3579,8 @@ ImU32 graphPortColor(const GraphPort& port, const GraphSurfaceStyle& style,
 }
 
 // Which node edge a pin's node-local rect sits flush against: 0 none,
-// 1 left, 2 right. Pins that straddle the edge (murk's, centred on it) match
-// neither and keep the classic full-outline look; flush-inside pins render as
+// 1 left, 2 right. Pins that straddle the edge match neither and keep the
+// classic full-outline look; flush-inside pins render as
 // sockets (see drawGraphPort).
 int portFlushEdge(const GraphNode& node, const GraphPort& port)
 {
@@ -3596,10 +3596,9 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
                    const GraphSurfaceStyle& style, int flushEdge)
 {
-    // murk PinComponent::paint, exact: kind colour reduced 1.5, black 0.45
-    // outline, white 0.18 inner outline reduced 2; square or round per skin.
-    // Pins carry no hover/selected paint in murk. A flush pin (square only)
-    // opens THROUGH the node border: its fill runs to the edge, covering the
+    // Kind colour reduced 1.5, black 0.45 outline, white 0.18 inner outline
+    // reduced 2; square or round per skin. A flush pin (square only) opens
+    // through the node border: its fill runs to the edge, covering the
     // border segment beneath, and outline + inner lip skip that side, so the
     // wire reads as plugging into a socket.
     const Palette& pal = palette();
@@ -3801,8 +3800,8 @@ Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint)
             (screenPoint.y - viewport.pan.y) / z};
 }
 
-// Connector tooltip (murk parity): while a pin is hovered for a moment,
-// draw its GraphPort::label. Timing lives in GraphSurfaceState (which pin,
+// Connector tooltip: while a pin is hovered for a moment, draw its
+// GraphPort::label. Timing lives in GraphSurfaceState (which pin,
 // since when) so the delay survives across frames. Shared by both render
 // paths; call it LAST so the tooltip sits over the graph.
 void drawGraphPortTooltip(draw::Surface& surface, GraphSurfaceState& state,
@@ -3837,7 +3836,7 @@ void drawGraphPortTooltip(draw::Surface& surface, GraphSurfaceState& state,
         state.tooltipKey = key;
         state.tooltipStart = context.timeSeconds;
     }
-    if (context.timeSeconds - state.tooltipStart < 0.4) // murk hover delay
+    if (context.timeSeconds - state.tooltipStart < 0.4)
         return;
 
     draw::Vec2 at;
@@ -5538,8 +5537,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                 rectCenter(graphNode.bounds));
                 nodeHit.nodeId = graphNode.id;
                 paint::ControlState nodeState;
-                // murk: hover does NOT light the selected border (owner:
-                // Neo's rim was spinning up "sometimes" on mere hover)
+                // Hover does not light the selected border; selected/focused
+                // nodes own that stronger rim treatment.
                 nodeState.selected = graphNode.selected ||
                                      sameGraphHit(state.focused, nodeHit);
                 nodeState.hovered = state.hovered.nodeId == graphNode.id;
@@ -5640,8 +5639,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                            IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
             }
 
-            // connector tooltip (murk parity), ImGui-backed path: build a
-            // FrameContext from ImGui globals and reuse the shared helper.
+            // Connector tooltip, ImGui-backed path: build a FrameContext from
+            // ImGui globals and reuse the shared helper.
             draw::ImGuiSurface tipSurface(&dl);
             draw::FrameContext tctx;
             tctx.font = draw::fontRef(ImGui::GetFont());
@@ -5721,7 +5720,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                     rectCenter(graphNode.bounds));
                     nodeHit.nodeId = graphNode.id;
                     paint::ControlState nodeState;
-                    // murk: hover does not light the selected border
+                    // Hover does not light the selected border.
                     nodeState.selected = graphNode.selected ||
                                          sameGraphHit(state.focused, nodeHit);
                     nodeState.hovered = state.hovered.nodeId == graphNode.id;
@@ -5763,7 +5762,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                             if (port.kind == GraphPortKind::Control &&
                                 port.direction == GraphPortDirection::Output &&
                                 !port.label.empty()) {
-                                // murk: name control-out sockets, 9px right-aligned
+                                // Name control-out sockets, right-aligned.
                                 const float ls = std::round(context.fontSizePx *
                                                             0.75f * zoomScale *
                                                             2.0f) *
@@ -5834,8 +5833,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                        IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
                 }
 
-                // connector tooltip (murk parity): hovering a pin for a
-                // moment shows its label. Drawn LAST so it sits over the
+                // Connector tooltip: hovering a pin for a moment shows its
+                // label. Drawn LAST so it sits over the
                 // graph; timing tracked in state (which pin, since when).
                 drawGraphPortTooltip(surface, state, nodes, graphStyle, bounds,
                                      context);

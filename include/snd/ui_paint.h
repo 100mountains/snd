@@ -121,12 +121,12 @@ struct GraphSurfaceStyle {
     ImU32 text = 0;
     ImU32 accent = 0;
     ImU32 selectedBorder = 0;
-    float corner = 0.0f; // murk TechSquare default
+    float corner = 0.0f; // TechSquare default
     bool squarePins = false;
     ImU32 pinAudio = 0;
     ImU32 pinMidi = 0;
     ImU32 pinControl = 0;
-    float wireThickness = 2.0f; // murk PathStrokeType(2.0)
+    float wireThickness = 2.0f;
     bool wireDroop = false;
     Backdrop backdrop = Backdrop::Grid;
     ImU32 backdropFill = 0;
@@ -152,7 +152,7 @@ struct GraphSurfaceStyle {
     // (owner); the current presets leave it off.
     ImU32 glowA = 0;
     ImU32 glowB = 0;
-    // The 3px accent stripe down the header's left edge (murk chrome).
+    // The 3px accent stripe down the header's left edge.
     // Skins that want a clean slab (Neo) turn it off.
     bool headerStripe = true;
     // Extra rim stops (appended for aggregate stability): a 6-stop sweep is
@@ -160,12 +160,12 @@ struct GraphSurfaceStyle {
     ImU32 rimD = 0;
     ImU32 rimE = 0;
     ImU32 rimF = 0;
-    // Hover a pin -> a tooltip showing its GraphPort::label (murk parity).
+    // Hover a pin -> a tooltip showing its GraphPort::label.
     bool portTooltips = true;
 };
 
-// House node skins: murk's five (Bob GraphEditorPanel::specFor) plus the
-// gradient family, each a FULL theme (slab, header, text, pins, wire
+// House node skins: five hardware-style bases plus the gradient family, each
+// a FULL theme (slab, header, text, pins, wire
 // gradient + weight, rim, spin): Neo (Turbo neon), Rainbow (six-stop hue
 // wheel), Ember (fire), Redline (black + red sweep), Glacier (ice), Acid
 // (toxic green), Vapor (vaporwave pastels, round pins), Gold (brass on
@@ -173,7 +173,7 @@ struct GraphSurfaceStyle {
 // Embedded as presets so consumers pick by name instead of re-transcribing
 // colour tables.
 enum class GraphSkin {
-    TechSquare, // murk default
+    TechSquare,
     ClassicRounded,
     Blueprint,
     Console,
@@ -190,12 +190,12 @@ enum class GraphSkin {
     Ultraviolet,
 };
 inline constexpr int kGraphSkinCount = 15;
-const char* graphSkinName(GraphSkin skin); // murk's Skin menu label
-// Node/pin/wire style for a skin. Backdrop fields keep their defaults: murk
-// treats the canvas as an independent choice (its Bg menu) — pick a Backdrop
-// mode and pair it with graphBackdropFill().
+const char* graphSkinName(GraphSkin skin);
+// Node/pin/wire style for a skin. Backdrop fields keep their defaults so the
+// canvas can stay an independent choice: pick a Backdrop mode and pair it with
+// graphBackdropFill().
 GraphSurfaceStyle graphSkinStyle(GraphSkin skin);
-// murk's Bg menu, per backdrop mode: base canvas colour and menu label.
+// Per backdrop mode: base canvas colour and menu label.
 ImU32 graphBackdropFill(GraphSurfaceStyle::Backdrop mode);
 const char* graphBackdropName(GraphSurfaceStyle::Backdrop mode);
 
@@ -577,11 +577,11 @@ void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
                const GraphSurfaceStyle& style = {}, float zoom = 1.0f);
 // Draws module chrome only. GraphNode/ModuleBox internals such as meters,
 // readouts, toggles, actions, and ports remain structured UI parts.
-// murk NodeBox::paint, exact: body + per-skin corner, selected 0xffffc24a
-// border, 24px header (scale via headerH) with a 3px accent stripe and bold
-// title, 1px black underline, BYPASS veil + tag. Pass headerH pre-scaled by
-// the viewport zoom. timeSeconds drives the style's rim spin (only read when
-// the skin animates; pass the render clock).
+// Body + per-skin corner, selected 0xffffc24a border, 24px header (scale via
+// headerH) with a 3px accent stripe and bold title, 1px black underline,
+// BYPASS veil + tag. Pass headerH pre-scaled by the viewport zoom.
+// timeSeconds drives the style's rim spin (only read when the skin animates;
+// pass the render clock).
 void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                    draw::Vec2 topLeft, draw::Vec2 size, const char* title,
                    const Palette& pal, const ControlState& state,

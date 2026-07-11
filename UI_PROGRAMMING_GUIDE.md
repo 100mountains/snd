@@ -11,18 +11,34 @@ How to build a user interface on `snd::ui`. Complements PROGRAMMING-GUIDE.md
 
 ## Model
 
-`snd::ui` is **Dear ImGui** (immediate mode) plus a thin native-window shell
-and a set of audio-oriented widgets drawn on top via `ImDrawList`. ImGui is
-vendored unmodified. You include `snd/ui.h`, open a `Window`, and each frame
-call stock `ImGui::` functions and `snd::ui::` widgets to declare the UI. State
-lives in *your* variables, not in the immediate widgets.
+`snd::ui` now has two front ends over one shared paint/style vocabulary.
 
-SND's retained-mode UI layer is currently exposed in C++ as
-`snd::ui::retained` through `snd/ui_retained.h` and retained widget helpers. It
-uses a stable tree for layout, focus, events, dirty state, and semantics, but
-shares SND's paint/style vocabulary with immediate widgets.
+- **aGooey** is the preferred retained UI path for new SND screens. Its C++
+  API is still `snd::ui::retained` through `snd/ui_retained.h`,
+  `snd/ui_retained_widgets.h`, and the pure retained GL window. Do not rename
+  public symbols for the user-facing name without a separate approved API
+  decision.
+- **Dear ImGui compatibility** remains available for immediate-mode tools,
+  plugin editors, and existing hosts. ImGui is vendored unmodified; the
+  compatibility widgets still compose with stock `ImGui::` calls.
 
-Immediate-mode consequences:
+Both paths use caller-owned state. SND owns widget drawing, input conventions,
+focus treatment, semantics, and shared audio-oriented controls; your app owns
+plugin parameters, project state, undo, persistence, and audio-thread handoff.
+
+aGooey consequences:
+
+- Build a stable retained tree with caller-chosen node IDs. Rebuild layout as
+  needed, but keep the model and values outside the tree unless a widget state
+  struct explicitly says otherwise.
+- Use `ValueBinding`, callbacks, or small adapters so widgets can read/write
+  caller-owned values without owning plugin/DSP state.
+- Expose semantics by default: accessible names, roles, focusability, checked
+  and disabled state, value text/ranges, and actions where relevant.
+- Draw custom/live regions with retained Canvas helpers and
+  `draw::Surface` painters when they should run without an ImGui context.
+
+Immediate compatibility consequences:
 
 - A widget both draws and reports interaction in the same call. `knob(...)`
   returns `true` on the frame its value changed; `toggle(...)` returns `true`
@@ -33,7 +49,43 @@ Immediate-mode consequences:
 - Every widget takes a string `id`/`label`. Identical visible labels need
   distinct ids: use the `"Label##uniqueid"` suffix or `ImGui::PushID`.
 
-## The window and the frame loop
+## The aGooey window and frame loop
+
+For a new retained/aGooey app, include the retained headers and use
+`snd::ui::retained::GlWindow`. This path has no ImGui context.
+
+```cpp
+#include "snd/ui_retained.h"
+#include "snd/ui_retained_gl.h"
+#include "snd/ui_retained_widgets.h"
+
+namespace r = snd::ui::retained;
+
+r::Tree tree(buildUiTree());
+r::PaintRenderer renderer;
+
+r::GlWindow window;
+if (!window.create(800, 600, "My App"))
+    return 1;
+
+while (!window.shouldClose()) {
+    if (!window.beginFrame(tree, renderer))
+        break;
+
+    window.endFrame();
+}
+window.destroy();
+```
+
+`GlWindow::beginFrame` pumps platform input into retained events, refreshes
+caller-owned bound values, lays out the tree to the current window size, and
+renders through `PaintRenderer::render(tree, draw::Surface&, FrameContext)`.
+`endFrame()` presents the rendered frame.
+
+## Dear ImGui compatibility window
+
+Use the immediate `snd::ui::Window` shell when embedding SND widgets in an
+existing ImGui tool or maintaining an immediate-mode editor.
 
 ```cpp
 #include "snd/ui.h"
@@ -55,8 +107,8 @@ while (!window.shouldClose()) {
 window.destroy();
 ```
 
-`beginFrame`/`endFrame` bracket exactly one frame. Do all UI between them.
-`shouldClose()` reflects the OS close button; override it with
+`beginFrame`/`endFrame` bracket exactly one ImGui frame. Do all immediate UI
+between them. `shouldClose()` reflects the OS close button; override it with
 `setShouldClose(bool)` (e.g. hold the window open to show an unsaved-changes
 prompt).
 
@@ -80,10 +132,11 @@ the OS title (also shown in the taskbar/dock).
 
 ## Multiple windows
 
-Construct more than one `Window`. Each gets its own ImGui context; GL objects
-(textures, fonts) are shared automatically across windows, so an image loaded
-in one is usable in another. Give every window its own frame loop, or pump them
-in sequence each iteration:
+Construct more than one retained `GlWindow` or immediate `Window`. Immediate
+`Window` instances each get their own ImGui context; GL objects (textures,
+fonts) are shared automatically across windows, so an image loaded in one is
+usable in another. Give every window its own frame loop, or pump them in
+sequence each iteration:
 
 ```cpp
 for (auto& w : windows) {
@@ -93,8 +146,8 @@ for (auto& w : windows) {
 }
 ```
 
-`beginFrame` makes that window's ImGui context current for the duration of the
-frame, so widget state does not leak between windows.
+For immediate windows, `beginFrame` makes that window's ImGui context current
+for the duration of the frame, so widget state does not leak between windows.
 
 ## File drops
 
@@ -118,8 +171,10 @@ zone colours `meterLow` / `meterMid` / `meterHot`. Colours are `ImU32`
 (`IM_COL32(r,g,b,a)`). Stock `ImGui::` widgets follow ImGui's own style, not the
 palette — set `ImGui::GetStyle()` colours if you want them to match.
 
-For a look outside the palette's reach (a bespoke skin), draw directly with
-`ImGui::GetWindowDrawList()` and your own colours, as the widgets do internally.
+For a look outside the palette's reach (a bespoke skin), prefer a retained
+Canvas or custom painter that draws through `snd::ui::draw::Surface`. In ImGui
+compatibility code, direct `ImGui::GetWindowDrawList()` drawing remains
+available.
 
 ## Icon fonts and glyphs
 
@@ -304,10 +359,11 @@ The fence dims itself while locked; `lockColor = 0` uses `pal.meterHot`.
 `paint::kKnobA0` / `paint::kKnobA1` (the rotary sweep endpoints) are public so
 consumer-drawn overlays land exactly on the arc the knob bodies draw.
 
-## Retained widgets
+## aGooey retained widgets
 
-Include `snd/ui_retained_widgets.h` to build retained panels with the shared
-SND look. The helper namespace is `snd::ui::retained::widgets`; the renderer is
+Include `snd/ui_retained_widgets.h` to build aGooey panels with the shared SND
+look. The public C++ namespace remains `snd::ui::retained`; helper widgets live
+in `snd::ui::retained::widgets`; the renderer is
 `snd::ui::retained::PaintRenderer`.
 
 Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
@@ -316,8 +372,9 @@ Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `segmented`, `cycleButton`, `ledButton`,
 `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
 `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`, `valueField`,
-`envelopeEditor`, `canvas`, and `graphSurface`. Value controls use `ValueBinding`; the caller
-still owns plugin parameters, app state, undo, and audio-thread handoff. Knobs,
+`envelopeEditor`, `canvas`, `textField`, `scrollView`, `splitter`, and
+`graphSurface`. Value controls use `ValueBinding`; the caller still owns
+plugin parameters, app state, undo, and audio-thread handoff. Knobs,
 faders, drag numbers, XY pads, pattern grids, keyboards, menus, and envelope
 editors support retained pointer editing through the ImGui input bridge or the
 pure retained GL window.
@@ -326,7 +383,7 @@ display changing audio/UI state without recreating nodes. `xyPad` takes
 separate X/Y bindings, while `patternGrid` edits a caller-owned row-major bool
 array and can read a dynamic playhead callback.
 
-The normal retained frame call is:
+When embedding a retained tree inside an ImGui layout, use:
 
 ```cpp
 snd::ui::retained::drawImGui(tree, renderer, {360.0f, 180.0f});
@@ -338,8 +395,8 @@ input, and renders through the shared paint layer. If you wire the pieces
 manually, call `tree.refreshBoundValues()` before rendering or taking semantic
 snapshots whenever caller-owned model values may have changed.
 
-For a retained window with no ImGui context, include `snd/ui_retained_gl.h` and
-use `snd::ui::retained::GlWindow`:
+For a pure aGooey retained window with no ImGui context, include
+`snd/ui_retained_gl.h` and use `snd::ui::retained::GlWindow`:
 
 ```cpp
 snd::ui::retained::GlWindow window;
@@ -648,9 +705,9 @@ drifting HSV facets with a diagonal split and 0.40 veil), and `Aurora` /
 wave + noise displacement; AuroraMosaic adds the bright wireframe pass). The
 animated modes read the render-time clock.
 
-Fifteen house skins ship as presets (`paint::GraphSkin`): murk's five
-(`TechSquare`, `ClassicRounded`, `Blueprint`, `Console`, `Studio`) and the
-gradient family, each a full theme — its own slab/header/text tints, pin
+Fifteen graph skins ship as presets (`paint::GraphSkin`): five hardware-style
+bases (`TechSquare`, `ClassicRounded`, `Blueprint`, `Console`, `Studio`) and
+the gradient family, each a full theme — its own slab/header/text tints, pin
 triple, wire gradient and weight, rim sweep, and spin character: `Neo`
 (Turbo neon), `Rainbow` (six-stop hue wheel), `Ember` (fire), `Redline`
 (black slab, red highlight sweep, razor wires), `Glacier` (ice), `Acid`
@@ -681,9 +738,9 @@ horizontal), cmd+wheel zooms at the cursor, cmd/alt+left-drag or middle-drag
 pans, and cmd+arrow keys step-scroll while the surface is focused.
 
 Square pins whose node-local rect sits flush against the node's left or right
-edge render as SOCKETS: the fill runs to the edge over the node border and
-the outline skips that side, so a wire reads as plugging into the box. Pins
-that straddle the edge (murk's) keep the classic full outline.
+edge render as sockets: the fill runs to the edge over the node border and the
+outline skips that side, so a wire reads as plugging into the box. Pins that
+straddle the edge keep the classic full outline.
 
 Hovering a pin shows a connector tooltip with that port's `GraphPort::label`
 (same look as `snd::ui::tooltip`, after a short delay) — `graphSurface` owns
@@ -932,15 +989,17 @@ Shift drags 10× slower.
 - **UI → audio is a value the audio thread reads.** A knob writes a normalized
   float; the audio thread reads it (an atomic, or a plugin param). Never call
   back into audio from a widget.
-- **Stock ImGui is fair game.** Use `ImGui::Button`, `Combo`, `SliderFloat`,
-  `BeginChild`, tables, etc. for everything the audio widgets don't cover;
-  `snd::ui` widgets compose with them freely on the same frame.
-- **Custom drawing.** For anything bespoke, `ImGui::GetWindowDrawList()` plus
-  `InvisibleButton` for hit-testing is the pattern the widgets use internally.
+- **Stock ImGui is fair game in compatibility code.** Use `ImGui::Button`,
+  `Combo`, `SliderFloat`, `BeginChild`, tables, etc. for immediate tools that
+  are already inside an ImGui frame; `snd::ui` widgets compose with them there.
+- **Custom drawing.** In aGooey, prefer Canvas helpers and `draw::Surface`
+  painters. In ImGui compatibility code, `ImGui::GetWindowDrawList()` plus
+  `InvisibleButton` remains the local pattern for bespoke immediate controls.
 
 ## Plugin editors
 
-A plugin built with the client SDK draws its editor in `Processor::drawUi()`
-using these same `snd::ui::` / `ImGui::` calls. The wrapper owns the window, GL
-context, and input routing; `drawUi` only declares the widgets, exactly as a
-panel between `Begin`/`End` does here.
+Current plugin editors built with the client SDK draw in `Processor::drawUi()`
+through the Dear ImGui compatibility path. The wrapper owns the window, GL
+context, and input routing; `drawUi` only declares widgets, exactly as a panel
+between `Begin`/`End` does here. New retained hosts should prefer aGooey
+widgets and `draw::Surface` painters when the host exposes that path.
