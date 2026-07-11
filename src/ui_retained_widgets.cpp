@@ -42,6 +42,38 @@ Rect offset(Rect r, draw::Vec2 origin)
     return r;
 }
 
+// Vertical scrollbar geometry for a scroll container: the thumb rect on the
+// right edge of `viewRect`. Shared by the render (drawScrollbar) and the
+// widget's drag handling so a press lands exactly on what's drawn.
+constexpr float kScrollBarW = 6.0f;
+constexpr float kScrollBarInset = 2.0f;
+Rect scrollbarThumbRect(Rect viewRect, float contentH, float viewH,
+                        float scrollY)
+{
+    const float trackY = viewRect.y + 2.0f;
+    const float trackH = std::max(0.0f, viewRect.h - 4.0f);
+    const float thumbH =
+        contentH > 0.0f ? std::max(24.0f, trackH * viewH / contentH) : trackH;
+    const float maxScroll = std::max(0.0f, contentH - viewH);
+    const float frac = maxScroll > 0.0f ? scrollY / maxScroll : 0.0f;
+    const float thumbY = trackY + frac * std::max(0.0f, trackH - thumbH);
+    const float x = viewRect.x + viewRect.w - kScrollBarInset - kScrollBarW;
+    return {x, thumbY, kScrollBarW, thumbH};
+}
+
+void drawScrollbar(draw::Surface& surface, Rect viewRect, float contentH,
+                   float viewH, float scrollY)
+{
+    const Palette& pal = palette();
+    const float x = viewRect.x + viewRect.w - kScrollBarInset - kScrollBarW;
+    surface.fillRect({x, viewRect.y + 2.0f},
+                     {x + kScrollBarW, viewRect.y + viewRect.h - 2.0f},
+                     paint::withAlpha(pal.frameBright, 0x22), 3.0f);
+    const Rect t = scrollbarThumbRect(viewRect, contentH, viewH, scrollY);
+    surface.fillRect({t.x, t.y}, {t.x + t.w, t.y + t.h},
+                     paint::withAlpha(pal.frameBright, 0x99), 3.0f);
+}
+
 double clamp01(double v)
 {
     return std::max(0.0, std::min(1.0, v));
@@ -2096,12 +2128,23 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
 
+    const bool scrollClip = node.scroll();
+    if (scrollClip)
+        drawList->PushClipRect(topLeft(bounds), bottomRight(bounds), true);
     for (const auto& child : node.children()) {
         if (overlayQueue && child->overlay() && child->visible()) {
             overlayQueue->push_back(child.get()); // painted after the main pass
             continue;
         }
         renderNode(*child, semantics, origin, drawList, context, overlayQueue);
+    }
+    if (scrollClip) {
+        drawList->PopClipRect();
+        if (node.contentHeight() > node.viewHeight() + 0.5f) {
+            draw::ImGuiSurface sbSurface(drawList);
+            drawScrollbar(sbSurface, bounds, node.contentHeight(),
+                          node.viewHeight(), node.scrollY());
+        }
     }
 }
 
@@ -2372,12 +2415,21 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
 
+    const bool scrollClip = node.scroll();
+    if (scrollClip)
+        surface.pushClip(topLeftDraw(bounds), bottomRightDraw(bounds), true);
     for (const auto& child : node.children()) {
         if (overlayQueue && child->overlay() && child->visible()) {
             overlayQueue->push_back(child.get()); // painted after the main pass
             continue;
         }
         renderNode(*child, semantics, origin, surface, context, overlayQueue);
+    }
+    if (scrollClip) {
+        surface.popClip();
+        if (node.contentHeight() > node.viewHeight() + 0.5f)
+            drawScrollbar(surface, bounds, node.contentHeight(),
+                          node.viewHeight(), node.scrollY());
     }
 }
 
@@ -3913,6 +3965,78 @@ Node::Ptr column(NodeId id, float gap, Insets padding)
     return panel(std::move(id), layout, padding);
 }
 
+Node::Ptr scrollView(NodeId id, float gap, Insets padding,
+                     PaintRenderer* renderer)
+{
+    (void)renderer; // the scrollbar is drawn by the render, not a style
+    auto node = column(std::move(id), gap, padding);
+    node->setScroll(true);
+
+    struct ScrollDrag {
+        bool active = false;
+        float grabOffset = 0.0f; // pointer.y - thumb.y at grab
+    };
+    auto drag = std::make_shared<ScrollDrag>();
+    node->setOnEvent([drag](Node& n, const Event& e) {
+        const float maxScroll =
+            std::max(0.0f, n.contentHeight() - n.viewHeight());
+        if (maxScroll <= 0.0f)
+            return false;
+        const Rect b = n.bounds();
+        switch (e.type) {
+        case EventType::MouseWheel:
+            if (e.wheelDelta.y != 0.0f) {
+                n.setScrollY(std::clamp(n.scrollY() - e.wheelDelta.y * 40.0f,
+                                        0.0f, maxScroll));
+                return true;
+            }
+            return false;
+        case EventType::MouseDown: {
+            if (e.button != MouseButton::Left)
+                return false;
+            const Rect t = scrollbarThumbRect(b, n.contentHeight(),
+                                               n.viewHeight(), n.scrollY());
+            // grab the thumb, or page toward a click elsewhere on the track
+            if (t.contains(e.position)) {
+                drag->active = true;
+                drag->grabOffset = e.position.y - t.y;
+                return true;
+            }
+            if (e.position.x >= b.x + b.w - kScrollBarInset - kScrollBarW - 2.0f) {
+                n.setScrollY(std::clamp(
+                    n.scrollY() + (e.position.y < t.y ? -1.0f : 1.0f) *
+                                      n.viewHeight() * 0.9f,
+                    0.0f, maxScroll));
+                return true;
+            }
+            return false;
+        }
+        case EventType::MouseMove: {
+            if (!drag->active)
+                return false;
+            const float trackH = std::max(1.0f, b.h - 4.0f);
+            const float thumbH =
+                std::max(24.0f, trackH * n.viewHeight() / n.contentHeight());
+            const float span = std::max(1.0f, trackH - thumbH);
+            const float thumbY = e.position.y - drag->grabOffset;
+            const float frac = std::clamp((thumbY - (b.y + 2.0f)) / span,
+                                          0.0f, 1.0f);
+            n.setScrollY(frac * maxScroll);
+            return true;
+        }
+        case EventType::MouseUp:
+            if (drag->active) {
+                drag->active = false;
+                return true;
+            }
+            return false;
+        default:
+            return false;
+        }
+    });
+    return node;
+}
+
 Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
                    bool horizontal, bool invert, PaintRenderer* renderer,
                    float thickness)
@@ -4231,6 +4355,43 @@ Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
                           renderer, menuWidth);
     root->addChild(std::move(button));
     root->addChild(std::move(menu));
+    return root;
+}
+
+Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
+                       const std::vector<MenuItem>& items, ValueBinding binding,
+                       std::function<void(Node&, const MenuItem&, int)> onSelect,
+                       PaintRenderer* renderer, Vec2 buttonSize, float menuWidth,
+                       paint::OutlineButtonStyle buttonStyle)
+{
+    // A heap int mirrors the binding: the int* impl reads it for the label,
+    // this overload keeps it synced from binding.get() each frame and writes
+    // binding.set() on pick.
+    auto idx = std::make_shared<int>(
+        binding.get ? (int)std::lround(binding.get()) : 0);
+    auto user = std::move(onSelect);
+    auto onPick = [idx, binding, user](Node& n, const MenuItem& it,
+                                       int i) mutable {
+        *idx = i;
+        if (binding.set)
+            binding.set((double)i);
+        if (user)
+            user(n, it, i);
+    };
+    auto root = dropdownMenu(std::move(id), std::move(name), state, items,
+                             idx.get(), std::move(onPick), renderer, buttonSize,
+                             menuWidth, buttonStyle);
+    // sync the mirror from the binding before the button's own onRefresh reads
+    // it (refresh is top-down, so the root runs first)
+    root->setOnRefresh([idx, binding](Node&) {
+        if (!binding.get)
+            return false;
+        const int v = (int)std::lround(binding.get());
+        if (v == *idx)
+            return false;
+        *idx = v;
+        return true;
+    });
     return root;
 }
 

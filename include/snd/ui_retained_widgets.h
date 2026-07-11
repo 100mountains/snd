@@ -356,6 +356,17 @@ Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
                        Vec2 buttonSize = {160.0f, 28.0f},
                        float menuWidth = 180.0f,
                        paint::OutlineButtonStyle buttonStyle = {});
+// ValueBinding overload: the selected index is read/written through the
+// binding (rounded to an int), so the dropdown live-follows a value that
+// changes underneath it -- a real dropdown replacement for cycleButton on
+// longer enum lists.
+Node::Ptr dropdownMenu(NodeId id, std::string name, PopupMenuState& state,
+                       const std::vector<MenuItem>& items, ValueBinding binding,
+                       std::function<void(Node&, const MenuItem&, int)> onSelect = {},
+                       PaintRenderer* renderer = nullptr,
+                       Vec2 buttonSize = {160.0f, 28.0f},
+                       float menuWidth = 180.0f,
+                       paint::OutlineButtonStyle buttonStyle = {});
 Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
                             PopupMenuState& state,
                             std::function<void(Node&, Vec2)> onOpen = {},
@@ -419,6 +430,13 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
 Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
                    bool horizontal = true, bool invert = false,
                    PaintRenderer* renderer = nullptr, float thickness = 6.0f);
+
+// A vertical scroll container: add children to it and they stack as a column
+// at their natural height, clipped to the view with a wheel-driven, draggable
+// scrollbar when they overflow. `gap`/`padding` apply to the column; the node
+// fills its parent by default (give it a fixed Length to size the viewport).
+Node::Ptr scrollView(NodeId id, float gap = 0.0f, Insets padding = {},
+                     PaintRenderer* renderer = nullptr);
 
 Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                        const std::vector<GraphNode>& nodes,

@@ -331,8 +331,75 @@ void layoutLinear(Node& node, bool row)
     }
 }
 
+// A vertical scroll container: children stack as a column at their NATURAL
+// height (overflowing the node), the whole column is offset up by the clamped
+// scroll position, and content/view heights are recorded so the widget can
+// draw + drive a scrollbar. Render clips to the node's rect (PaintRenderer).
+void layoutScroll(Node& node)
+{
+    const Rect c = contentRect(node);
+    constexpr float kBarGutter = 10.0f; // space reserved for the scrollbar
+
+    // total natural content height (fixed/intrinsic child heights + gaps)
+    float contentH = 0.0f;
+    int visibleCount = 0;
+    for (const auto& childPtr : node.children()) {
+        if (!childPtr->visible() || childPtr->overlay())
+            continue;
+        contentH += lengthValue(childPtr->height(), childPtr->intrinsicSize().y, 0.0f);
+        ++visibleCount;
+    }
+    if (visibleCount > 1)
+        contentH += node.layout().gap * (float)(visibleCount - 1);
+    contentH += node.layout().padding.top + node.layout().padding.bottom;
+
+    const float viewH = node.bounds().h;
+    const bool overflow = contentH > viewH + 0.5f;
+    node.setLayoutMetrics(contentH, viewH);
+
+    // clamp the scroll position into range
+    const float maxScroll = std::max(0.0f, contentH - viewH);
+    if (node.scrollY() < 0.0f)
+        node.setScrollY(0.0f);
+    if (node.scrollY() > maxScroll)
+        node.setScrollY(maxScroll);
+
+    const float innerW = c.w - (overflow ? kBarGutter : 0.0f);
+    float cursor = c.y - node.scrollY();
+    for (const auto& childPtr : node.children()) {
+        Node& child = *childPtr;
+        if (!child.visible() || child.overlay())
+            continue;
+        const float h =
+            lengthValue(child.height(), child.intrinsicSize().y, 0.0f);
+        float w = lengthValue(child.width(), child.intrinsicSize().x, innerW);
+        if (node.layout().crossAlign == Align::Stretch &&
+            child.width().mode == LengthMode::Intrinsic)
+            w = innerW;
+        child.setBounds({c.x + alignOffset(innerW, w, node.layout().crossAlign),
+                         cursor, w, h});
+        layoutNode(child);
+        cursor += h + node.layout().gap;
+    }
+
+    // overlays (menus/popups) anchor to the view, not the scrolled content
+    for (const auto& childPtr : node.children()) {
+        if (!childPtr->visible() || !childPtr->overlay())
+            continue;
+        Node& child = *childPtr;
+        const float w = lengthValue(child.width(), child.intrinsicSize().x, c.w);
+        const float h = lengthValue(child.height(), child.intrinsicSize().y, c.h);
+        child.setBounds({c.x, c.y, w, h});
+        layoutNode(child);
+    }
+}
+
 void layoutNode(Node& node)
 {
+    if (node.scroll()) {
+        layoutScroll(node);
+        return;
+    }
     switch (node.layout().kind) {
     case LayoutKind::Stack:
         layoutStack(node);
@@ -501,6 +568,14 @@ void Node::setOverlay(bool overlay)
     if (overlay_ == overlay)
         return;
     overlay_ = overlay;
+    markDirty();
+}
+
+void Node::setScroll(bool scroll)
+{
+    if (scroll_ == scroll)
+        return;
+    scroll_ = scroll;
     markDirty();
 }
 
@@ -680,12 +755,20 @@ const Node* Node::hitTest(Vec2 point) const
     if (!visible_)
         return nullptr;
 
+    // A scroll container clips its content: non-overlay children scrolled out
+    // of the view must not grab hits outside the view rect. Test them only
+    // when the point is inside this node (overlays stay reachable below).
+    const bool scrollGated = scroll_ && !bounds_.contains(point);
+
     // Children are consulted regardless of this node's own rect: overlay
     // subtrees (popups, flyout submenus) are translated outside their
     // parent's bounds by design and must stay hittable.
-    for (auto it = children_.rbegin(); it != children_.rend(); ++it)
+    for (auto it = children_.rbegin(); it != children_.rend(); ++it) {
+        if (scrollGated && !(*it)->overlay())
+            continue;
         if (const Node* hit = (*it)->hitTest(point))
             return hit;
+    }
 
     return bounds_.contains(point) ? this : nullptr;
 }
@@ -1003,9 +1086,20 @@ bool Tree::dispatch(const Event& event)
         return pressed != nullptr || handled;
     }
 
+    if (event.type == EventType::MouseWheel) {
+        // the wheel bubbles: the deepest hit gets first refusal, then each
+        // ancestor, so a scroll container catches it even when the pointer is
+        // over one of its (non-scrolling) children.
+        Node* target = hitTest(event.position);
+        setHoveredNode(target);
+        for (Node* n = target; n != nullptr; n = n->parent())
+            if (isInteractive(*n) && n->handleEvent(event))
+                return true;
+        return false;
+    }
+
     if (event.type == EventType::MouseDown ||
         event.type == EventType::MouseUp ||
-        event.type == EventType::MouseWheel ||
         event.type == EventType::ContextMenu) {
         Node* target = hitTest(event.position);
         setHoveredNode(target);

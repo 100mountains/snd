@@ -511,6 +511,13 @@ height, centred, never moves) in the outline-button chrome — border-first,
 transport row reads as one family. The tactile `iconButton` remains as the
 raised-key alternative; its face is palette-derived and its glyph is pinned.
 
+**Scroll view.** `widgets::scrollView(id, gap, padding, renderer)` is a
+vertical scroll container: add children and they stack as a column at their
+natural height, clipped to the view, with a wheel-driven draggable scrollbar
+when they overflow (the wheel bubbles, so it scrolls even when the pointer is
+over a child). Give the node a fixed `Length` to size the viewport; it
+reports `contentHeight()`/`viewHeight()` and clamps `scrollY`.
+
 **Splitter.** `widgets::splitter(id, name, binding, horizontal, invert,
 renderer, thickness)` is a draggable pane divider: dragging (or arrow keys
 while focused) writes the adjacent pane's size through the `ValueBinding`,
@@ -522,6 +529,10 @@ clear behind everything the app draws; apps painting their own chrome should
 set their canvas colour so padding/gaps don't show the library default.
 
 ## Menus
+
+`dropdownMenu` also takes a `ValueBinding` (instead of `int*`) so the
+control live-follows a value that changes underneath it — a real dropdown
+replacement for `cycleButton` on longer enum lists.
 
 Use SND menu primitives for action lists, dropdown/select controls, and
 right-click/context actions. Menu rows share one `MenuItem` model: `id`,

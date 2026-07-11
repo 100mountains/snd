@@ -318,6 +318,23 @@ public:
     void setOverlay(bool overlay);
     bool overlay() const { return overlay_; }
 
+    // Scroll container: lay out this node's children as a column at their
+    // NATURAL height (overflowing the node's rect), offset up by scrollY, and
+    // clip rendering to the node's rect. contentHeight()/viewHeight() are set
+    // during layout for the scrollbar; scrollY is clamped to [0, content -
+    // view]. widgets::scrollView wires the wheel + scrollbar drag.
+    void setScroll(bool scroll);
+    bool scroll() const { return scroll_; }
+    void setScrollY(float y) { scrollY_ = y; }
+    float scrollY() const { return scrollY_; }
+    float contentHeight() const { return contentHeight_; }
+    float viewHeight() const { return viewHeight_; }
+    void setLayoutMetrics(float contentHeight, float viewHeight)
+    {
+        contentHeight_ = contentHeight;
+        viewHeight_ = viewHeight;
+    }
+
     void setEnabled(bool enabled);
     bool enabled() const { return enabled_; }
 
@@ -381,6 +398,10 @@ private:
     Rect bounds_;
     bool visible_ = true;
     bool overlay_ = false;
+    bool scroll_ = false;
+    float scrollY_ = 0.0f;
+    float contentHeight_ = 0.0f;
+    float viewHeight_ = 0.0f;
     bool enabled_ = true;
     bool focusable_ = false;
     bool focused_ = false;
