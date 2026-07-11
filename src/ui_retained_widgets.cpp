@@ -1,6 +1,5 @@
 #include "snd/ui_retained_widgets.h"
 
-#include "snd/icons.h" // ICON_LC_* transport glyphs
 #include "ui_draw_imgui.h"
 
 #include "imgui.h"
@@ -1599,6 +1598,32 @@ void PaintRenderer::clearStyles()
     styles_.clear();
 }
 
+namespace {
+void collectNodeIds(const Node& node, std::unordered_set<NodeId>& out)
+{
+    out.insert(node.id());
+    for (const auto& child : node.children())
+        if (child)
+            collectNodeIds(*child, out);
+}
+} // namespace
+
+void PaintRenderer::gcStyles(const Tree& tree) const
+{
+    // Sweep on a cadence: dead entries only appear when nodes are destroyed
+    // (screen switch, menu/popup teardown), which is rare relative to frames,
+    // so a periodic pass keeps this off the hot path. Tree::find is an O(nodes)
+    // walk, so collect every live id in one traversal and prune in one pass
+    // rather than find() per entry.
+    if ((++styleGcTick_ % 64u) != 0 || styles_.empty())
+        return;
+    std::unordered_set<NodeId> live;
+    live.reserve(styles_.size() * 2);
+    collectNodeIds(tree.root(), live);
+    for (auto it = styles_.begin(); it != styles_.end();)
+        it = live.count(it->first) ? std::next(it) : styles_.erase(it);
+}
+
 const VisualStyle* PaintRenderer::styleFor(const NodeId& id) const
 {
     auto it = styles_.find(id);
@@ -1745,6 +1770,7 @@ void PaintRenderer::render(const Tree& tree, ImDrawList* drawList) const
 void PaintRenderer::render(const Tree& tree, const ImVec2& origin,
                            ImDrawList* drawList) const
 {
+    gcStyles(tree);
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
@@ -1776,6 +1802,7 @@ void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
                            const draw::FrameContext& context,
                            draw::Vec2 origin) const
 {
+    gcStyles(tree);
     SemanticMap semMap;
     for (const SemanticNode& node : tree.semanticSnapshot())
         semMap[node.id] = node;
@@ -5973,35 +6000,48 @@ Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
     return node;
 }
 
-// The transport semantic -> its Lucide house glyph. Lucide is an outline set,
-// so the whole transport row reads as one crisp, consistent style.
-static const char* lucideTransportGlyph(Icon icon)
-{
-    switch (icon) {
-    case Icon::Record: return ICON_LC_CIRCLE;
-    case Icon::Play: return ICON_LC_PLAY;
-    case Icon::Stop: return ICON_LC_SQUARE;
-    case Icon::Loop: return ICON_LC_REPEAT;
-    case Icon::SkipToStart: return ICON_LC_SKIP_BACK;
-    case Icon::SkipToEnd: return ICON_LC_SKIP_FORWARD;
-    default: return ICON_LC_CIRCLE;
-    }
-}
-
 Node::Ptr transportButton(NodeId id, std::string name, Icon icon,
                           std::function<void(Node&)> onActivate,
                           PaintRenderer* renderer, Vec2 size,
                           paint::OutlineButtonStyle style, bool selected,
                           bool actOnPress)
 {
-    // A transport button is an outline icon button whose glyph is chosen from
-    // the transport semantic -- the Lucide glyph, so the shapes match the rest
-    // of the icon vocabulary exactly. selected = engaged fill; actOnPress fires
-    // on mouse down.
-    return outlineIconButton(std::move(id), std::move(name),
-                             lucideTransportGlyph(icon), std::move(onActivate),
-                             renderer, size, std::move(style), selected,
-                             IconFont::Lucide, actOnPress);
+    // Outline chrome + a VECTOR transport glyph, drawn through a Canvas node so
+    // no new render kind is needed. `selected` shows the engaged fill (and, for
+    // Record, fills the ring to a disc); actOnPress fires on mouse down.
+    NodeId sid = id;
+    auto node = button(std::move(id), std::move(name),
+                       actOnPress ? std::function<void(Node&)>{}
+                                  : std::move(onActivate),
+                       nullptr);
+    node->setIntrinsicSize(size);
+    node->setFocusable(true);
+    if (actOnPress && onActivate)
+        installActOnPress(*node, std::move(onActivate));
+    if (selected) {
+        Semantics sem = node->semantics();
+        sem.states |= SemanticState::Selected;
+        node->setSemantics(sem);
+    }
+    if (renderer) {
+        VisualStyle vs;
+        vs.kind = VisualKind::Canvas;
+        vs.panelBorder = false;     // drawTransportButton draws its own outline
+        vs.canvasFocusRing = false; // and its own focus ring
+        vs.canvasDraw = [icon, style](ImDrawList& dl, const Node&, Rect b,
+                                      const paint::ControlState& st) {
+            paint::drawTransportButton(&dl, icon, topLeft(b), sizeOf(b),
+                                       palette(), st, style);
+        };
+        vs.canvasSurfaceDraw = [icon, style](draw::Surface& s, const Node&, Rect b,
+                                             const paint::ControlState& st,
+                                             const draw::FrameContext&) {
+            paint::drawTransportButton(s, icon, topLeftDraw(b), sizeOfDraw(b),
+                                       palette(), st, style);
+        };
+        renderer->setStyle(sid, vs);
+    }
+    return node;
 }
 
 Node::Ptr iconButton(NodeId id, std::string name, Icon icon,

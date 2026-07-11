@@ -399,9 +399,26 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
                           bool active = false);
 
 // A single vector transport/scope glyph (Icon), centred at `center`, scaled to
-// radius `r`, in `color`. Crisp at any size; used by the vector icon button.
+// radius `r`, in `color`. `thickness` 0 draws the FILLED shape (record disc,
+// solid play triangle); >0 draws the OUTLINE version at that stroke width (a
+// ring, a hollow triangle, a two-arrow repeat) -- the shapes mirror the Lucide
+// icon set. Crisp at any size.
 void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 center,
-                        float r, ImU32 color);
+                        float r, ImU32 color, float thickness = 0.0f);
+
+// A transport button: the house OUTLINE chrome (drawOutlineButton) with a
+// centred vector transport glyph. `glyphThickness` >0 draws the outline glyph;
+// Record shows a ring when idle and a filled disc when engaged (state.selected).
+void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
+                         draw::Vec2 size, const Palette& pal,
+                         const ControlState& state,
+                         const OutlineButtonStyle& style = {},
+                         float glyphThickness = 1.6f);
+void drawTransportButton(ImDrawList* dl, Icon icon, const ImVec2& topLeft,
+                         const ImVec2& size, const Palette& pal,
+                         const ControlState& state,
+                         const OutlineButtonStyle& style = {},
+                         float glyphThickness = 1.6f);
 
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,

@@ -71,6 +71,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .outlinebtn:focus-visible{outline:1px solid var(--accent);outline-offset:2px;}
 .outlinebtn.sel{border-color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);}
 .outlinebtn.custom{border-color:#8de3ff;background:rgba(141,227,255,.08);color:#d8fbff;}
+.outlinebtn.tb{min-width:0;width:42px;padding:0;display:grid;place-items:center;color:var(--ink);}
+.outlinebtn.tb svg{width:16px;height:16px;display:block;}
+.outlinebtn.tb.sel{background:color-mix(in srgb,transparent,var(--accent) 22%);box-shadow:none;}
+.outlinebtn.tb.rec.sel{background:#c03930;border-color:#ff6b66;color:#fff;box-shadow:none;}
 .badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:11px;letter-spacing:.05em;background:color-mix(in srgb,transparent,var(--accent) 27%);color:var(--ink);}
 .li{width:150px;padding:7px 10px;border-radius:3px;border:1px solid var(--frameB);background:var(--frame);color:var(--ink);font-size:12.5px;cursor:pointer;}
 .li.sel{border-color:var(--accent);background:color-mix(in srgb,transparent,var(--accent) 22%);box-shadow:inset 3px 0 0 var(--accent);}
@@ -127,6 +131,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <a href="#fader" class="nl">Fader</a>
     <a href="#toggle" class="nl">Toggle</a>
     <a href="#buttons" class="nl">Buttons</a>
+    <a href="#transport" class="nl">Transport</a>
     <a href="#segmented" class="nl">Segmented</a>
     <a href="#cycle" class="nl">Cycle button</a>
     <a href="#custom-paint" class="nl">Animated · custom</a>
@@ -235,6 +240,21 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
           <div class="statecol"><button class="outlinebtn act">Active</button><div class="cellcap">active fill</div></div>
           <div class="statecol"><button class="outlinebtn sel">Selected</button><div class="cellcap">selected</div></div>
           <div class="statecol"><button class="outlinebtn custom">Custom</button><div class="cellcap">custom colours</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="transport">
+      <div class="sechead"><h2>Transport buttons</h2><span class="tag">widgets::transportButton · paint::drawTransportGlyph</span></div>
+      <p class="desc">The building block of a transport bar: the outline-button chrome with a crisp <b>vector</b> transport glyph (drawn, not a font), picked by <b>intent</b> (<code>Icon::Record</code>, <code>Play</code>, <code>Stop</code>, <code>Loop</code>). The engaged fill marks the state — blue for play/cycle, and <b>record goes red</b>, its ring filling to a disc while armed. Fires on mouse-down for no-latency feel. <b class="try">Hover them.</b></p>
+      <div class="rack">
+        <div class="statebar">
+          <div class="statecol"><button class="outlinebtn tb rec"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg></button><div class="cellcap">record</div></div>
+          <div class="statecol"><button class="outlinebtn tb rec sel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg></button><div class="cellcap">recording</div></div>
+          <div class="statecol"><button class="outlinebtn tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button><div class="cellcap">play</div></div>
+          <div class="statecol"><button class="outlinebtn tb sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button><div class="cellcap">playing</div></div>
+          <div class="statecol"><button class="outlinebtn tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button><div class="cellcap">loop</div></div>
+          <div class="statecol"><button class="outlinebtn tb sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button><div class="cellcap">cycling</div></div>
         </div>
       </div>
     </section>

@@ -88,6 +88,12 @@ public:
     void setStyle(const NodeId& id, const VisualStyle& style);
     void clearStyle(const NodeId& id);
     void clearStyles();
+    // Drop style entries whose node no longer exists in `tree`. setStyle only
+    // ever adds; without this sweep the map keeps every style ever registered
+    // for a transient popup/menu or a torn-down screen forever, and the
+    // per-frame popup loops walk the corpses. Self-throttled, so it is cheap to
+    // call every frame; the render(Tree, ...) overloads call it automatically.
+    void gcStyles(const Tree& tree) const;
 
     const VisualStyle* styleFor(const NodeId& id) const;
     // Call after layout when manually rendering retained trees; drawImGui does
@@ -147,7 +153,11 @@ private:
                          std::vector<const Node*>& out) const;
     VisualStyle resolvedStyle(const Node& node) const;
 
-    std::unordered_map<NodeId, VisualStyle> styles_;
+    // mutable: gcStyles() prunes dead entries from the const render() path, and
+    // styleGcTick_ throttles that sweep. Style content is otherwise set only
+    // through the non-const setStyle/clearStyle API.
+    mutable std::unordered_map<NodeId, VisualStyle> styles_;
+    mutable unsigned styleGcTick_ = 0;
 };
 
 // Translate current ImGui input into retained events. `origin` is the

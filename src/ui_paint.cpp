@@ -897,35 +897,35 @@ void drawTactileIconButton(draw::Surface& surface, draw::FontRef font,
     if (!glyph)
         return;
 
-    // Subtle key: the face stays in the theme's own greys (owner: the old
-    // white-to-dark-grey flip read as "wtf") and the bevel is a quiet 1px
-    // pair that inverts on press. The glyph NEVER moves.
+    // A subtly RAISED icon button: a quiet static bevel (light top / dark
+    // bottom) that reads as gently lifted off the bar and NEVER inverts, plus a
+    // fixed glyph -- so nothing appears to click down. Pressed/lit changes the
+    // face COLOUR to the accent (not a darken-to-black, not a push). Owner:
+    // "subtle raised button that just goes a different colour when pressed with
+    // no movement."
     down = down && !state.disabled;
     const ImU32 base = face ? face : pal.frame;
-    ImU32 faceCol = down ? mix(base, IM_COL32(0, 0, 0, 255), 0.30f)
-                         : mix(base, IM_COL32(255, 255, 255, 255), 0.10f);
+    const ImU32 rest = mix(base, IM_COL32(255, 255, 255, 255), 0.10f);
+    ImU32 faceCol = down ? pal.accent : rest;
     if (state.hovered && !down && !state.disabled)
-        faceCol = mix(faceCol, IM_COL32(255, 255, 255, 255), 0.05f);
+        faceCol = mix(rest, IM_COL32(255, 255, 255, 255), 0.08f);
     if (state.disabled)
-        faceCol = mix(faceCol, IM_COL32(0, 0, 0, 255), 0.28f);
+        faceCol = mix(rest, IM_COL32(0, 0, 0, 255), 0.28f);
 
     const float r = 4.0f;
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
     surface.fillRect(topLeft, mx, faceCol, r);
-    const ImU32 topEdge =
-        down ? IM_COL32(0, 0, 0, 90) : IM_COL32(255, 255, 255, 55);
-    const ImU32 botEdge =
-        down ? IM_COL32(255, 255, 255, 30) : IM_COL32(0, 0, 0, 90);
+    // static bevel: same light-top / dark-bottom in every state (no flip)
     surface.line({topLeft.x + r, topLeft.y + 1.0f},
-                 {mx.x - r, topLeft.y + 1.0f}, topEdge, 1.0f);
+                 {mx.x - r, topLeft.y + 1.0f}, IM_COL32(255, 255, 255, 55), 1.0f);
     surface.line({topLeft.x + r, mx.y - 1.0f},
-                 {mx.x - r, mx.y - 1.0f}, botEdge, 1.0f);
+                 {mx.x - r, mx.y - 1.0f}, IM_COL32(0, 0, 0, 90), 1.0f);
     surface.strokeRect(topLeft, mx, IM_COL32(0, 0, 0, 110), r, 1.0f);
 
     const float iconPx = size.y * 0.60f;
-    const ImU32 iconCol = state.disabled ? pal.textDim
-                          : down         ? mix(pal.text, pal.accent, 0.35f)
-                                         : pal.text;
+    // glyph stays legible in every state (near-white on both the grey rest and
+    // the accent press); no tint-to-accent that would vanish on the blue face.
+    const ImU32 iconCol = state.disabled ? pal.textDim : pal.text;
     if (iconPx > 0.0f) {
         draw::Vec2 ts = surface.measureText(font, iconPx, glyph);
         draw::Vec2 gp{topLeft.x + (size.x - ts.x) * 0.5f,
@@ -1024,41 +1024,75 @@ void drawVectorIconButton(draw::Surface& surface, draw::Vec2 topLeft,
 }
 
 void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
-                        float r, ImU32 fg)
+                        float r, ImU32 fg, float thickness)
 {
+    const bool outline = thickness > 0.0f;
+    const float t = outline ? thickness : 2.0f;
     switch (icon) {
-    case Icon::Play:
-        surface.fillTriangle({c.x - r * 0.7f, c.y - r},
-                             {c.x - r * 0.7f, c.y + r},
-                             {c.x + r, c.y}, fg);
+    case Icon::Play: {
+        const draw::Vec2 a{c.x - r * 0.7f, c.y - r};
+        const draw::Vec2 b{c.x - r * 0.7f, c.y + r};
+        const draw::Vec2 d{c.x + r, c.y};
+        if (outline) {
+            const draw::Vec2 pts[3] = {a, b, d};
+            surface.polyline(pts, 3, fg, /*closed*/ true, t);
+        } else {
+            surface.fillTriangle(a, b, d, fg);
+        }
         break;
+    }
     case Icon::Stop:
-        surface.fillRect({c.x - r * 0.8f, c.y - r * 0.8f},
-                         {c.x + r * 0.8f, c.y + r * 0.8f}, fg, 2.0f);
+        if (outline)
+            surface.strokeRect({c.x - r * 0.8f, c.y - r * 0.8f},
+                               {c.x + r * 0.8f, c.y + r * 0.8f}, fg, 1.5f, t);
+        else
+            surface.fillRect({c.x - r * 0.8f, c.y - r * 0.8f},
+                             {c.x + r * 0.8f, c.y + r * 0.8f}, fg, 2.0f);
         break;
     case Icon::Record:
-        surface.fillCircle(c, r * 0.9f, fg, 24);
+        if (outline)
+            surface.strokeCircle(c, r * 0.85f, fg, 28, t); // ring
+        else
+            surface.fillCircle(c, r * 0.9f, fg, 24);        // disc
         break;
     case Icon::SkipToStart:
-        surface.fillRect({c.x - r, c.y - r}, {c.x - r + 2.5f, c.y + r}, fg);
-        surface.fillTriangle({c.x + r, c.y - r},
-                             {c.x + r, c.y + r},
-                             {c.x - r * 0.5f, c.y}, fg);
+        if (outline) {
+            surface.line({c.x - r, c.y - r}, {c.x - r, c.y + r}, fg, t);
+            const draw::Vec2 p[3] = {{c.x + r, c.y - r}, {c.x + r, c.y + r},
+                                     {c.x - r * 0.5f, c.y}};
+            surface.polyline(p, 3, fg, true, t);
+        } else {
+            surface.fillRect({c.x - r, c.y - r}, {c.x - r + 2.5f, c.y + r}, fg);
+            surface.fillTriangle({c.x + r, c.y - r}, {c.x + r, c.y + r},
+                                 {c.x - r * 0.5f, c.y}, fg);
+        }
         break;
     case Icon::SkipToEnd:
-        surface.fillRect({c.x + r - 2.5f, c.y - r}, {c.x + r, c.y + r}, fg);
-        surface.fillTriangle({c.x - r, c.y - r},
-                             {c.x - r, c.y + r},
-                             {c.x + r * 0.5f, c.y}, fg);
+        if (outline) {
+            surface.line({c.x + r, c.y - r}, {c.x + r, c.y + r}, fg, t);
+            const draw::Vec2 p[3] = {{c.x - r, c.y - r}, {c.x - r, c.y + r},
+                                     {c.x + r * 0.5f, c.y}};
+            surface.polyline(p, 3, fg, true, t);
+        } else {
+            surface.fillRect({c.x + r - 2.5f, c.y - r}, {c.x + r, c.y + r}, fg);
+            surface.fillTriangle({c.x - r, c.y - r}, {c.x - r, c.y + r},
+                                 {c.x + r * 0.5f, c.y}, fg);
+        }
         break;
     case Icon::Loop: {
-        surface.pathArcTo(c, r, 0.3f, 2.0f * 3.14159265f - 0.6f, 24);
-        surface.pathStroke(fg, false, 2.0f);
-        const float ax = c.x + r * std::cos(0.3f);
-        const float ay = c.y + r * std::sin(0.3f);
-        surface.fillTriangle({ax - 4.0f, ay - 1.0f},
-                             {ax + 3.0f, ay + 3.0f},
-                             {ax + 2.0f, ay - 5.0f}, fg);
+        // Lucide "repeat": two horizontal tracks in a loop, top arrowed right,
+        // bottom arrowed left.
+        const float xl = c.x - r * 0.85f, xr = c.x + r * 0.85f;
+        const float yt = c.y - r * 0.52f, yb = c.y + r * 0.52f;
+        const float ah = r * 0.42f;
+        surface.line({xl, yt}, {xr, yt}, fg, t);   // top track
+        surface.line({xl, yb}, {xr, yb}, fg, t);   // bottom track
+        surface.line({xr, yt}, {xr, yb}, fg, t);   // right turn
+        surface.line({xl, yt}, {xl, yb}, fg, t);   // left turn
+        surface.line({xr - ah, yt - ah}, {xr, yt}, fg, t); // top-right arrow ->
+        surface.line({xr - ah, yt + ah}, {xr, yt}, fg, t);
+        surface.line({xl + ah, yb - ah}, {xl, yb}, fg, t); // bottom-left arrow <-
+        surface.line({xl + ah, yb + ah}, {xl, yb}, fg, t);
         break;
     }
     case Icon::Waveform: {
@@ -1082,14 +1116,46 @@ void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
         break;
     case Icon::Spectrum:
         for (int i = 0; i < 12; ++i) {
-            const float t = i / 11.0f;
-            const float x = c.x - r * 1.1f + t * r * 2.2f;
-            const float h = r * (0.2f + 0.8f * t);
+            const float ft = i / 11.0f;
+            const float x = c.x - r * 1.1f + ft * r * 2.2f;
+            const float h = r * (0.2f + 0.8f * ft);
             surface.line({x, c.y + r * 0.9f},
                          {x, c.y + r * 0.9f - h * 1.8f}, fg, 1.5f);
         }
         break;
     }
+}
+
+void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
+                         draw::Vec2 size, const Palette& pal,
+                         const ControlState& state,
+                         const OutlineButtonStyle& style, float glyphThickness)
+{
+    // house outline chrome, no text glyph
+    drawOutlineButton(surface, draw::FontRef{}, 0.0f, topLeft, size, nullptr,
+                      pal, state, style);
+    const draw::Vec2 c{topLeft.x + size.x * 0.5f,
+                       topLeft.y + size.y * 0.5f + style.labelOffsetY};
+    const float r = std::min(size.x, size.y) * 0.30f;
+    const ImU32 fg = state.disabled ? pal.textDim
+                     : visible(style.text) ? style.text : pal.text;
+    // Record fills to a solid disc while engaged (armed); every other transport
+    // glyph is the outline shape. thickness 0 = filled.
+    const bool recArmed =
+        icon == Icon::Record && (state.selected || state.active);
+    drawTransportGlyph(surface, icon, c, r, fg, recArmed ? 0.0f : glyphThickness);
+}
+
+void drawTransportButton(ImDrawList* dl, Icon icon, const ImVec2& topLeft,
+                         const ImVec2& size, const Palette& pal,
+                         const ControlState& state,
+                         const OutlineButtonStyle& style, float glyphThickness)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTransportButton(surface, icon, draw::toDrawVec2(topLeft),
+                        draw::toDrawVec2(size), pal, state, style, glyphThickness);
 }
 
 void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
