@@ -118,6 +118,13 @@ bool outlineButton(const char* label, const ImVec2& size,
                    const paint::OutlineButtonStyle& style,
                    bool selected = false);
 
+// Focus-VISIBLE test for the item just submitted: true only when it holds
+// keyboard/gamepad nav focus AND the nav cursor is showing. ImGui hides the nav
+// cursor on a mouse click, so a pointer-focused control returns false here.
+// Drive focus rings from this (not ImGui::IsItemFocused) so a clicked control
+// doesn't wear a ring; Tab/arrow navigation still shows it.
+bool itemFocusVisible();
+
 // Segmented control: a pill group of mutually exclusive options (mono/stereo,
 // filter slope, A/B). Click a segment, or use Left/Right when focused.
 // size 0 = equal-width segments sized to the widest label. Returns true when

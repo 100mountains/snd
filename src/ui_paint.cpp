@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 
 namespace snd::ui::paint {
@@ -1023,76 +1024,151 @@ void drawVectorIconButton(draw::Surface& surface, draw::Vec2 topLeft,
         drawFocusRing(surface, topLeft, mx, pal, 4.0f);
 }
 
+namespace {
+// The real Lucide transport SVGs (ISC-licensed). White stroke so image() tints
+// the one master to any state colour. Rasterised to a texture once by
+// loadTransportIcons and blitted below -- crisp at small sizes, where a
+// hand-stroked thin polyline's anti-alias fringe would swallow a ~13px icon.
+const char* transportIconSvg(Icon icon)
+{
+    switch (icon) {
+    case Icon::Record: // lucide "circle"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/></svg>)SVG";
+    case Icon::Play: // lucide "play" (outline)
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='6 3 20 12 6 21'/></svg>)SVG";
+    case Icon::Loop: // lucide "repeat"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m17 2 4 4-4 4'/><path d='M3 11v-1a4 4 0 0 1 4-4h14'/><path d='m7 22-4-4 4-4'/><path d='M21 13v1a4 4 0 0 1-4 4H3'/></svg>)SVG";
+    case Icon::Stop: // lucide "square"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/></svg>)SVG";
+    case Icon::SkipToStart: // lucide "skip-back"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='19 20 9 12 19 4 19 20'/><line x1='5' x2='5' y1='19' y2='5'/></svg>)SVG";
+    case Icon::SkipToEnd: // lucide "skip-forward"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='5 4 15 12 5 20 5 4'/><line x1='19' x2='19' y1='5' y2='19'/></svg>)SVG";
+    default:
+        return nullptr;
+    }
+}
+
+std::unordered_map<int, SvgTexture>& transportIconCache()
+{
+    static std::unordered_map<int, SvgTexture> cache;
+    return cache;
+}
+
+const SvgTexture* transportIconTexture(Icon icon)
+{
+    auto& cache = transportIconCache();
+    auto it = cache.find(static_cast<int>(icon));
+    if (it != cache.end() && it->second.id != ImTextureID_Invalid)
+        return &it->second;
+    return nullptr;
+}
+} // namespace
+
+void loadTransportIcons()
+{
+    auto& cache = transportIconCache();
+    const Icon icons[] = {Icon::Record, Icon::Play,        Icon::Loop,
+                          Icon::Stop,   Icon::SkipToStart, Icon::SkipToEnd};
+    for (Icon ic : icons) {
+        if (cache.count(static_cast<int>(ic)))
+            continue; // idempotent; textures live for the program
+        if (const char* svg = transportIconSvg(ic))
+            cache[static_cast<int>(ic)] =
+                loadSvgTexture(svg, 40); // 2x-crisp master; tinted+downsampled at draw
+    }
+}
+
+void releaseTransportIcons()
+{
+    auto& cache = transportIconCache();
+    for (auto& entry : cache)
+        if (entry.second.id != ImTextureID_Invalid)
+            releaseTexture(entry.second.id);
+    cache.clear();
+}
+
 void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
                         float r, ImU32 fg, float thickness)
 {
     const bool outline = thickness > 0.0f;
-    const float t = outline ? thickness : 2.0f;
-    switch (icon) {
-    case Icon::Play: {
-        const draw::Vec2 a{c.x - r * 0.7f, c.y - r};
-        const draw::Vec2 b{c.x - r * 0.7f, c.y + r};
-        const draw::Vec2 d{c.x + r, c.y};
-        if (outline) {
-            const draw::Vec2 pts[3] = {a, b, d};
-            surface.polyline(pts, 3, fg, /*closed*/ true, t);
-        } else {
-            surface.fillTriangle(a, b, d, fg);
+    // Crisp path: blit the Lucide SVG rasterised at init (loadTransportIcons).
+    // The full 24-unit viewBox spans 2.4r, matching the procedural P() mapping
+    // below, and the tint recolours the white master to the state colour. Record
+    // armed (!outline) still draws the filled disc in the switch. Falls back to
+    // procedural stroking when no texture is loaded (headless/no GL).
+    if (outline) {
+        if (const SvgTexture* tex = transportIconTexture(icon)) {
+            const float h = 1.2f * r;
+            surface.image((draw::TextureRef)tex->id, {c.x - h, c.y - h},
+                          {c.x + h, c.y + h}, fg);
+            return;
         }
+    }
+    const float t = outline ? thickness : 2.0f;
+    // Map Lucide's 24x24 viewBox (origin at its centre 12,12) onto this glyph,
+    // so the shapes ARE the Lucide paths, scaled to radius r.
+    const float s = r / 10.0f;
+    auto P = [&](float vx, float vy) -> draw::Vec2 {
+        return {c.x + (vx - 12.0f) * s, c.y + (vy - 12.0f) * s};
+    };
+    constexpr float kPi = 3.14159265f;
+    switch (icon) {
+    case Icon::Play: { // lucide "play": polygon 6,3 20,12 6,21
+        const draw::Vec2 p[3] = {P(6, 3), P(20, 12), P(6, 21)};
+        if (outline)
+            surface.polyline(p, 3, fg, /*closed*/ true, t);
+        else
+            surface.fillTriangle(p[0], p[1], p[2], fg);
         break;
     }
-    case Icon::Stop:
+    case Icon::Stop: // lucide "square": rect 3,3 18x18 rx2
         if (outline)
-            surface.strokeRect({c.x - r * 0.8f, c.y - r * 0.8f},
-                               {c.x + r * 0.8f, c.y + r * 0.8f}, fg, 1.5f, t);
+            surface.strokeRect(P(3, 3), P(21, 21), fg, 2.0f * s, t);
         else
-            surface.fillRect({c.x - r * 0.8f, c.y - r * 0.8f},
-                             {c.x + r * 0.8f, c.y + r * 0.8f}, fg, 2.0f);
+            surface.fillRect(P(3, 3), P(21, 21), fg, 2.0f * s);
         break;
-    case Icon::Record:
+    case Icon::Record: // lucide "circle" r10; fills to a disc while armed
         if (outline)
-            surface.strokeCircle(c, r * 0.85f, fg, 28, t); // ring
+            surface.strokeCircle(c, r, fg, 32, t);
         else
-            surface.fillCircle(c, r * 0.9f, fg, 24);        // disc
+            surface.fillCircle(c, r * 0.82f, fg, 32);
         break;
-    case Icon::SkipToStart:
-        if (outline) {
-            surface.line({c.x - r, c.y - r}, {c.x - r, c.y + r}, fg, t);
-            const draw::Vec2 p[3] = {{c.x + r, c.y - r}, {c.x + r, c.y + r},
-                                     {c.x - r * 0.5f, c.y}};
+    case Icon::SkipToStart: { // lucide "skip-back": bar x5 + triangle 19,20 9,12 19,4
+        surface.line(P(5, 5), P(5, 19), fg, t);
+        const draw::Vec2 p[3] = {P(19, 20), P(9, 12), P(19, 4)};
+        if (outline)
             surface.polyline(p, 3, fg, true, t);
-        } else {
-            surface.fillRect({c.x - r, c.y - r}, {c.x - r + 2.5f, c.y + r}, fg);
-            surface.fillTriangle({c.x + r, c.y - r}, {c.x + r, c.y + r},
-                                 {c.x - r * 0.5f, c.y}, fg);
-        }
+        else
+            surface.fillTriangle(p[0], p[1], p[2], fg);
         break;
-    case Icon::SkipToEnd:
-        if (outline) {
-            surface.line({c.x + r, c.y - r}, {c.x + r, c.y + r}, fg, t);
-            const draw::Vec2 p[3] = {{c.x - r, c.y - r}, {c.x - r, c.y + r},
-                                     {c.x + r * 0.5f, c.y}};
+    }
+    case Icon::SkipToEnd: { // lucide "skip-forward": bar x19 + triangle 5,4 15,12 5,20
+        surface.line(P(19, 5), P(19, 19), fg, t);
+        const draw::Vec2 p[3] = {P(5, 4), P(15, 12), P(5, 20)};
+        if (outline)
             surface.polyline(p, 3, fg, true, t);
-        } else {
-            surface.fillRect({c.x + r - 2.5f, c.y - r}, {c.x + r, c.y + r}, fg);
-            surface.fillTriangle({c.x - r, c.y - r}, {c.x - r, c.y + r},
-                                 {c.x + r * 0.5f, c.y}, fg);
-        }
+        else
+            surface.fillTriangle(p[0], p[1], p[2], fg);
         break;
-    case Icon::Loop: {
-        // Lucide "repeat": two horizontal tracks in a loop, top arrowed right,
-        // bottom arrowed left.
-        const float xl = c.x - r * 0.85f, xr = c.x + r * 0.85f;
-        const float yt = c.y - r * 0.52f, yb = c.y + r * 0.52f;
-        const float ah = r * 0.42f;
-        surface.line({xl, yt}, {xr, yt}, fg, t);   // top track
-        surface.line({xl, yb}, {xr, yb}, fg, t);   // bottom track
-        surface.line({xr, yt}, {xr, yb}, fg, t);   // right turn
-        surface.line({xl, yt}, {xl, yb}, fg, t);   // left turn
-        surface.line({xr - ah, yt - ah}, {xr, yt}, fg, t); // top-right arrow ->
-        surface.line({xr - ah, yt + ah}, {xr, yt}, fg, t);
-        surface.line({xl + ah, yb - ah}, {xl, yb}, fg, t); // bottom-left arrow <-
-        surface.line({xl + ah, yb + ah}, {xl, yb}, fg, t);
+    }
+    case Icon::Loop: { // lucide "repeat": two arrowed tracks, rounded corners
+        surface.pathClear();               // top track: 3,11 -> 3,10 -arc-> 7,6 -> 21,6
+        surface.pathLineTo(P(3, 11));
+        surface.pathLineTo(P(3, 10));
+        surface.pathArcTo(P(7, 10), 4.0f * s, kPi, 1.5f * kPi, 8);
+        surface.pathLineTo(P(21, 6));
+        surface.pathStroke(fg, false, t);
+        const draw::Vec2 a1[3] = {P(17, 2), P(21, 6), P(17, 10)}; // top-right arrow
+        surface.polyline(a1, 3, fg, false, t);
+        surface.pathClear();               // bottom track: 21,13 -> 21,14 -arc-> 17,18 -> 3,18
+        surface.pathLineTo(P(21, 13));
+        surface.pathLineTo(P(21, 14));
+        surface.pathArcTo(P(17, 14), 4.0f * s, 0.0f, 0.5f * kPi, 8);
+        surface.pathLineTo(P(3, 18));
+        surface.pathStroke(fg, false, t);
+        const draw::Vec2 a2[3] = {P(7, 22), P(3, 18), P(7, 14)}; // bottom-left arrow
+        surface.polyline(a2, 3, fg, false, t);
         break;
     }
     case Icon::Waveform: {
@@ -1135,7 +1211,7 @@ void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
     drawOutlineButton(surface, draw::FontRef{}, 0.0f, topLeft, size, nullptr,
                       pal, state, style);
     const draw::Vec2 c{topLeft.x + size.x * 0.5f,
-                       topLeft.y + size.y * 0.5f + style.labelOffsetY};
+                       topLeft.y + size.y * 0.5f - 1.0f + style.labelOffsetY};
     const float r = std::min(size.x, size.y) * 0.30f;
     const ImU32 fg = state.disabled ? pal.textDim
                      : visible(style.text) ? style.text : pal.text;

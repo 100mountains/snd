@@ -7,6 +7,7 @@
 
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
+#include "imgui_internal.h" // ImGuiContext::NavCursorVisible (focus-visible)
 #include <GLFW/glfw3.h>
 
 #if defined(_WIN32)
@@ -734,7 +735,7 @@ bool gradientButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     std::string visible;
     paint::drawAnimatedButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
                               visibleButtonText(label, visible), top, bottom,
@@ -749,7 +750,7 @@ bool animatedButton(const char* label, const ImVec2& size, ImU32 top, ImU32 bott
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     const float pulse = 0.5f + 0.5f * std::sin((float)ImGui::GetTime() * 3.6f);
     std::string visible;
     paint::drawAnimatedButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
@@ -766,7 +767,7 @@ bool button(const char* label, const ImVec2& size,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
 
     std::string visible;
     paint::ButtonPaintArgs args;
@@ -779,6 +780,14 @@ bool button(const char* label, const ImVec2& size,
     args.state = &state;
     paint::drawButtonWithPainter(args, painter);
     return pressed;
+}
+
+bool itemFocusVisible()
+{
+    // Nav cursor is hidden after a mouse click and shown after a nav move, so
+    // this is true only for keyboard/gamepad focus on the item just submitted.
+    ImGuiContext* g = ImGui::GetCurrentContext();
+    return g && g->NavCursorVisible && ImGui::IsItemFocused();
 }
 
 bool outlineButton(const char* label, const ImVec2& size)
@@ -795,7 +804,7 @@ bool outlineButton(const char* label, const ImVec2& size,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     state.selected = selected;
     std::string visible;
     paint::drawOutlineButton(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, size,
@@ -831,7 +840,7 @@ bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, boo
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawVectorIconButton(ImGui::GetWindowDrawList(), p, size, icon, accent,
                                 palette(), state, active);
     return pressed;

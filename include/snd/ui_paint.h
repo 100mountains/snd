@@ -406,6 +406,15 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
 void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 center,
                         float r, ImU32 color, float thickness = 0.0f);
 
+// drawTransportGlyph blits the real Lucide transport SVGs rasterised to textures
+// so the glyphs stay crisp at button sizes -- a hand-stroked thin polyline's
+// anti-alias fringe swallows a ~13px icon (grey mush, rounded-off arrows). Call
+// loadTransportIcons once after a GL context exists (same rule as loadSvgTexture;
+// the app owns the timing). Idempotent. Without it (headless/no GL) the glyphs
+// fall back to procedural stroking. releaseTransportIcons frees the textures.
+void loadTransportIcons();
+void releaseTransportIcons();
+
 // A transport button: the house OUTLINE chrome (drawOutlineButton) with a
 // centred vector transport glyph. `glyphThickness` >0 draws the outline glyph;
 // Record shows a ring when idle and a filled disc when engaged (state.selected).

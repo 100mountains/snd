@@ -77,7 +77,7 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
 
     paint::KnobPaintArgs args;
     args.drawList = dl;
@@ -204,7 +204,7 @@ bool toggle(const char* label, bool* on)
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawToggle(dl, p, w, h, anim, gPalette, state);
 
     if (labelSize.x > 0)
@@ -282,7 +282,7 @@ bool fader(const char* id, float* value, const ImVec2& size)
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawFader(dl, p, size, *value, gPalette, state);
     return changed;
 }
@@ -316,7 +316,7 @@ bool iconButton(const char* id, const char* glyph, const ImVec2& size, ImFont* f
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     state.selected = toggled;
     paint::drawTactileIconButton(ImGui::GetWindowDrawList(), f, p, sz, glyph,
                                  gPalette, state, down, face);
@@ -347,7 +347,7 @@ bool ledButton(const char* id, const char* glyph, bool* on, bool blink,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     state.selected = *on;
     paint::drawLedButton(ImGui::GetWindowDrawList(), f, p, sz, glyph, level,
                          gPalette, state, ImGui::IsItemActive() || *on,
@@ -405,7 +405,7 @@ bool segmented(const char* id, const char* const* labels, int count,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawSegmented(ImGui::GetWindowDrawList(), font, p, sz, labels, count,
                          std::clamp(*selected, 0, count - 1), hovered, gPalette,
                          state);
@@ -447,7 +447,7 @@ bool cycleButton(const char* id, const char* const* labels, int count,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     const int shown = std::clamp(*index, 0, count - 1);
     paint::drawCycleButton(ImGui::GetWindowDrawList(), font, p, sz,
                            labels[shown] ? labels[shown] : "", shown, count,
@@ -521,7 +521,7 @@ bool keyboard(const char* id, KeyboardState& st, const ImVec2& size, int firstNo
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawKeyboard(dl, p, size, firstNote, octaves, st.mouseNote, lit,
                         gPalette, state);
     return played;
@@ -572,7 +572,7 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawPatternGrid(ImGui::GetWindowDrawList(), p, size, cells, rows, steps,
                            playheadStep, gPalette, state, cellPainter);
     return changed;
@@ -701,7 +701,7 @@ bool envelopeEditor(const char* id, std::vector<EnvPoint>& points, const ImVec2&
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
     paint::drawEnvelope(dl, p, size, points, tensions, hot, dragging, hotSeg, dragSeg,
                         gPalette, state);
     return changed;
@@ -726,7 +726,7 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size,
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
-    state.focused = ImGui::IsItemFocused();
+    state.focused = itemFocusVisible();
 
     paint::XYPadPaintArgs args;
     args.drawList = ImGui::GetWindowDrawList();
@@ -800,7 +800,7 @@ bool dragNumber(const char* label, float* value, float speed, float minV, float 
         paint::ControlState state;
         state.hovered = ImGui::IsItemHovered();
         state.active = ImGui::IsItemActive();
-        state.focused = ImGui::IsItemFocused();
+        state.focused = itemFocusVisible();
 
         const ImVec2 min = ImGui::GetItemRectMin();
         const ImVec2 max = ImGui::GetItemRectMax();
