@@ -97,9 +97,12 @@ struct OutlineButtonStyle {
     float rounding = 0.0f;
     float fontScale = 0.90f;
     // Stroke weights: resting border and the active/selected ("engaged")
-    // border. Thicken engagedThickness for a chunkier latched look.
+    // border. Equal by default (1px) so an engaged button is the same size as a
+    // resting one; raise engagedThickness only for a deliberate chunky latch.
     float borderThickness = 1.0f;
-    float engagedThickness = 1.6f;
+    float engagedThickness = 1.0f;
+    // Vertical nudge (px) for the centred label/glyph; 0 = optically centred.
+    float labelOffsetY = 0.0f;
 };
 
 struct GraphSurfaceStyle {
@@ -394,6 +397,11 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
                           const ImVec2& size, Icon icon, ImU32 accent,
                           const Palette& pal, const ControlState& state,
                           bool active = false);
+
+// A single vector transport/scope glyph (Icon), centred at `center`, scaled to
+// radius `r`, in `color`. Crisp at any size; used by the vector icon button.
+void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 center,
+                        float r, ImU32 color);
 
 void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                 const ImVec2& size, const char* text, const Palette& pal,

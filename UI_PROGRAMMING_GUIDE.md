@@ -3,6 +3,12 @@
 How to build a user interface on `snd::ui`. Complements PROGRAMMING-GUIDE.md
 (which covers the whole library); this file is only the UI layer.
 
+> **Writing for this guide:** before you add a line, ask *"does the new
+> programmer coming to this actually want to know this?"* Document what a
+> function does and how to use it. Skip the rationale for design decisions, the
+> history of how we got here, and justifications for one approach over another —
+> that belongs in commit messages, not here.
+
 ## Model
 
 `snd::ui` is **Dear ImGui** (immediate mode) plus a thin native-window shell
@@ -504,12 +510,33 @@ tree) use the split: `renderMain(...)` paints everything except overlays,
 (`ImGui::GetForegroundDrawList()` in the bridged case).
 
 **Outline icon button.** `widgets::outlineIconButton(id, name, glyph, ...,
-size, style, selected, font)` puts an icon-font glyph (70% of the button
-height, centred, never moves) in the outline-button chrome — border-first,
-`activeFill` on press, `selectedFill` while latched. Use it beside
-`outlineButton` text buttons with the same `OutlineButtonStyle` so a
+size, style, selected, font, actOnPress)` puts an icon-font glyph (70% of the
+button height, centred, never moves) in the outline-button chrome —
+border-first, `activeFill` on press, `selectedFill` while latched. Use it
+beside `outlineButton` text buttons with the same `OutlineButtonStyle` so a
 transport row reads as one family. The tactile `iconButton` remains as the
 raised-key alternative; its face is palette-derived and its glyph is pinned.
+
+**Transport button.** `widgets::transportButton(id, name, Icon, onActivate,
+&renderer, size, style, selected, actOnPress)` is the building block of a
+transport bar: it takes a transport *semantic* (`Icon::Record`, `Play`, `Stop`,
+`Loop`, `SkipToStart`, `SkipToEnd`) and renders that meaning as the matching
+Lucide house glyph in the same outline chrome as `outlineIconButton` —
+`selected` shows the engaged fill (armed/playing/cycling), `actOnPress` fires on
+mouse down for no-latency transport feel. Pick buttons by intent
+(`transportButton("play", Icon::Play, …)`) rather than wiring glyph constants.
+For a solid/filled transport glyph instead of the outline, use the vector
+`iconButton(id, Icon, …)`.
+
+**Fire on press.** Both `outlineButton` and `outlineIconButton` (and thus
+`transportButton`) take a trailing `actOnPress` flag. Default `false` = the
+conventional fire-on-release (the click only lands if the pointer is still over
+the button on mouse up). `true` = fire on mouse down (and Enter/Space) for a
+snappy, latency-free press — the transport feel.
+
+**Label nudge.** `OutlineButtonStyle::labelOffsetY` shifts the centred
+label/glyph down by N px for optical centring (e.g. a glyph that reads high in
+its box). 0 = geometric centre.
 
 **Text field.** `widgets::textField(id, std::string* text, renderer, size,
 placeholder, onCommit)` is a single-line retained editor: caret + selection,
@@ -745,6 +772,11 @@ r::Tree tree(std::move(root));
 // Each UI frame:
 r::drawImGui(tree, renderer, {360.0f, 160.0f});
 ```
+
+`canvas(...)` frames its region with a 1px panel border by default; pass the
+trailing `panelBorder=false` for a borderless canvas (a title strip or
+wordmark that paints its own chrome). `canvasClip` (in `VisualStyle`) is on by
+default — set it false when the draw should be allowed to overhang the node.
 
 Use `VisualStyle::CanvasSurfaceDraw` or the `widgets::canvas(...)` overload
 taking `draw::Surface&` for new retained custom regions that should render

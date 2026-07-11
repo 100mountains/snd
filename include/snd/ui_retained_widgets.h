@@ -413,14 +413,16 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                      Vec2 size = {120.0f, 28.0f},
                      paint::OutlineButtonStyle style = {},
                      double dragSpeed = 0.2);
+// panelBorder draws the 1px framed outline around the canvas; pass false for a
+// borderless canvas (e.g. a title strip that paints its own chrome).
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
-                 Role semanticRole = Role::Canvas);
+                 Role semanticRole = Role::Canvas, bool panelBorder = true);
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasSurfaceDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
-                 Role semanticRole = Role::Canvas);
+                 Role semanticRole = Role::Canvas, bool panelBorder = true);
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,
@@ -460,12 +462,16 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
 Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActivate = {},
                  PaintRenderer* renderer = nullptr,
                  paint::ButtonPainter painter = {});
+// actOnPress fires onActivate on mouse DOWN (and Enter/Space) for a snappy,
+// no-latency feel; the default false fires on release (the click lands only if
+// the pointer is still over the button), which is the conventional button
+// behaviour. Mirrors outlineIconButton's actOnPress.
 Node::Ptr outlineButton(NodeId id, std::string name,
                         std::function<void(Node&)> onActivate = {},
                         PaintRenderer* renderer = nullptr,
                         Vec2 size = {72.0f, 28.0f},
                         paint::OutlineButtonStyle style = {},
-                        bool selected = false);
+                        bool selected = false, bool actOnPress = false);
 Node::Ptr animatedButton(NodeId id, std::string name,
                          std::function<void(Node&)> onActivate = {},
                          PaintRenderer* renderer = nullptr,
@@ -495,6 +501,16 @@ Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
                      PaintRenderer* renderer = nullptr,
                      Vec2 size = {30.0f, 30.0f},
                      ImU32 accent = 0, bool active = false);
+// A transport button: the house OUTLINE chrome of outlineButton with a crisp
+// vector transport glyph (Icon::Record/Play/Stop/Pause../Loop) instead of a
+// font glyph -- the building block of a transport bar. Same behaviour as
+// outlineIconButton (selected = engaged fill; actOnPress fires on mouse down).
+Node::Ptr transportButton(NodeId id, std::string name, Icon icon,
+                          std::function<void(Node&)> onActivate = {},
+                          PaintRenderer* renderer = nullptr,
+                          Vec2 size = {36.0f, 18.0f},
+                          paint::OutlineButtonStyle style = {},
+                          bool selected = false, bool actOnPress = false);
 
 // Pill group of mutually exclusive options. The binding holds the selected
 // index (its min/max/step are forced to 0..count-1 step 1; a default format

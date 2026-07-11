@@ -455,6 +455,12 @@ public:
     // can use this to enter relative-cursor mode while a knob/slider is
     // being dragged (see Window::setMouseCaptured).
     const Node* pressed() const;
+    // Drop a press that outlived its MouseUp -- e.g. double-clicking a graph
+    // node spawns an OS editor window that grabs the release, so the tree would
+    // otherwise stay pressed and keep dragging the node on later moves. Clears
+    // the pressed flag without firing Activate. Returns true if a press was
+    // cleared.
+    bool cancelPress();
 
     bool dispatch(const Event& event);
     bool performAction(const NodeId& id, Action action, double value = 0.0);
@@ -488,6 +494,7 @@ private:
     NodeId focusedId_;
     NodeId hoveredId_;
     NodeId pressedId_;
+    Vec2 lastPointer_; // last pointer position, for synthesising a cancel release
 };
 
 } // namespace snd::ui::retained

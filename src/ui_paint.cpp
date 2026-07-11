@@ -1017,7 +1017,15 @@ void drawVectorIconButton(draw::Surface& surface, draw::Vec2 topLeft,
     const draw::Vec2 c{topLeft.x + size.x * 0.5f,
                        topLeft.y + size.y * 0.5f};
     const float r = std::min(size.x, size.y) * 0.28f;
+    drawTransportGlyph(surface, icon, c, r, fg);
 
+    if (state.focused && !state.disabled)
+        drawFocusRing(surface, topLeft, mx, pal, 4.0f);
+}
+
+void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
+                        float r, ImU32 fg)
+{
     switch (icon) {
     case Icon::Play:
         surface.fillTriangle({c.x - r * 0.7f, c.y - r},
@@ -1082,9 +1090,6 @@ void drawVectorIconButton(draw::Surface& surface, draw::Vec2 topLeft,
         }
         break;
     }
-
-    if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, mx, pal, 4.0f);
 }
 
 void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
@@ -1315,17 +1320,17 @@ void drawOutlineButton(draw::Surface& surface, draw::FontRef font,
         border = visible(style.selectedBorder) ? style.selectedBorder : engagedDefault;
     if (state.disabled && visible(border))
         border = mix(border, pal.frameBright, 0.65f);
-    if (visible(border))
-        surface.strokeRect(topLeft, mx, border, r,
-                           state.active || state.selected
-                               ? style.engagedThickness
-                               : style.borderThickness);
+    if (visible(border)) {
+        const float bt = state.active || state.selected ? style.engagedThickness
+                                                        : style.borderThickness;
+        surface.strokeRect(topLeft, mx, border, r, bt);
+    }
 
     if (text && text[0] && fontSizePx > 0.0f) {
         const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
         const draw::Vec2 p{
             topLeft.x + std::max(0.0f, size.x - ts.x) * 0.5f,
-            topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f};
+            topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f + style.labelOffsetY};
         const ImU32 textCol = state.disabled ? pal.textDim
                                              : visible(style.text) ? style.text : pal.text;
         surface.text(font, fontSizePx, p, textCol, text);

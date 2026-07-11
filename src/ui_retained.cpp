@@ -1023,6 +1023,31 @@ const Node* Tree::pressed() const
     return pressedId_.empty() ? nullptr : find(pressedId_);
 }
 
+bool Tree::cancelPress()
+{
+    if (pressedId_.empty())
+        return false;
+    if (Node* pressed = find(pressedId_)) {
+        pressed->setPressed(false);
+        // Deliver a terminating MouseUp so gesture state kept inside the node's
+        // own setOnEvent handler (drags, rubber-band selections) unwinds exactly
+        // as a real release would. Without it the press only clears at the tree
+        // level while the handler keeps dragging on later hover moves -- the
+        // "sticks to the cursor" bug when an OS window grabs the real release.
+        // This is a cancel, not a click, so it bypasses the activate-on-release
+        // path in dispatch() and never fires Action::Activate.
+        if (isInteractive(*pressed)) {
+            Event up;
+            up.type = EventType::MouseUp;
+            up.button = MouseButton::Left;
+            up.position = lastPointer_;
+            pressed->handleEvent(up);
+        }
+    }
+    pressedId_.clear();
+    return true;
+}
+
 const Node* Tree::hovered() const
 {
     return hoveredId_.empty() ? nullptr : find(hoveredId_);
@@ -1046,6 +1071,11 @@ bool Tree::dispatch(const Event& event)
 {
     if (!root_)
         return false;
+
+    if (event.type == EventType::MouseMove || event.type == EventType::MouseDown ||
+        event.type == EventType::MouseUp || event.type == EventType::MouseWheel ||
+        event.type == EventType::ContextMenu)
+        lastPointer_ = event.position;
 
     if (event.type == EventType::MouseMove) {
         Node* target = hitTest(event.position);

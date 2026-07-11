@@ -1,5 +1,6 @@
 #include "snd/ui_retained_widgets.h"
 
+#include "snd/icons.h" // ICON_LC_* transport glyphs
 #include "ui_draw_imgui.h"
 
 #include "imgui.h"
@@ -2505,6 +2506,14 @@ bool dispatchImGuiInput(Tree& tree, const ImVec2& origin, bool mouseCaptured)
             consumed = tree.dispatch(event) || consumed;
         }
     }
+
+    // A press ends on MouseUp -- unless an OS window spawned mid-gesture (e.g.
+    // double-clicking a graph node opens its editor) grabbed the release,
+    // leaving the tree pressed so it keeps dragging the node on later moves
+    // ("it sticks to the cursor"). Reconcile against the pointer state already
+    // in io: with no button held, no press can be live, so drop any stale one.
+    if (!io.MouseDown[0] && !io.MouseDown[1] && !io.MouseDown[2])
+        tree.cancelPress();
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
         // murk opens context menus on right mouse-DOWN, not on release
@@ -5093,7 +5102,8 @@ Node::Ptr textField(NodeId id, std::string* text, PaintRenderer* renderer,
 
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasDraw draw,
-                 PaintRenderer* renderer, bool focusable, Role semanticRole)
+                 PaintRenderer* renderer, bool focusable, Role semanticRole,
+                 bool panelBorder)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Canvas);
@@ -5106,7 +5116,7 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
-        style.panelBorder = true;
+        style.panelBorder = panelBorder;
         style.canvasDraw = std::move(draw);
         renderer->setStyle(sid, style);
     }
@@ -5115,7 +5125,8 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
 
 Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasSurfaceDraw draw,
-                 PaintRenderer* renderer, bool focusable, Role semanticRole)
+                 PaintRenderer* renderer, bool focusable, Role semanticRole,
+                 bool panelBorder)
 {
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Canvas);
@@ -5128,7 +5139,7 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Canvas;
-        style.panelBorder = true;
+        style.panelBorder = panelBorder;
         style.canvasSurfaceDraw = std::move(draw);
         renderer->setStyle(sid, style);
     }
@@ -5827,14 +5838,41 @@ Node::Ptr button(NodeId id, std::string name, std::function<void(Node&)> onActiv
     return node;
 }
 
+// Fire onActivate on mouse DOWN (and Enter/Space) instead of on release -- no
+// click latency. The button's default release-activation stays silent because
+// no onActivate is installed on it; onEvent runs before the tree's own key
+// mapping so Enter/Space still work. Shared by the outline/transport buttons.
+static void installActOnPress(Node& node, std::function<void(Node&)> onActivate)
+{
+    auto cb = std::make_shared<std::function<void(Node&)>>(std::move(onActivate));
+    node.setOnEvent([cb](Node& n, const Event& e) {
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Left) {
+            (*cb)(n);
+            return true;
+        }
+        if (e.type == EventType::KeyDown &&
+            (e.key == Key::Enter || e.key == Key::Space)) {
+            (*cb)(n);
+            return true;
+        }
+        return false;
+    });
+}
+
 Node::Ptr outlineButton(NodeId id, std::string name,
                         std::function<void(Node&)> onActivate,
                         PaintRenderer* renderer, Vec2 size,
-                        paint::OutlineButtonStyle outlineStyle, bool selected)
+                        paint::OutlineButtonStyle outlineStyle, bool selected,
+                        bool actOnPress)
 {
     NodeId sid = id;
-    auto node = button(std::move(id), std::move(name), std::move(onActivate), nullptr);
+    auto node = button(std::move(id), std::move(name),
+                       actOnPress ? std::function<void(Node&)>{}
+                                  : std::move(onActivate),
+                       nullptr);
     node->setIntrinsicSize(size);
+    if (actOnPress && onActivate)
+        installActOnPress(*node, std::move(onActivate));
     if (selected) {
         Semantics sem = node->semantics();
         sem.states |= SemanticState::Selected;
@@ -5921,27 +5959,8 @@ Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
                                   : std::move(onActivate),
                        nullptr);
     node->setIntrinsicSize(size);
-    if (actOnPress && onActivate) {
-        // Transport feel: fire on mouse DOWN (and Enter/Space), not on
-        // release -- no click latency. The default release-activation stays
-        // silent because no onActivate is installed; onEvent runs before the
-        // tree's own key mapping so Enter/Space still work.
-        auto cb = std::make_shared<std::function<void(Node&)>>(
-            std::move(onActivate));
-        node->setOnEvent([cb](Node& n, const Event& e) {
-            if (e.type == EventType::MouseDown &&
-                e.button == MouseButton::Left) {
-                (*cb)(n);
-                return true;
-            }
-            if (e.type == EventType::KeyDown &&
-                (e.key == Key::Enter || e.key == Key::Space)) {
-                (*cb)(n);
-                return true;
-            }
-            return false;
-        });
-    }
+    if (actOnPress && onActivate)
+        installActOnPress(*node, std::move(onActivate));
     if (renderer) {
         VisualStyle vs;
         vs.kind = VisualKind::OutlineIconButton;
@@ -5952,6 +5971,37 @@ Node::Ptr outlineIconButton(NodeId id, std::string name, std::string glyph,
         renderer->setStyle(sid, vs);
     }
     return node;
+}
+
+// The transport semantic -> its Lucide house glyph. Lucide is an outline set,
+// so the whole transport row reads as one crisp, consistent style.
+static const char* lucideTransportGlyph(Icon icon)
+{
+    switch (icon) {
+    case Icon::Record: return ICON_LC_CIRCLE;
+    case Icon::Play: return ICON_LC_PLAY;
+    case Icon::Stop: return ICON_LC_SQUARE;
+    case Icon::Loop: return ICON_LC_REPEAT;
+    case Icon::SkipToStart: return ICON_LC_SKIP_BACK;
+    case Icon::SkipToEnd: return ICON_LC_SKIP_FORWARD;
+    default: return ICON_LC_CIRCLE;
+    }
+}
+
+Node::Ptr transportButton(NodeId id, std::string name, Icon icon,
+                          std::function<void(Node&)> onActivate,
+                          PaintRenderer* renderer, Vec2 size,
+                          paint::OutlineButtonStyle style, bool selected,
+                          bool actOnPress)
+{
+    // A transport button is an outline icon button whose glyph is chosen from
+    // the transport semantic -- the Lucide glyph, so the shapes match the rest
+    // of the icon vocabulary exactly. selected = engaged fill; actOnPress fires
+    // on mouse down.
+    return outlineIconButton(std::move(id), std::move(name),
+                             lucideTransportGlyph(icon), std::move(onActivate),
+                             renderer, size, std::move(style), selected,
+                             IconFont::Lucide, actOnPress);
 }
 
 Node::Ptr iconButton(NodeId id, std::string name, Icon icon,
