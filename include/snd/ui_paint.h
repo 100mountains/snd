@@ -157,6 +157,8 @@ struct GraphSurfaceStyle {
     ImU32 rimD = 0;
     ImU32 rimE = 0;
     ImU32 rimF = 0;
+    // Hover a pin -> a tooltip showing its GraphPort::label (murk parity).
+    bool portTooltips = true;
 };
 
 // House node skins: murk's five (Bob GraphEditorPanel::specFor) plus the
@@ -216,6 +218,13 @@ void drawFocusRing(draw::Surface& surface, draw::Vec2 min, draw::Vec2 max,
                    const Palette& pal, float rounding, float expand = 2.0f);
 void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
                    const Palette& pal, float rounding, float expand = 2.0f);
+
+// A hover tooltip box: palette frame fill, frameBright border, text, drawn
+// at `anchor` (its top-left sits down-right of the anchor and is nudged back
+// inside `clipMax` when given). Same look as the immediate snd::ui::tooltip.
+void drawTooltip(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                 draw::Vec2 anchor, const char* text, const Palette& pal,
+                 draw::Vec2 clipMax = {0.0f, 0.0f});
 
 void drawGradientPanel(draw::Surface& surface, draw::Vec2 topLeft,
                        draw::Vec2 size, ImU32 topLeftColor,

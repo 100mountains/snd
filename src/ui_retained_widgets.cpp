@@ -3713,6 +3713,58 @@ Vec2 screenToGraph(const GraphViewport& viewport, Vec2 screenPoint)
             (screenPoint.y - viewport.pan.y) / z};
 }
 
+// Connector tooltip (murk parity): while a pin is hovered for a moment,
+// draw its GraphPort::label. Timing lives in GraphSurfaceState (which pin,
+// since when) so the delay survives across frames. Shared by both render
+// paths; call it LAST so the tooltip sits over the graph.
+void drawGraphPortTooltip(draw::Surface& surface, GraphSurfaceState& state,
+                          const std::vector<GraphNode>& nodes,
+                          const GraphSurfaceStyle& graphStyle, Rect bounds,
+                          const draw::FrameContext& context)
+{
+    if (!graphStyle.portTooltips ||
+        state.hovered.kind != GraphHitKind::Port) {
+        state.tooltipKey.clear();
+        return;
+    }
+    // resolve the hovered port's label
+    const std::string* label = nullptr;
+    for (const GraphNode& n : nodes) {
+        if (n.id != state.hovered.nodeId)
+            continue;
+        for (const GraphPort& p : n.inputs)
+            if (p.id == state.hovered.portId)
+                label = &p.label;
+        for (const GraphPort& p : n.outputs)
+            if (p.id == state.hovered.portId)
+                label = &p.label;
+        break;
+    }
+    if (!label || label->empty()) {
+        state.tooltipKey.clear();
+        return;
+    }
+    const std::string key = state.hovered.nodeId + "/" + state.hovered.portId;
+    if (state.tooltipKey != key) {
+        state.tooltipKey = key;
+        state.tooltipStart = context.timeSeconds;
+    }
+    if (context.timeSeconds - state.tooltipStart < 0.4) // murk hover delay
+        return;
+
+    draw::Vec2 at;
+    if (context.pointerValid) {
+        at = context.pointer;
+    } else {
+        const Vec2 pin = graphToScreen(state.viewport, state.hovered.graphPosition);
+        at = {bounds.x + pin.x, bounds.y + pin.y};
+    }
+    paint::drawTooltip(surface, context.font,
+                       context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f,
+                       at, label->c_str(), palette(),
+                       {bounds.x + bounds.w, bounds.y + bounds.h});
+}
+
 GraphHit hitTestGraph(const GraphViewport& viewport,
                       const std::vector<GraphNode>& nodes,
                       const std::vector<GraphCable>& cables,
@@ -5197,6 +5249,18 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 dl.AddRect(topLeft(r), bottomRight(r),
                            IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
             }
+
+            // connector tooltip (murk parity), ImGui-backed path: build a
+            // FrameContext from ImGui globals and reuse the shared helper.
+            draw::ImGuiSurface tipSurface(&dl);
+            draw::FrameContext tctx;
+            tctx.font = draw::fontRef(ImGui::GetFont());
+            tctx.fontSizePx = ImGui::GetFontSize();
+            tctx.timeSeconds = ImGui::GetTime();
+            tctx.pointer = {ImGui::GetIO().MousePos.x, ImGui::GetIO().MousePos.y};
+            tctx.pointerValid = true;
+            drawGraphPortTooltip(tipSurface, state, nodes, graphStyle, bounds,
+                                 tctx);
         };
         style.canvasSurfaceDraw =
             [&state, &nodes, &cables, graphStyle](
@@ -5379,6 +5443,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     surface.strokeRect(topLeftDraw(r), bottomRightDraw(r),
                                        IM_COL32(0xff, 0xc2, 0x4a, 0xB3), 0.0f);
                 }
+
+                // connector tooltip (murk parity): hovering a pin for a
+                // moment shows its label. Drawn LAST so it sits over the
+                // graph; timing tracked in state (which pin, since when).
+                drawGraphPortTooltip(surface, state, nodes, graphStyle, bounds,
+                                     context);
             };
         renderer->setStyle(sid, style);
     }

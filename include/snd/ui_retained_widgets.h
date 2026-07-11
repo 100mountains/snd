@@ -281,6 +281,9 @@ struct GraphSurfaceState {
     GraphHit cablePreviewTarget;
     Vec2 cablePreviewPosition;
     bool cablePreviewValid = false;
+    // port-tooltip hover timing (which pin, and since when)
+    std::string tooltipKey;
+    double tooltipStart = 0.0;
 };
 
 struct GraphSurfaceCallbacks {

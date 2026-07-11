@@ -641,6 +641,12 @@ edge render as SOCKETS: the fill runs to the edge over the node border and
 the outline skips that side, so a wire reads as plugging into the box. Pins
 that straddle the edge (murk's) keep the classic full outline.
 
+Hovering a pin shows a connector tooltip with that port's `GraphPort::label`
+(same look as `snd::ui::tooltip`, after a short delay) — `graphSurface` owns
+the timing and draws it; `GraphSurfaceStyle::portTooltips` (default on) opts
+out. `paint::drawTooltip(surface, font, sizePx, anchor, text, pal, clipMax)`
+is the reusable helper.
+
 Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
 `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an
 editor or inspector. Double-click on empty canvas fires

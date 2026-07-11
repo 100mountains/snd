@@ -3016,6 +3016,28 @@ void drawSectionHeader(draw::Surface& surface, draw::FontRef font,
                      withAlpha(pal.frameBright, 0xAA), 1.0f);
 }
 
+void drawTooltip(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                 draw::Vec2 anchor, const char* text, const Palette& pal,
+                 draw::Vec2 clipMax)
+{
+    if (!text || !text[0] || fontSizePx < 1.0f)
+        return;
+    const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
+    const float padX = 7.0f, padY = 4.0f;
+    draw::Vec2 tl{anchor.x + 14.0f, anchor.y + 14.0f}; // down-right of the cursor
+    const draw::Vec2 sz{ts.x + padX * 2.0f, ts.y + padY * 2.0f};
+    if (clipMax.x > 0.0f && tl.x + sz.x > clipMax.x)
+        tl.x = std::max(0.0f, clipMax.x - sz.x);
+    if (clipMax.y > 0.0f && tl.y + sz.y > clipMax.y)
+        tl.y = anchor.y - 14.0f - sz.y; // flip above the cursor
+    tl.x = std::round(tl.x);
+    tl.y = std::round(tl.y);
+    const draw::Vec2 br{tl.x + sz.x, tl.y + sz.y};
+    surface.fillRect(tl, br, pal.frame, 3.0f);
+    surface.strokeRect(tl, br, pal.frameBright, 3.0f);
+    surface.text(font, fontSizePx, {tl.x + padX, tl.y + padY}, pal.text, text);
+}
+
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        const char* text, float fontSize, float width,
                        const Palette& pal)
