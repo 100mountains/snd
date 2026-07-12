@@ -85,6 +85,40 @@ private:
 std::vector<std::string> playbackDevices();
 std::vector<std::string> captureDevices();
 
+// Detailed device information for settings UIs. `channels == 0` means the
+// backend reports "any channel count"; `sampleRate == 0` means "any rate".
+struct DeviceNativeFormat {
+    uint32_t channels = 0;
+    uint32_t sampleRate = 0;
+};
+
+struct DeviceInfo {
+    std::string name;
+    bool isDefault = false;
+    std::vector<DeviceNativeFormat> nativeFormats;
+};
+
+std::vector<DeviceInfo> playbackDeviceInfos();
+std::vector<DeviceInfo> captureDeviceInfos();
+bool playbackDeviceInfo(const std::string& name, DeviceInfo& out);
+bool captureDeviceInfo(const std::string& name, DeviceInfo& out);
+
+// Settings used when opening a device. bufferFrames/bufferMilliseconds are
+// hints; backends may choose a nearby period size. `periods == 0` keeps the
+// backend default. `activeChannels` is a 0-based enable mask; empty = all.
+// Playback devices silence inactive channels after the callback returns.
+// Capture devices report the mask for callers/UI; capture callbacks still
+// receive the opened channel count.
+struct DeviceOptions {
+    uint32_t sampleRate = 48000;
+    uint32_t channels = 2;
+    uint32_t bufferFrames = 0;
+    uint32_t bufferMilliseconds = 0;
+    uint32_t periods = 0;
+    std::string deviceName;
+    std::vector<uint32_t> activeChannels;
+};
+
 // Playback device. The callback runs on the audio thread: no allocation, no
 // locks, no I/O in it.
 class Device {
@@ -99,6 +133,7 @@ public:
     // deviceName from playbackDevices(); empty = system default.
     bool open(uint32_t sampleRate = 48000, uint32_t channels = 2, Callback cb = {},
               const std::string& deviceName = {});
+    bool open(const DeviceOptions& options, Callback cb = {});
     void close();
     bool start();
     void stop();
@@ -107,6 +142,9 @@ public:
     std::string name() const;
     uint32_t sampleRate() const;
     uint32_t channels() const;
+    uint32_t bufferFrames() const;
+    uint32_t periods() const;
+    std::vector<uint32_t> activeChannels() const;
 
 private:
     struct Impl;
@@ -126,9 +164,17 @@ public:
     // deviceName from captureDevices(); empty = system default.
     bool open(uint32_t sampleRate = 48000, uint32_t channels = 1, Callback cb = {},
               const std::string& deviceName = {});
+    bool open(const DeviceOptions& options, Callback cb = {});
     void close();
     bool start();
     void stop();
+    bool isOpen() const;
+    std::string name() const;
+    uint32_t sampleRate() const;
+    uint32_t channels() const;
+    uint32_t bufferFrames() const;
+    uint32_t periods() const;
+    std::vector<uint32_t> activeChannels() const;
 
 private:
     struct Impl;
@@ -144,6 +190,7 @@ public:
 
     bool open(uint32_t sampleRate = 48000, uint32_t channels = 2,
               const std::string& deviceName = {});
+    bool open(const DeviceOptions& options);
     void close();
 
     // The buffer must outlive playback. Sample-rate conversion is not done;

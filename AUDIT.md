@@ -51,27 +51,6 @@ per block without resizing, and either queue AU parameter changes consistently
 with VST3 or explicitly narrow the public contract after owner approval. Add a
 selftest that exercises AU parameter changes while processing.
 
-#### A2. MIDI/control event buffers need a bounded realtime contract
-
-Evidence: `snd::midi::Buffer` and `snd::control::Buffer` are `std::vector`
-aliases. `src/plugin_client/vst3_wrapper.cpp` clears and appends MIDI events
-inside `process()`, `src/plugin_host/vst3/vst3_format.cpp` appends emitted MIDI
-to a caller-provided vector in `processMidi()`, and `Processor::emitControl()`
-pushes into a control vector from the processor path. `control::Event` also
-carries a `std::string` name while documenting audio-thread emission. The
-in-tree `Graph` currently processes stereo audio only and never binds
-`_setControlBuffers()`.
-
-Risk: event emission can allocate on the audio thread unless every caller
-pre-reserves capacity perfectly. The control bus is also exposed as an
-in-process graph concept before the in-tree graph owns routing for it.
-
-Recommended change: choose one explicit realtime event-buffer model before
-heavier bob graph work: fixed-capacity block buffers, a required reserve-at-
-prepare contract, or a small POD/id encoding for control targets. Implement
-graph control routing or keep the control bus documented as an API surface
-until a routed graph exists.
-
 #### A3. Root design coverage lags the current SDK/backends
 
 Evidence: `DESIGN.md` accurately covers the original hosting architecture but
@@ -104,6 +83,11 @@ process context before `processor_->process()` if the finding holds, and add a
 small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
+
+- Uncommitted at `3d4b411`: resolved A2 with fixed-capacity MIDI/control block
+  buffers, POD control target IDs, typed graph edges, allocation-free graph
+  event fan-in, and MIDI/control routing in the graph's prepared topological
+  schedule; covered by the graph selftest and Bob3 headless contract test.
 
 - Uncommitted documentation hygiene at audited commit
   `bb98209e009095769dae5fe8dd64bd1452190c29`: recorded the architect working

@@ -2799,6 +2799,60 @@ media_done:;
             bool editorOpen() const override { return false; }
         };
 
+        struct EventNode final : snd::plugin::Instance {
+            explicit EventNode(bool source) : source(source) {}
+            snd::plugin::Description d;
+            std::vector<snd::plugin::Parameter*> noParams;
+            bool source = false;
+            int note = -1;
+            uint32_t target = 0;
+
+            const snd::plugin::Description& description() const override { return d; }
+            bool prepare(double, uint32_t) override { return true; }
+            void unprepare() override {}
+            bool process(const float* const*, uint32_t, float* const* out,
+                         uint32_t, uint32_t frames) override
+            {
+                for (uint32_t channel = 0; channel < 2; ++channel)
+                    std::fill(out[channel], out[channel] + frames, 0.0f);
+                return true;
+            }
+            bool processEvents(const float* const* in, uint32_t inChannels,
+                               float* const* out, uint32_t outChannels,
+                               uint32_t frames, const snd::midi::Buffer& midiIn,
+                               snd::midi::Buffer* midiOut,
+                               const snd::control::Buffer& controlIn,
+                               snd::control::Buffer* controlOut) override
+            {
+                if (!process(in, inChannels, out, outChannels, frames))
+                    return false;
+                if (source)
+                    return midiOut && controlOut &&
+                           midiOut->push_back(
+                               snd::midi::Message::noteOn(0, 64, 100, 3)) &&
+                           controlOut->push_back(
+                               snd::control::Event::paramSet(0x10203040u, 0.75f, 5));
+                if (!midiIn.empty()) note = midiIn[0].data1;
+                if (!controlIn.empty()) target = controlIn[0].target;
+                return true;
+            }
+            void idle() override {}
+            const std::vector<snd::plugin::Parameter*>& parameters() const override
+            {
+                return noParams;
+            }
+            snd::plugin::Parameter* parameterById(const std::string&) const override
+            {
+                return nullptr;
+            }
+            bool saveState(std::vector<uint8_t>&) override { return false; }
+            bool loadState(const uint8_t*, size_t) override { return false; }
+            bool hasEditor() override { return false; }
+            bool openEditor(const std::string&) override { return false; }
+            void closeEditor() override {}
+            bool editorOpen() const override { return false; }
+        };
+
         snd::plugin::Graph g;
         int delayed = g.addNode(std::make_unique<FakeDelay>());
         ok20 = g.connect(snd::plugin::Graph::kInput, delayed) &&
@@ -2835,6 +2889,24 @@ media_done:;
                        residue);
         } else
             printf("FAIL (graph build/prepare)\n");
+
+        auto source = std::make_unique<EventNode>(true);
+        auto sink = std::make_unique<EventNode>(false);
+        auto* sinkResult = sink.get();
+        snd::plugin::Graph events;
+        const int sourceNode = events.addNode(std::move(source));
+        const int sinkNode = events.addNode(std::move(sink));
+        snd::midi::Buffer noMidi;
+        ok20 = ok20 &&
+               events.connect(sourceNode, sinkNode,
+                              snd::plugin::GraphEdgeType::Midi) &&
+               events.connect(sourceNode, sinkNode,
+                              snd::plugin::GraphEdgeType::Control) &&
+               events.prepare(48000.0, 64) &&
+               events.processEvents(nullptr, nullptr, 64, noMidi) &&
+               sinkResult->note == 64 && sinkResult->target == 0x10203040u;
+        printf(ok20 ? "      typed events: PASS (MIDI + control routed)\n"
+                    : "      typed events: FAIL\n");
     }
 
     printf("[21/24] SDK instrument:  ");

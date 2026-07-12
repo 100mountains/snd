@@ -1,5 +1,5 @@
-// snd::plugin::Graph -- a stereo processing graph with arbitrary routing and
-// automatic latency compensation (the AudioProcessorGraph replacement).
+// snd::plugin::Graph -- a typed audio/MIDI/control processing graph with
+// automatic audio latency compensation (the AudioProcessorGraph replacement).
 // Parallel paths that merge are delay-aligned using each node's reported
 // latencySamples(), so a phase-linear EQ in one branch no longer combs
 // against the dry branch.
@@ -13,6 +13,12 @@
 #include <memory>
 
 namespace snd::plugin {
+
+enum class GraphEdgeType {
+    Audio,
+    Midi,
+    Control,
+};
 
 class Graph {
 public:
@@ -30,8 +36,8 @@ public:
     bool removeNode(int node); // disconnects its edges too
     Instance* instance(int node) const;
 
-    bool connect(int from, int to);
-    bool disconnect(int from, int to);
+    bool connect(int from, int to, GraphEdgeType type = GraphEdgeType::Audio);
+    bool disconnect(int from, int to, GraphEdgeType type = GraphEdgeType::Audio);
 
     // Prepares every node, orders the graph, and computes the compensation
     // delays. False on a cycle or a node that failed to prepare.
@@ -43,6 +49,8 @@ public:
 
     // Stereo in/out. frames <= maxBlockFrames.
     bool process(const float* const* in, float* const* out, uint32_t frames);
+    bool processEvents(const float* const* in, float* const* out, uint32_t frames,
+                       const midi::Buffer& midiIn, midi::Buffer* midiOut = nullptr);
 
 private:
     struct Impl;

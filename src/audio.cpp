@@ -35,6 +35,7 @@ void* dlsym(void* lib, const char* sym)
 #include <cstdio>
 #include <fstream>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace snd::audio {
@@ -97,10 +98,122 @@ std::vector<std::string> deviceNames(bool playback)
     return out;
 }
 
+DeviceInfo toDeviceInfo(const ma_device_info& info)
+{
+    DeviceInfo out;
+    out.name = info.name;
+    out.isDefault = info.isDefault != 0;
+    out.nativeFormats.reserve(info.nativeDataFormatCount);
+    for (ma_uint32 i = 0; i < info.nativeDataFormatCount; ++i) {
+        DeviceNativeFormat fmt;
+        fmt.channels = info.nativeDataFormats[i].channels;
+        fmt.sampleRate = info.nativeDataFormats[i].sampleRate;
+        out.nativeFormats.push_back(fmt);
+    }
+    return out;
+}
+
+bool detailedDeviceInfo(bool playback, const std::string& name,
+                        DeviceInfo& out)
+{
+    ma_context* ctx = globalContext();
+    if (!ctx)
+        return false;
+
+    const ma_device_id* id = findDeviceId(playback, name);
+    if (!name.empty() && !id)
+        return false;
+
+    ma_device_info info{};
+    const ma_device_type type =
+        playback ? ma_device_type_playback : ma_device_type_capture;
+    if (ma_context_get_device_info(ctx, type, id, &info) != MA_SUCCESS)
+        return false;
+    out = toDeviceInfo(info);
+    return true;
+}
+
+std::vector<DeviceInfo> detailedDeviceInfos(bool playback)
+{
+    std::vector<DeviceInfo> out;
+    ma_context* ctx = globalContext();
+    if (!ctx)
+        return out;
+    ma_device_info* playbackInfos = nullptr;
+    ma_device_info* captureInfos = nullptr;
+    ma_uint32 playbackCount = 0, captureCount = 0;
+    if (ma_context_get_devices(ctx, &playbackInfos, &playbackCount, &captureInfos,
+                               &captureCount) != MA_SUCCESS)
+        return out;
+
+    ma_device_info* infos = playback ? playbackInfos : captureInfos;
+    ma_uint32 count = playback ? playbackCount : captureCount;
+    out.reserve(count);
+    const ma_device_type type =
+        playback ? ma_device_type_playback : ma_device_type_capture;
+    for (ma_uint32 i = 0; i < count; ++i) {
+        ma_device_info detailed{};
+        if (ma_context_get_device_info(ctx, type, &infos[i].id, &detailed) ==
+            MA_SUCCESS) {
+            out.push_back(toDeviceInfo(detailed));
+        } else {
+            out.push_back(toDeviceInfo(infos[i]));
+        }
+    }
+    return out;
+}
+
+std::vector<uint32_t> normalizedActiveChannels(
+    const std::vector<uint32_t>& activeChannels, uint32_t channels)
+{
+    std::vector<uint32_t> out;
+    if (channels == 0)
+        return out;
+    if (activeChannels.empty()) {
+        out.reserve(channels);
+        for (uint32_t c = 0; c < channels; ++c)
+            out.push_back(c);
+        return out;
+    }
+
+    out.reserve(activeChannels.size());
+    for (uint32_t c : activeChannels) {
+        if (c >= channels)
+            continue;
+        if (std::find(out.begin(), out.end(), c) == out.end())
+            out.push_back(c);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+std::vector<uint8_t> activeMask(const std::vector<uint32_t>& activeChannels,
+                                uint32_t channels)
+{
+    if (activeChannels.size() >= channels)
+        return {};
+    std::vector<uint8_t> mask(channels, 0);
+    for (uint32_t c : activeChannels) {
+        if (c < channels)
+            mask[c] = 1;
+    }
+    return mask;
+}
+
 } // namespace
 
 std::vector<std::string> playbackDevices() { return deviceNames(true); }
 std::vector<std::string> captureDevices() { return deviceNames(false); }
+std::vector<DeviceInfo> playbackDeviceInfos() { return detailedDeviceInfos(true); }
+std::vector<DeviceInfo> captureDeviceInfos() { return detailedDeviceInfos(false); }
+bool playbackDeviceInfo(const std::string& name, DeviceInfo& out)
+{
+    return detailedDeviceInfo(true, name, out);
+}
+bool captureDeviceInfo(const std::string& name, DeviceInfo& out)
+{
+    return detailedDeviceInfo(false, name, out);
+}
 
 // ---------------------------------------------------------------------------
 // load / save
@@ -706,16 +819,28 @@ bool resample(const Buffer& in, uint32_t newRate, Buffer& out, std::string* erro
 struct Device::Impl {
     ma_device device{};
     Callback callback;
+    std::vector<uint32_t> activeChannels;
+    std::vector<uint8_t> activeChannelMask;
     bool open = false;
 
     static void maCallback(ma_device* dev, void* output, const void* /*input*/, ma_uint32 frames)
     {
         auto* self = (Impl*)dev->pUserData;
         auto channels = dev->playback.channels;
-        if (self->callback)
+        if (self->callback) {
             self->callback((float*)output, frames, channels);
-        else
+            if (self->activeChannelMask.size() == channels) {
+                float* out = (float*)output;
+                for (ma_uint32 f = 0; f < frames; ++f) {
+                    for (ma_uint32 c = 0; c < channels; ++c) {
+                        if (!self->activeChannelMask[c])
+                            out[f * channels + c] = 0.0f;
+                    }
+                }
+            }
+        } else {
             ma_silence_pcm_frames(output, frames, ma_format_f32, channels);
+        }
     }
 };
 
@@ -725,19 +850,38 @@ Device::~Device() { close(); }
 bool Device::open(uint32_t sampleRate, uint32_t channels, Callback cb,
                   const std::string& deviceName)
 {
+    DeviceOptions options;
+    options.sampleRate = sampleRate;
+    options.channels = channels;
+    options.deviceName = deviceName;
+    return open(options, std::move(cb));
+}
+
+bool Device::open(const DeviceOptions& options, Callback cb)
+{
     close();
     impl->callback = std::move(cb);
+    impl->activeChannels.clear();
+    impl->activeChannelMask.clear();
 
     ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
     cfg.playback.format = ma_format_f32;
-    cfg.playback.channels = channels;
-    cfg.playback.pDeviceID = findDeviceId(true, deviceName);
-    cfg.sampleRate = sampleRate;
+    cfg.playback.channels = options.channels;
+    cfg.playback.pDeviceID = findDeviceId(true, options.deviceName);
+    cfg.sampleRate = options.sampleRate;
+    cfg.periodSizeInFrames = options.bufferFrames;
+    cfg.periodSizeInMilliseconds = options.bufferMilliseconds;
+    cfg.periods = options.periods;
     cfg.dataCallback = Impl::maCallback;
     cfg.pUserData = impl.get();
 
     if (ma_device_init(globalContext(), &cfg, &impl->device) != MA_SUCCESS)
         return false;
+    impl->activeChannels =
+        normalizedActiveChannels(options.activeChannels, impl->device.playback.channels);
+    if (!options.activeChannels.empty())
+        impl->activeChannelMask =
+            activeMask(impl->activeChannels, impl->device.playback.channels);
     impl->open = true;
     return true;
 }
@@ -747,6 +891,8 @@ void Device::close()
     if (impl->open) {
         ma_device_uninit(&impl->device);
         impl->open = false;
+        impl->activeChannels.clear();
+        impl->activeChannelMask.clear();
     }
 }
 
@@ -757,6 +903,18 @@ bool Device::isOpen() const { return impl->open; }
 std::string Device::name() const { return impl->open ? impl->device.playback.name : ""; }
 uint32_t Device::sampleRate() const { return impl->open ? impl->device.sampleRate : 0; }
 uint32_t Device::channels() const { return impl->open ? impl->device.playback.channels : 0; }
+uint32_t Device::bufferFrames() const
+{
+    return impl->open ? impl->device.playback.internalPeriodSizeInFrames : 0;
+}
+uint32_t Device::periods() const
+{
+    return impl->open ? impl->device.playback.internalPeriods : 0;
+}
+std::vector<uint32_t> Device::activeChannels() const
+{
+    return impl->open ? impl->activeChannels : std::vector<uint32_t>{};
+}
 
 // ---------------------------------------------------------------------------
 // CaptureDevice
@@ -765,6 +923,7 @@ uint32_t Device::channels() const { return impl->open ? impl->device.playback.ch
 struct CaptureDevice::Impl {
     ma_device device{};
     Callback callback;
+    std::vector<uint32_t> activeChannels;
     bool open = false;
 
     static void maCallback(ma_device* dev, void* /*output*/, const void* input, ma_uint32 frames)
@@ -781,19 +940,34 @@ CaptureDevice::~CaptureDevice() { close(); }
 bool CaptureDevice::open(uint32_t sampleRate, uint32_t channels, Callback cb,
                          const std::string& deviceName)
 {
+    DeviceOptions options;
+    options.sampleRate = sampleRate;
+    options.channels = channels;
+    options.deviceName = deviceName;
+    return open(options, std::move(cb));
+}
+
+bool CaptureDevice::open(const DeviceOptions& options, Callback cb)
+{
     close();
     impl->callback = std::move(cb);
+    impl->activeChannels.clear();
 
     ma_device_config cfg = ma_device_config_init(ma_device_type_capture);
     cfg.capture.format = ma_format_f32;
-    cfg.capture.channels = channels;
-    cfg.capture.pDeviceID = findDeviceId(false, deviceName);
-    cfg.sampleRate = sampleRate;
+    cfg.capture.channels = options.channels;
+    cfg.capture.pDeviceID = findDeviceId(false, options.deviceName);
+    cfg.sampleRate = options.sampleRate;
+    cfg.periodSizeInFrames = options.bufferFrames;
+    cfg.periodSizeInMilliseconds = options.bufferMilliseconds;
+    cfg.periods = options.periods;
     cfg.dataCallback = Impl::maCallback;
     cfg.pUserData = impl.get();
 
     if (ma_device_init(globalContext(), &cfg, &impl->device) != MA_SUCCESS)
         return false;
+    impl->activeChannels =
+        normalizedActiveChannels(options.activeChannels, impl->device.capture.channels);
     impl->open = true;
     return true;
 }
@@ -803,11 +977,37 @@ void CaptureDevice::close()
     if (impl->open) {
         ma_device_uninit(&impl->device);
         impl->open = false;
+        impl->activeChannels.clear();
     }
 }
 
 bool CaptureDevice::start() { return impl->open && ma_device_start(&impl->device) == MA_SUCCESS; }
 void CaptureDevice::stop() { if (impl->open) ma_device_stop(&impl->device); }
+bool CaptureDevice::isOpen() const { return impl->open; }
+std::string CaptureDevice::name() const
+{
+    return impl->open ? impl->device.capture.name : "";
+}
+uint32_t CaptureDevice::sampleRate() const
+{
+    return impl->open ? impl->device.sampleRate : 0;
+}
+uint32_t CaptureDevice::channels() const
+{
+    return impl->open ? impl->device.capture.channels : 0;
+}
+uint32_t CaptureDevice::bufferFrames() const
+{
+    return impl->open ? impl->device.capture.internalPeriodSizeInFrames : 0;
+}
+uint32_t CaptureDevice::periods() const
+{
+    return impl->open ? impl->device.capture.internalPeriods : 0;
+}
+std::vector<uint32_t> CaptureDevice::activeChannels() const
+{
+    return impl->open ? impl->activeChannels : std::vector<uint32_t>{};
+}
 
 // ---------------------------------------------------------------------------
 // Player
@@ -891,11 +1091,19 @@ Player::~Player() { close(); }
 
 bool Player::open(uint32_t sampleRate, uint32_t channels, const std::string& deviceName)
 {
+    DeviceOptions options;
+    options.sampleRate = sampleRate;
+    options.channels = channels;
+    options.deviceName = deviceName;
+    return open(options);
+}
+
+bool Player::open(const DeviceOptions& options)
+{
     auto* p = impl.get();
     if (!impl->device.open(
-            sampleRate, channels,
-            [p](float* out, uint32_t frames, uint32_t ch) { p->render(out, frames, ch); },
-            deviceName))
+            options,
+            [p](float* out, uint32_t frames, uint32_t ch) { p->render(out, frames, ch); }))
         return false;
     return impl->device.start();
 }

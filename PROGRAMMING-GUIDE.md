@@ -72,6 +72,24 @@ needs them. If UI code needs to update audio state, use atomics, prepared
 command queues, copied snapshots, or block-boundary application owned by the
 audio-owning object.
 
+Audio device settings UIs may call `playbackDeviceInfos()` /
+`captureDeviceInfos()` on the UI/main thread when a settings panel opens or the
+user refreshes devices. Do not probe detailed device info every frame, and
+never enumerate devices from an audio/MIDI callback. Open or reopen devices
+with `DeviceOptions`; treat requested buffer sizes as hints and read
+`bufferFrames()` after opening for the accepted period size.
+
+Use `snd::midi::Buffer` and `snd::control::Buffer` directly for realtime block
+events. They are fixed-capacity buffers: check the boolean result of
+`push_back()` when losing an event must fail the operation. Do not replace them
+with vectors or append heap-owning payloads. Control parameter events carry
+stable numeric target IDs; resolve names and paths outside the audio callback.
+
+Connect in-process processors through `snd::plugin::Graph` with an explicit
+`GraphEdgeType`. Audio, MIDI, and control edges share graph ordering, while
+latency compensation applies only to audio. Build, connect, disconnect,
+prepare, and unprepare on the main thread while processing is stopped.
+
 ## Retained UI Rules
 
 SND's retained-mode UI layer currently uses the C++ API
@@ -89,6 +107,10 @@ mouse-move events until release so custom controls can implement drags without
 renderer-local capture state.
 Pointer events carry button identity, click count, modifier keys, pointer
 delta, wheel delta, and context-menu intent in the retained `Event`.
+Retained key events include navigation keys and `A` through `Z`, with Ctrl,
+Alt, Shift, and Super modifiers intact. Unclaimed key events bubble to the
+tree root so applications can implement global accelerators without bypassing
+focused text/control handling.
 Left-button press/release keeps the default focus, pressed, capture, and
 activation behaviour. Right/middle buttons, wheel, and context-menu events are
 delivered to the hit node's custom event hook without triggering built-in
@@ -117,6 +139,11 @@ Use `Role::Canvas` for custom-drawn or live animated regions that still need
 retained layout, focus, hit testing, dirty state, and semantics. Canvas drawing
 must stay on the UI/render thread and read audio-derived values through the
 same snapshot/atomic patterns as other UI.
+`draw::Surface::glDraw(...)` is a raw-GL escape hatch for bounded retained
+Canvas/live-surface content such as Murk. It is not a reusable widget paint
+path: shared controls must still use renderer-neutral `draw::Surface` /
+`paint::drawX` helpers, with input behaviour and retained semantics owned by
+the widget/tree.
 Retained Canvas drawing is clipped to the node bounds by default; only disable
 `VisualStyle::canvasClip` for deliberate bleed effects. Popup/dropdown content
 that should float over surrounding layout must use `Node::setOverlay(true)` so

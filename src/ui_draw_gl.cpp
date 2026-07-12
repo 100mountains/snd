@@ -292,6 +292,47 @@ void OpenGLSurface::image(TextureRef texture, Vec2 mn, Vec2 mx, Color tint,
             (unsigned int)texture);
 }
 
+void OpenGLSurface::glDraw(Vec2 mn, Vec2 mx, GLDrawFn fn, void* user)
+{
+    if (!fn)
+        return;
+    if (mx.x < mn.x)
+        std::swap(mn.x, mx.x);
+    if (mx.y < mn.y)
+        std::swap(mn.y, mx.y);
+    const float lw = mx.x - mn.x;
+    const float lh = mx.y - mn.y;
+    if (lw <= 0.0f || lh <= 0.0f)
+        return;
+
+    // logical rect -> physical viewport/scissor (GL y is bottom-up), the same
+    // mapping applyClip() uses. Rendering at framebuffer scale is what keeps
+    // shader content crisp on HiDPI -- an offscreen texture at logical size
+    // would upscale.
+    const int vx = (int)std::floor(mn.x * scaleX_);
+    const int vy = (int)std::floor((logicalSize_.y - mx.y) * scaleY_);
+    const int vw = (int)std::ceil(lw * scaleX_);
+    const int vh = (int)std::ceil(lh * scaleY_);
+    if (vw <= 0 || vh <= 0)
+        return;
+
+    glViewport(vx, vy, vw, vh);
+    glScissor(vx, vy, vw, vh);
+    glEnable(GL_SCISSOR_TEST);
+
+    fn(user, lw, lh);
+
+    // restore this surface's per-frame GL state (mirrors beginFrame) so the
+    // primitives drawn after this composite exactly as before -- `fn` may have
+    // changed the program, bound buffers, blend func, viewport, and scissor.
+    glViewport(0, 0, framebufferWidth_, framebufferHeight_);
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_SCISSOR_TEST);
+    applyClip();
+}
+
 void OpenGLSurface::drawSolid(const std::vector<Vertex>& vertices)
 {
     drawRaw(vertices.data(), (int)vertices.size(), (int)sizeof(Vertex),

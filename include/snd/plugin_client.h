@@ -40,7 +40,10 @@ struct PluginSpec {
     uint32_t uid[4] = {0, 0, 0, 0};   // unique per plugin; pick once, keep forever
     bool isInstrument = false;        // no audio input; MIDI drives it
     bool wantsAudioInput = false;     // instrument that ALSO reads audio in (e.g. NxD Audio Key): the host/graph feeds `in`
-    bool wantsMidi = false;           // receive note events in process()
+    bool wantsMidi = false;           // receive note events in process() (JUCE acceptsMidi)
+    bool producesMidi = false;        // WRITES note events to process()'s midiOut (JUCE producesMidi):
+                                      // sequencers, arps, scale/quantise, controllers. A host/graph
+                                      // uses this to know a node has a MIDI OUTPUT to wire from.
     // Audio channel counts. Default is stereo. Set higher for multi-bus
     // plugins (a mixer's many lanes, aux sends/returns): process() then
     // receives/produces this many channel pointers in `in`/`out`. Instruments
@@ -122,10 +125,9 @@ public:
     }
     // Broadcast a control event to whoever is wired to this plugin's control
     // output. No-op when there's no control bus (a DAW host).
-    void emitControl(const control::Event& e)
+    bool emitControl(const control::Event& e)
     {
-        if (controlOut_)
-            controlOut_->push_back(e);
+        return controlOut_ && controlOut_->push_back(e);
     }
 
     // wrapper/graph wiring -- not for plugin code

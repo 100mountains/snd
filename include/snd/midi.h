@@ -7,11 +7,12 @@
 // callbacks -- no allocation, no blocking, hand off through a queue.
 #pragma once
 
+#include "snd/event_buffer.h"
+
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace snd::midi {
 
@@ -52,8 +53,10 @@ struct Message {
     }
 };
 
-// A block's worth of events, ordered by frame.
-using Buffer = std::vector<Message>;
+// A block's worth of events, ordered by frame. Overflow is rejected by
+// push_back() rather than allocating on the realtime thread.
+inline constexpr std::size_t kMaxBlockEvents = 2048;
+using Buffer = snd::EventBuffer<Message, kMaxBlockEvents>;
 
 // Endpoint names for settings UIs. Select by NAME, not index.
 std::vector<std::string> inputDevices();

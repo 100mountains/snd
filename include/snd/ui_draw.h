@@ -12,6 +12,15 @@ namespace snd::ui::draw {
 // Packed 0xAABBGGRR colour value matching SND's current UI colour constants.
 using Color = uint32_t;
 
+constexpr Color rgba(uint8_t red, uint8_t green, uint8_t blue,
+                     uint8_t alpha = 255) noexcept
+{
+    return static_cast<Color>(red) |
+           (static_cast<Color>(green) << 8u) |
+           (static_cast<Color>(blue) << 16u) |
+           (static_cast<Color>(alpha) << 24u);
+}
+
 struct Vec2 {
     float x = 0.0f;
     float y = 0.0f;
@@ -115,6 +124,25 @@ public:
             line(points[i], points[i + 1], colors[i], thickness);
         if (closed)
             line(points[count - 1], points[0], colors[count - 1], thickness);
+    }
+
+    // Raw-OpenGL escape hatch for bounded retained Canvas/live-surface content
+    // only. Do not use this for reusable SND widget bodies; those stay on the
+    // renderer-neutral 2D surface/paint path. Runs `fn` with the GL viewport +
+    // scissor set to the logical rect [mn,mx] at physical framebuffer
+    // resolution, in draw order with the 2D primitives -- so shader content
+    // composites behind whatever is drawn after it. `fn` receives its opaque
+    // `user` plus the rect's logical width/height. It may freely change GL
+    // state; the backend restores the viewport, scissor, and blend state it
+    // needs afterwards. Default: no-op -- backends without a live GL frame
+    // (e.g. an ImGui adapter) ignore it.
+    using GLDrawFn = void (*)(void* user, float logicalW, float logicalH);
+    virtual void glDraw(Vec2 mn, Vec2 mx, GLDrawFn fn, void* user)
+    {
+        (void)mn;
+        (void)mx;
+        (void)fn;
+        (void)user;
     }
 };
 

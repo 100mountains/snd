@@ -208,6 +208,11 @@ Shape (from the audits in `docs/research/`):
   in-process fallback.
 - **MIDI**: hosted plugins receive note/CC events and can emit them, via
   `snd::midi`. Host transport (tempo/bars) is supplied to the plugin.
+- **In-process graph**: `snd::plugin::Graph` uses typed audio, MIDI, and control
+  edges in one topological schedule. Audio edges alone participate in latency
+  compensation. MIDI and control use fixed-capacity block buffers; control
+  parameter targets are stable numeric IDs, so event routing performs no heap
+  allocation in `processEvents()`.
 - **Editor GUIs**: hosted in floating native windows per OS
   (NSView / HWND / X11), with an `IComponentHandler` for parameter edits and
   `IPlugFrame` for resize. The AU side uses the Cocoa/generic view tiers.

@@ -13,6 +13,7 @@
 //     next idle(). Call idle() periodically from the main thread.
 #pragma once
 
+#include "snd/control.h"
 #include "snd/midi.h"
 
 #include <cstdint>
@@ -73,6 +74,21 @@ public:
         (void)midiIn;
         (void)midiOut;
         return process(in, inChannels, out, outChannels, frames);
+    }
+
+    // In-process graph path. Hosted formats use the MIDI path and ignore the
+    // Bob/SND control bus; native graph instances may consume and emit both.
+    virtual bool processEvents(const float* const* in, uint32_t inChannels,
+                               float* const* out, uint32_t outChannels,
+                               uint32_t frames, const midi::Buffer& midiIn,
+                               midi::Buffer* midiOut,
+                               const control::Buffer& controlIn,
+                               control::Buffer* controlOut)
+    {
+        (void)controlIn;
+        (void)controlOut;
+        return processMidi(in, inChannels, out, outChannels, frames, midiIn,
+                           midiOut);
     }
 
     // Main thread, periodically (~60Hz while interactive; once per file is

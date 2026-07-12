@@ -44,6 +44,10 @@ Mode-specific, utility, or adapter-only:
   sequencer matrices are retained-primary because they depend on retained
   layout/focus/semantic ownership. Immediate consumers should use stock ImGui
   containers or local tools unless a thin wrapper proves useful.
+- `draw::Surface::glDraw(...)` is a retained Canvas/live-surface backend hatch,
+  not a primitive parity target and not a reusable widget paint path. It may be
+  used for bounded shader/custom regions such as Murk only when the retained
+  node still owns layout, input, focus, and semantics.
 
 Paint-wrapper gaps:
 
