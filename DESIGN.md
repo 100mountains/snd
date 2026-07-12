@@ -1,6 +1,6 @@
 # Design
 
-Verified against: `fb0b8612c23253c3dc54fbddafd29e873a5a7f9c`.
+Verified against: `5fc8967`.
 
 This is the current high-level design for this project. It records architectural
 decisions, ownership boundaries, and the technical reasons behind them.
