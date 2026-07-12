@@ -49,6 +49,8 @@ enum class Role {
     Menu,
     MenuItem,
     ComboBox,
+    Dialog,
+    Alert,
     Canvas,
     Custom,
 };
@@ -318,6 +320,12 @@ public:
     void setOverlay(bool overlay);
     bool overlay() const { return overlay_; }
 
+    // Modal nodes make the rest of the tree inert while visible: pointer hit
+    // tests stay inside the modal subtree, Tab focus wraps inside it, and
+    // semantic snapshots expose only the modal subtree.
+    void setModal(bool modal);
+    bool modal() const { return modal_; }
+
     // Scroll container: lay out this node's children as a column at their
     // NATURAL height (overflowing the node's rect), offset up by scrollY, and
     // clip rendering to the node's rect. contentHeight()/viewHeight() are set
@@ -398,6 +406,7 @@ private:
     Rect bounds_;
     bool visible_ = true;
     bool overlay_ = false;
+    bool modal_ = false;
     bool scroll_ = false;
     float scrollY_ = 0.0f;
     float contentHeight_ = 0.0f;

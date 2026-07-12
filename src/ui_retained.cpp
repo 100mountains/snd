@@ -157,6 +157,52 @@ void appendDerivedActions(const Node& node, std::vector<Action>& actions)
     }
 }
 
+Node* findActiveModal(Node& node)
+{
+    if (!node.visible())
+        return nullptr;
+    const auto& children = node.children();
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        if (Node* modal = findActiveModal(**it))
+            return modal;
+    }
+    return node.modal() ? &node : nullptr;
+}
+
+const Node* findActiveModal(const Node& node)
+{
+    if (!node.visible())
+        return nullptr;
+    const auto& children = node.children();
+    for (auto it = children.rbegin(); it != children.rend(); ++it) {
+        if (const Node* modal = findActiveModal(**it))
+            return modal;
+    }
+    return node.modal() ? &node : nullptr;
+}
+
+bool containsNode(const Node& root, const Node& target)
+{
+    if (&root == &target)
+        return true;
+    for (const auto& child : root.children())
+        if (containsNode(*child, target))
+            return true;
+    return false;
+}
+
+Node* firstFocusable(Node& node)
+{
+    if (!node.visible() || !node.enabled())
+        return nullptr;
+    if (node.focusable())
+        return &node;
+    for (const auto& child : node.children())
+        if (Node* next = firstFocusable(*child))
+            return next;
+    return nullptr;
+}
+
 float lengthValue(const Length& length, float intrinsic, float fillSize)
 {
     switch (length.mode) {
@@ -571,6 +617,14 @@ void Node::setOverlay(bool overlay)
     markDirty();
 }
 
+void Node::setModal(bool modal)
+{
+    if (modal_ == modal)
+        return;
+    modal_ = modal;
+    markDirty();
+}
+
 void Node::setScroll(bool scroll)
 {
     if (scroll_ == scroll)
@@ -917,12 +971,20 @@ void Tree::layout(Vec2 size)
 
 Node* Tree::hitTest(Vec2 point)
 {
-    return root_ ? root_->hitTest(point) : nullptr;
+    if (!root_)
+        return nullptr;
+    if (Node* modal = findActiveModal(*root_))
+        return modal->hitTest(point);
+    return root_->hitTest(point);
 }
 
 const Node* Tree::hitTest(Vec2 point) const
 {
-    return root_ ? root_->hitTest(point) : nullptr;
+    if (!root_)
+        return nullptr;
+    if (const Node* modal = findActiveModal(*root_))
+        return modal->hitTest(point);
+    return root_->hitTest(point);
 }
 
 bool Tree::focus(const NodeId& id)
@@ -935,6 +997,10 @@ bool Tree::focus(const NodeId& id, bool focusVisible)
     Node* next = find(id);
     if (!next || !next->focusable_ || !isInteractive(*next))
         return false;
+    if (Node* modal = root_ ? findActiveModal(*root_) : nullptr) {
+        if (!containsNode(*modal, *next))
+            return false;
+    }
 
     if (focusedId_ == id) {
         next->setFocused(true, focusVisible); // may promote/demote visibility
@@ -963,17 +1029,24 @@ void Tree::collectFocusable(std::vector<Node*>& out)
     if (!root_)
         return;
     std::function<void(Node&)> collect = [&](Node& node) {
-        if (node.visible_ && node.enabled_ && node.focusable_)
+        if (!node.visible_ || !node.enabled_)
+            return;
+        if (node.focusable_)
             out.push_back(&node);
         for (const auto& child : node.children_)
             collect(*child);
     };
-    collect(*root_);
+    if (Node* modal = findActiveModal(*root_))
+        collect(*modal);
+    else
+        collect(*root_);
 }
 
 void Tree::collectFocusable(const Node& node, std::vector<const Node*>& out) const
 {
-    if (node.visible_ && node.enabled_ && node.focusable_)
+    if (!node.visible_ || !node.enabled_)
+        return;
+    if (node.focusable_)
         out.push_back(&node);
     for (const auto& child : node.children_)
         collectFocusable(*child, out);
@@ -1142,6 +1215,18 @@ bool Tree::dispatch(const Event& event)
     if (!keyOrTextEvent)
         return false;
 
+    Node* modal = root_ ? findActiveModal(*root_) : nullptr;
+    if (modal) {
+        Node* current = focused();
+        if (!current || !containsNode(*modal, *current)) {
+            if (current)
+                current->setFocused(false, false);
+            focusedId_.clear();
+            if (Node* first = firstFocusable(*modal))
+                focus(first->id());
+        }
+    }
+
     if (event.type == EventType::KeyDown && event.key == Key::Tab)
         return focusNext(event.shift);
     if (event.type == EventType::TextInput && event.text.empty())
@@ -1187,6 +1272,16 @@ bool Tree::dispatch(const Event& event)
         }
     }
 
+    if (modal && event.type == EventType::KeyDown && event.key == Key::Escape &&
+        isInteractive(*modal) && modal->handleEvent(event))
+        return true;
+
+    if (modal) {
+        if (modal != current && isInteractive(*modal) && modal->handleEvent(event))
+            return true;
+        return true;
+    }
+
     // Global accelerators: a KeyDown/TextInput that no focused widget claimed
     // (including when nothing is focused) falls through to the root node's
     // onEvent, so an app can register shortcut keys -- transport, delete --
@@ -1204,8 +1299,13 @@ bool Tree::performAction(const NodeId& id, Action action, double value)
         return focus(id);
 
     Node* node = find(id);
-    if (node)
+    if (node) {
+        if (Node* modal = root_ ? findActiveModal(*root_) : nullptr) {
+            if (!containsNode(*modal, *node))
+                return false;
+        }
         return node->perform(action, value);
+    }
     return root_ && root_->performSemanticChildAction(id, action, value);
 }
 
@@ -1372,7 +1472,9 @@ std::vector<ValidationIssue> Tree::validate() const
     };
     visit(*root_);
     std::set<NodeId> semanticSeen;
-    for (const SemanticNode& node : semanticSnapshot()) {
+    std::vector<SemanticNode> allSemantics;
+    collectSemantics(*root_, {}, allSemantics);
+    for (const SemanticNode& node : allSemantics) {
         if (node.id.empty()) {
             issues.push_back({ValidationIssueKind::EmptyId, {}});
         } else if (!semanticSeen.insert(node.id).second) {
@@ -1389,8 +1491,12 @@ std::vector<ValidationIssue> Tree::validate() const
 std::vector<SemanticNode> Tree::semanticSnapshot() const
 {
     std::vector<SemanticNode> out;
-    if (root_)
-        collectSemantics(*root_, {}, out);
+    if (root_) {
+        if (const Node* modal = findActiveModal(*root_))
+            collectSemantics(*modal, {}, out);
+        else
+            collectSemantics(*root_, {}, out);
+    }
     return out;
 }
 

@@ -1750,6 +1750,8 @@ VisualStyle PaintRenderer::resolvedStyle(const Node& node) const
         style.kind = VisualKind::OutlineButton;
         break;
     case Role::Menu:
+    case Role::Dialog:
+    case Role::Alert:
         style.kind = VisualKind::Panel;
         style.panelFill = true;
         style.panelBorder = true;
@@ -4528,6 +4530,305 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
         renderer->setStyle(sid, style);
     }
     return node;
+}
+
+namespace {
+
+ModalDialogResult resultForButtonRole(ModalButtonRole role)
+{
+    switch (role) {
+    case ModalButtonRole::Primary: return ModalDialogResult::Primary;
+    case ModalButtonRole::Secondary: return ModalDialogResult::Secondary;
+    case ModalButtonRole::Cancel: return ModalDialogResult::Cancel;
+    case ModalButtonRole::Destructive: return ModalDialogResult::Destructive;
+    }
+    return ModalDialogResult::None;
+}
+
+paint::OutlineButtonStyle modalButtonStyle(ModalButtonRole role)
+{
+    const Palette& pal = palette();
+    paint::OutlineButtonStyle style;
+    style.rounding = 0.0f;
+    style.border = paint::withAlpha(pal.frameBright, 0xbb);
+    style.hoverBorder = pal.accent;
+    style.activeBorder = pal.accent;
+    style.activeFill = paint::withAlpha(pal.accent, 0x33);
+    style.text = pal.text;
+    if (role == ModalButtonRole::Primary) {
+        style.border = pal.accent;
+        style.activeFill = paint::withAlpha(pal.accent, 0x44);
+    } else if (role == ModalButtonRole::Destructive) {
+        style.border = IM_COL32(190, 74, 70, 220);
+        style.hoverBorder = IM_COL32(238, 92, 86, 255);
+        style.activeBorder = IM_COL32(238, 92, 86, 255);
+        style.activeFill = IM_COL32(238, 92, 86, 52);
+        style.text = IM_COL32(255, 188, 184, 255);
+    }
+    return style;
+}
+
+void dismissModal(ModalDialogState& state, ModalDialogResult result,
+                  std::string action)
+{
+    state.lastResult = result;
+    state.lastAction = std::move(action);
+    state.open = false;
+}
+
+void activateModalButton(ModalDialogState& state,
+                         const ModalDialogButton& button)
+{
+    state.lastResult = resultForButtonRole(button.role);
+    state.lastAction = button.id;
+    if (button.closes)
+        state.open = false;
+    if (button.onActivate)
+        button.onActivate();
+}
+
+bool activateFirstModalRole(ModalDialogState& state,
+                            const std::vector<ModalDialogButton>& buttons,
+                            ModalButtonRole primary,
+                            ModalButtonRole fallback)
+{
+    auto findRole = [&](ModalButtonRole role) {
+        return std::find_if(buttons.begin(), buttons.end(),
+                            [&](const ModalDialogButton& b) {
+                                return b.role == role;
+                            });
+    };
+    auto it = findRole(primary);
+    if (it == buttons.end())
+        it = findRole(fallback);
+    if (it == buttons.end())
+        return false;
+    activateModalButton(state, *it);
+    return true;
+}
+
+void syncModalRootFromState(Node& node, const ModalDialogState& state)
+{
+    for (Node* n = &node; n != nullptr; n = n->parent()) {
+        if (n->modal() || n->overlay()) {
+            n->setVisible(state.open);
+            n->setModal(state.open);
+            return;
+        }
+    }
+}
+
+} // namespace
+
+Node::Ptr modalDialog(NodeId id, std::string title, std::string message,
+                      ModalDialogState& state,
+                      std::vector<ModalDialogButton> buttons,
+                      PaintRenderer* renderer,
+                      ModalDialogOptions options)
+{
+    NodeId sid = id;
+    const NodeId dialogId = sid + ".dialog";
+    auto buttonDefs =
+        std::make_shared<std::vector<ModalDialogButton>>(std::move(buttons));
+
+    Layout overlayLayout;
+    overlayLayout.kind = LayoutKind::Stack;
+    overlayLayout.mainAlign = Align::Center;
+    overlayLayout.crossAlign = Align::Center;
+    auto overlay = Node::make(std::move(id), Role::Group);
+    overlay->setLayout(overlayLayout);
+    overlay->setSize(Length::fill(), Length::fill());
+    overlay->setIntrinsicSize(options.size);
+    overlay->setOverlay(true);
+    overlay->setVisible(state.open);
+    overlay->setModal(state.open);
+    overlay->setSemantics(named(Role::Group, std::string{}));
+
+    overlay->setOnRefresh([&state](Node& n) {
+        const bool changed = n.visible() != state.open ||
+                             n.modal() != state.open;
+        n.setVisible(state.open);
+        n.setModal(state.open);
+        return changed;
+    });
+
+    overlay->setOnEvent([&state, buttonDefs, dialogId, options](Node& n,
+                                                                const Event& e) {
+        if (!state.open)
+            return false;
+        if (e.type == EventType::KeyDown && e.key == Key::Escape) {
+            switch (options.escapePolicy) {
+            case ModalEscapePolicy::Ignore:
+                return true;
+            case ModalEscapePolicy::Primary:
+                if (activateFirstModalRole(state, *buttonDefs,
+                                           ModalButtonRole::Primary,
+                                           ModalButtonRole::Secondary)) {
+                    syncModalRootFromState(n, state);
+                    return true;
+                }
+                dismissModal(state, ModalDialogResult::Dismissed, "escape");
+                syncModalRootFromState(n, state);
+                return true;
+            case ModalEscapePolicy::Cancel:
+                if (activateFirstModalRole(state, *buttonDefs,
+                                           ModalButtonRole::Cancel,
+                                           ModalButtonRole::Secondary)) {
+                    syncModalRootFromState(n, state);
+                    return true;
+                }
+                dismissModal(state, ModalDialogResult::Dismissed, "escape");
+                syncModalRootFromState(n, state);
+                return true;
+            case ModalEscapePolicy::Close:
+                dismissModal(state, ModalDialogResult::Dismissed, "escape");
+                syncModalRootFromState(n, state);
+                return true;
+            }
+        }
+
+        if (e.type == EventType::MouseMove ||
+            e.type == EventType::MouseWheel ||
+            e.type == EventType::ContextMenu ||
+            e.type == EventType::MouseDown ||
+            e.type == EventType::MouseUp) {
+            if (e.type == EventType::MouseUp && e.button == MouseButton::Left &&
+                options.closeOnScrimClick) {
+                const Node* dialog = n.find(dialogId);
+                if (!dialog || !dialog->bounds().contains(e.position)) {
+                    dismissModal(state, ModalDialogResult::Dismissed, "scrim");
+                    syncModalRootFromState(n, state);
+                }
+            }
+            return true;
+        }
+        return false;
+    });
+
+    if (renderer) {
+        VisualStyle scrim;
+        scrim.kind = VisualKind::Canvas;
+        scrim.panelBorder = false;
+        scrim.canvasClip = false;
+        scrim.canvasFocusRing = false;
+        scrim.canvasSurfaceDraw =
+            [color = options.scrimColor](draw::Surface& surface,
+                                         const Node&, Rect bounds,
+                                         const paint::ControlState&,
+                                         const draw::FrameContext&) {
+                surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                                 color, 0.0f);
+            };
+        renderer->setStyle(sid, scrim);
+    }
+
+    Layout dialogLayout;
+    dialogLayout.kind = LayoutKind::Column;
+    dialogLayout.padding = Insets::all(16.0f);
+    dialogLayout.gap = 10.0f;
+    dialogLayout.crossAlign = Align::Stretch;
+    auto dialog = Node::make(dialogId, options.role);
+    dialog->setLayout(dialogLayout);
+    dialog->setSize(Length::fixed(options.size.x), Length::fixed(options.size.y));
+    dialog->setIntrinsicSize(options.size);
+    dialog->setFocusable(true);
+    Semantics dialogSem = named(options.role, title);
+    dialogSem.description = message;
+    dialog->setSemantics(dialogSem);
+
+    if (renderer) {
+        VisualStyle panelStyle;
+        panelStyle.kind = VisualKind::Canvas;
+        panelStyle.canvasClip = false;
+        panelStyle.panelBorder = false;
+        panelStyle.canvasFocusRing = true;
+        panelStyle.canvasSurfaceDraw =
+            [fill = options.panelFill, border = options.panelBorder](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState&, const draw::FrameContext&) {
+                const Palette& pal = palette();
+                surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                                 fill ? fill : pal.frame, 0.0f);
+                surface.strokeRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                                   border ? border : pal.frameBright, 0.0f);
+            };
+        renderer->setStyle(dialogId, panelStyle);
+    }
+
+    auto titleNode = label(sid + ".title", std::move(title), renderer);
+    titleNode->setSize(Length::fill(), Length::fixed(22.0f));
+    titleNode->setIntrinsicSize({std::max(40.0f, options.size.x - 32.0f), 22.0f});
+
+    auto messageNode = label(sid + ".message", std::move(message), renderer);
+    messageNode->setSize(Length::fill(), Length::fill());
+    messageNode->setIntrinsicSize({std::max(40.0f, options.size.x - 32.0f), 52.0f});
+
+    Layout buttonLayout;
+    buttonLayout.kind = LayoutKind::Row;
+    buttonLayout.gap = 8.0f;
+    buttonLayout.mainAlign = Align::End;
+    buttonLayout.crossAlign = Align::Center;
+    auto buttonRow = Node::make(sid + ".buttons", Role::Group);
+    buttonRow->setLayout(buttonLayout);
+    buttonRow->setSize(Length::fill(), Length::fixed(30.0f));
+    buttonRow->setIntrinsicSize({std::max(40.0f, options.size.x - 32.0f), 30.0f});
+    buttonRow->setSemantics(named(Role::Group, std::string{}));
+
+    for (std::size_t i = 0; i < buttonDefs->size(); ++i) {
+        ModalDialogButton& def = (*buttonDefs)[i];
+        if (def.id.empty())
+            def.id = "button" + std::to_string(i);
+        const NodeId buttonId = sid + "." + def.id;
+        const float buttonW =
+            std::max(74.0f, 18.0f + (float)def.label.size() * 7.0f);
+        auto buttonNode = outlineButton(
+            buttonId, def.label,
+            [&state, buttonDefs, i](Node& n) {
+                activateModalButton(state, (*buttonDefs)[i]);
+                syncModalRootFromState(n, state);
+            },
+            renderer, {buttonW, 28.0f}, modalButtonStyle(def.role));
+        buttonRow->addChild(std::move(buttonNode));
+    }
+
+    dialog->addChild(std::move(titleNode));
+    dialog->addChild(std::move(messageNode));
+    dialog->addChild(std::move(buttonRow));
+    overlay->addChild(std::move(dialog));
+    return overlay;
+}
+
+Node::Ptr alertDialog(NodeId id, std::string title, std::string message,
+                      ModalDialogState& state,
+                      std::function<void()> onOk,
+                      PaintRenderer* renderer,
+                      ModalDialogOptions options)
+{
+    options.role = Role::Alert;
+    options.escapePolicy = ModalEscapePolicy::Primary;
+    std::vector<ModalDialogButton> buttons = {
+        {"ok", "OK", ModalButtonRole::Primary, true, std::move(onOk)},
+    };
+    return modalDialog(std::move(id), std::move(title), std::move(message),
+                       state, std::move(buttons), renderer, options);
+}
+
+Node::Ptr confirmDialog(NodeId id, std::string title, std::string message,
+                        ModalDialogState& state,
+                        std::function<void()> onConfirm,
+                        std::function<void()> onCancel,
+                        PaintRenderer* renderer,
+                        ModalDialogOptions options)
+{
+    options.role = Role::Dialog;
+    options.escapePolicy = ModalEscapePolicy::Cancel;
+    std::vector<ModalDialogButton> buttons = {
+        {"cancel", "Cancel", ModalButtonRole::Cancel, true, std::move(onCancel)},
+        {"confirm", "Confirm", ModalButtonRole::Primary, true,
+         std::move(onConfirm)},
+    };
+    return modalDialog(std::move(id), std::move(title), std::move(message),
+                       state, std::move(buttons), renderer, options);
 }
 
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,

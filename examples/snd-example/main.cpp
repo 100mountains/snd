@@ -1652,6 +1652,107 @@ static bool selftestRetainedUi()
                                                  r::Action::OpenMenu) &&
          contextState.open && contextOpens == 2;
 
+    int modalBackgroundActivations = 0;
+    int modalConfirmations = 0;
+    int modalCancels = 0;
+    int modalRootShortcuts = 0;
+    r::ModalDialogState confirmState;
+    confirmState.open = true;
+    r::PaintRenderer modalRenderer;
+    auto modalRoot = r::Node::make("modal.root");
+    r::Layout modalLayout;
+    modalLayout.kind = r::LayoutKind::Stack;
+    modalRoot->setLayout(modalLayout);
+    modalRoot->setOnEvent([&](r::Node&, const r::Event& event) {
+        if (event.type == r::EventType::KeyDown) {
+            ++modalRootShortcuts;
+            return true;
+        }
+        return false;
+    });
+    modalRoot->addChild(w::button(
+        "modal.background", "Background",
+        [&](r::Node&) { ++modalBackgroundActivations; }, &modalRenderer));
+    modalRoot->addChild(w::confirmDialog(
+        "modal.confirm", "Delete module?",
+        "This removes the module and its cables.", confirmState,
+        [&]() { ++modalConfirmations; },
+        [&]() { ++modalCancels; }, &modalRenderer));
+    r::Tree modalTree(std::move(modalRoot));
+    modalTree.layout({420.0f, 260.0f});
+    r::SemanticNode modalDialogSem;
+    r::SemanticNode modalButtonSem;
+    r::SemanticNode modalBackgroundSem;
+    ok = ok && modalTree.validate().empty() &&
+         modalTree.semanticNode("modal.confirm.dialog", modalDialogSem) &&
+         modalDialogSem.role == r::Role::Dialog &&
+         modalDialogSem.name == "Delete module?" &&
+         !modalTree.semanticNode("modal.background", modalBackgroundSem) &&
+         !modalTree.focus("modal.background") &&
+         !modalTree.performAction("modal.background", r::Action::Activate) &&
+         modalBackgroundActivations == 0;
+    ok = ok && modalTree.focusNext() && modalTree.focused() &&
+         modalTree.focused()->id() == "modal.confirm.dialog";
+    ok = ok && modalTree.focusNext() && modalTree.focused() &&
+         modalTree.focused()->id() == "modal.confirm.cancel";
+    ok = ok && modalTree.focusNext() && modalTree.focused() &&
+         modalTree.focused()->id() == "modal.confirm.confirm";
+    ok = ok && modalTree.semanticNode("modal.confirm.confirm", modalButtonSem) &&
+         modalButtonSem.role == r::Role::Button &&
+         hasAction(&modalButtonSem, r::Action::Activate);
+    key = {};
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Delete;
+    ok = ok && modalTree.dispatch(key) && modalRootShortcuts == 0;
+    key = {};
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Escape;
+    ok = ok && modalTree.dispatch(key) && !confirmState.open &&
+         confirmState.lastResult == r::ModalDialogResult::Cancel &&
+         confirmState.lastAction == "cancel" && modalCancels == 1 &&
+         modalTree.find("modal.confirm") &&
+         !modalTree.find("modal.confirm")->visible();
+
+    confirmState.open = true;
+    ok = ok && modalTree.refreshBoundValues();
+    modalTree.layout({420.0f, 260.0f});
+    ok = ok && modalTree.performAction("modal.confirm.confirm",
+                                       r::Action::Activate) &&
+         !confirmState.open &&
+         confirmState.lastResult == r::ModalDialogResult::Primary &&
+         confirmState.lastAction == "confirm" && modalConfirmations == 1;
+
+    int alertOk = 0;
+    r::ModalDialogState alertState;
+    alertState.open = true;
+    r::ModalDialogOptions alertOptions;
+    alertOptions.closeOnScrimClick = true;
+    auto alertRoot = r::Node::make("alert.root");
+    alertRoot->setLayout(modalLayout);
+    alertRoot->addChild(w::button(
+        "alert.background", "Background",
+        [&](r::Node&) { ++modalBackgroundActivations; }, &modalRenderer));
+    alertRoot->addChild(w::alertDialog(
+        "alert.modal", "Transport stopped", "The render completed.",
+        alertState, [&]() { ++alertOk; }, &modalRenderer, alertOptions));
+    r::Tree alertTree(std::move(alertRoot));
+    alertTree.layout({420.0f, 260.0f});
+    r::SemanticNode alertSem;
+    ok = ok && alertTree.validate().empty() &&
+         alertTree.semanticNode("alert.modal.dialog", alertSem) &&
+         alertSem.role == r::Role::Alert &&
+         !alertTree.semanticNode("alert.background", modalBackgroundSem);
+    r::Event scrim;
+    scrim.position = {8.0f, 8.0f};
+    scrim.button = r::MouseButton::Left;
+    scrim.type = r::EventType::MouseDown;
+    ok = ok && alertTree.dispatch(scrim);
+    scrim.type = r::EventType::MouseUp;
+    ok = ok && alertTree.dispatch(scrim) && !alertState.open &&
+         alertState.lastResult == r::ModalDialogResult::Dismissed &&
+         alertState.lastAction == "scrim" && alertOk == 0 &&
+         modalBackgroundActivations == 0;
+
     r::GraphSurfaceState graphState;
     graphState.viewport.pan = {10.0f, 5.0f};
     graphState.viewport.zoom = 1.0f;

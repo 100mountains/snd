@@ -137,6 +137,16 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .selectface span:last-child{font-family:mdf;color:var(--accent);text-align:right;}
 .contexttarget{width:190px;height:92px;border:1px dashed var(--frameB);border-radius:8px;background:linear-gradient(135deg,#11151d,#171b23);position:relative;display:grid;place-items:center;color:var(--dim);font-size:12px;}
 .contexttarget:after{content:"";position:absolute;left:116px;top:42px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px rgba(240,190,90,.14);}
+.modaldemo{position:relative;width:100%;min-height:236px;border:1px solid var(--frame);background:#101319;overflow:hidden;display:grid;place-items:center;}
+.modalback{position:absolute;inset:0;padding:18px;display:grid;grid-template-columns:repeat(3,minmax(80px,1fr));gap:10px;opacity:.5;}
+.modalghost{height:54px;border:1px solid #2b303b;background:#151922;color:var(--dim);font-size:11px;display:grid;place-items:center;}
+.modalscrim{position:absolute;inset:0;background:rgba(0,0,0,.62);}
+.modalpanel{position:relative;width:min(360px,calc(100% - 36px));border:1px solid var(--frameB);background:#171b22;box-shadow:0 20px 46px rgba(0,0,0,.45);padding:16px;}
+.modalpanel h3{margin:0 0 8px;color:var(--ink);font-size:16px;font-weight:700;letter-spacing:0;}
+.modalpanel p{margin:0 0 18px;color:var(--dim);font-size:12px;line-height:1.45;}
+.modalbuttons{display:flex;justify-content:flex-end;gap:8px;}
+.modalbtn{height:28px;min-width:74px;border:1px solid var(--frameB);background:transparent;color:var(--ink);font:12px system-ui,sans-serif;padding:0 12px;}
+.modalbtn.primary{border-color:var(--accent);box-shadow:inset 0 -2px 0 rgba(240,190,90,.24);}
 .fielddemo{min-width:230px;display:grid;gap:9px;}
 .textfield{height:34px;border:1px solid var(--frameB);border-radius:7px;background:#101319;color:var(--ink);display:grid;grid-template-columns:1fr auto;align-items:center;padding:0 10px;font:13px ui-monospace,Menlo,monospace;box-shadow:0 0 0 1px rgba(240,190,90,.12);}
 .textfield .caret{width:1px;height:17px;background:var(--accent);display:inline-block;margin-left:2px;}
@@ -188,6 +198,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <div class="grp">aGooey</div>
     <a href="#agooey" class="nl">Render surface</a>
     <a href="#menus" class="nl">Menus</a>
+    <a href="#dialogs" class="nl">Modal dialogs</a>
     <a href="#graph" class="nl">Graph surface</a>
     <a href="#fields" class="nl">Text field</a>
     <a href="#scrollsplit" class="nl">Scroll · splitter</a>
@@ -197,7 +208,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   <main>
     <div class="eyebrow">SND · component library</div>
     <h1>The aGooey UI toolkit</h1>
-    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, menus, graph nodes, a keyboard, an XY pad, a step grid, a sequencer matrix — rendered here from the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
+    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, menus, modal dialogs, graph nodes, a keyboard, an XY pad, a step grid, a sequencer matrix — rendered here from the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
     <div class="tryhint"><b>Try it —</b><span>drag the knobs &amp; faders (hold <b>⇧&nbsp;Shift</b> for 10× fine adjust), grab the XY handle, play the keys, click the switches and grid cells. The meter and the mod ring run on their own.</span></div>
 
     <div class="themebar">
@@ -494,6 +505,32 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <div>
           <div class="cellcap" style="text-align:left">context anchor</div>
           <div class="contexttarget">right-click canvas/list/module</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dialogs">
+      <div class="sechead"><h2>Modal dialogs</h2><span class="tag">modalDialog · alertDialog · confirmDialog</span></div>
+      <p class="desc">Retained blocking overlays with a scrim, centred dialog chrome, real button children, Escape policy, Tab focus trap, inert background input, and Dialog/Alert semantics.</p>
+      <div class="rack">
+        <div class="modaldemo">
+          <div class="modalback">
+            <div class="modalghost">graph surface</div>
+            <div class="modalghost">module list</div>
+            <div class="modalghost">transport</div>
+            <div class="modalghost">meter bank</div>
+            <div class="modalghost">pattern grid</div>
+            <div class="modalghost">value rows</div>
+          </div>
+          <div class="modalscrim"></div>
+          <div class="modalpanel">
+            <h3>Delete module?</h3>
+            <p>This removes the module and its cables. Background controls are inert until Cancel, Confirm, Escape, or the configured scrim policy resolves the dialog.</p>
+            <div class="modalbuttons">
+              <button class="modalbtn">Cancel</button>
+              <button class="modalbtn primary">Confirm</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>

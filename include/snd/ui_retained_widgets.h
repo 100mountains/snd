@@ -337,6 +337,53 @@ GraphHit hitTestGraph(const GraphViewport& viewport,
                       Vec2 screenPoint,
                       GraphSurfaceStyle style = {});
 
+enum class ModalDialogResult {
+    None,
+    Primary,
+    Secondary,
+    Cancel,
+    Destructive,
+    Dismissed,
+};
+
+enum class ModalButtonRole {
+    Primary,
+    Secondary,
+    Cancel,
+    Destructive,
+};
+
+enum class ModalEscapePolicy {
+    Ignore,
+    Close,
+    Cancel,
+    Primary,
+};
+
+struct ModalDialogState {
+    bool open = false;
+    ModalDialogResult lastResult = ModalDialogResult::None;
+    std::string lastAction;
+};
+
+struct ModalDialogButton {
+    std::string id;
+    std::string label;
+    ModalButtonRole role = ModalButtonRole::Secondary;
+    bool closes = true;
+    std::function<void()> onActivate;
+};
+
+struct ModalDialogOptions {
+    Vec2 size = {360.0f, 168.0f};
+    ModalEscapePolicy escapePolicy = ModalEscapePolicy::Cancel;
+    bool closeOnScrimClick = false;
+    ImU32 scrimColor = IM_COL32(0, 0, 0, 156);
+    ImU32 panelFill = 0;
+    ImU32 panelBorder = 0;
+    Role role = Role::Dialog;
+};
+
 namespace widgets {
 
 Node::Ptr panel(NodeId id, Layout layout = {}, Insets padding = {});
@@ -392,6 +439,22 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
                             VisualStyle::CanvasSurfaceDraw draw,
                             bool focusable = true,
                             Role semanticRole = Role::Canvas);
+Node::Ptr modalDialog(NodeId id, std::string title, std::string message,
+                      ModalDialogState& state,
+                      std::vector<ModalDialogButton> buttons,
+                      PaintRenderer* renderer = nullptr,
+                      ModalDialogOptions options = {});
+Node::Ptr alertDialog(NodeId id, std::string title, std::string message,
+                      ModalDialogState& state,
+                      std::function<void()> onOk = {},
+                      PaintRenderer* renderer = nullptr,
+                      ModalDialogOptions options = {});
+Node::Ptr confirmDialog(NodeId id, std::string title, std::string message,
+                        ModalDialogState& state,
+                        std::function<void()> onConfirm = {},
+                        std::function<void()> onCancel = {},
+                        PaintRenderer* renderer = nullptr,
+                        ModalDialogOptions options = {});
 Node::Ptr patternGrid(NodeId id, std::string name, bool* cells, int rows, int steps,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {240.0f, 96.0f},

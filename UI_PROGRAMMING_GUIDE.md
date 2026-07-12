@@ -368,7 +368,8 @@ in `snd::ui::retained::widgets`; the renderer is
 
 Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `sectionHeader`, `badge`, `listItem`, `menuItem`, `popupMenu`,
-`dropdownMenu`, `contextMenuRegion`, `button`, `outlineButton`,
+`dropdownMenu`, `contextMenuRegion`, `modalDialog`, `alertDialog`,
+`confirmDialog`, `button`, `outlineButton`,
 `segmented`, `cycleButton`, `ledButton`,
 `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
 `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`, `valueField`,
@@ -696,6 +697,38 @@ normal retained frame bridge moves the popup subtree to that tree-local anchor
 before hit testing and render. Retained popup/menu children are overlay nodes:
 they do not inflate row/column layout while open.
 
+## Modal Dialogs
+
+Use retained modal helpers for blocking decisions, alerts, destructive
+confirmation, and short app-state interruptions. `widgets::modalDialog(...)`
+builds a top-level overlay with a scrim, centred dialog panel, title, message,
+real retained buttons, focus trap, Escape handling, and inert background input.
+`widgets::alertDialog(...)` and `widgets::confirmDialog(...)` are convenience
+wrappers over the same primitive.
+
+Add the returned node as a top-level child of the retained root, usually last:
+
+```cpp
+snd::ui::retained::ModalDialogState state;
+state.open = true;
+
+root.addChild(widgets::confirmDialog(
+    "delete.confirm", "Delete module?",
+    "This removes the module and its cables.", state,
+    [&] { deleteSelectedModule(); },
+    [&] { keepModule(); },
+    &renderer));
+```
+
+The caller owns `ModalDialogState::open`. While the modal node is visible,
+`Node::setModal(true)` makes the rest of the tree inert: pointer hit tests stay
+inside the modal subtree, Tab wraps inside the dialog controls, and semantic
+snapshots expose the dialog instead of background controls. Set
+`ModalDialogOptions::escapePolicy` to `Ignore`, `Close`, `Cancel`, or
+`Primary`; confirm dialogs default Escape to Cancel, alerts default Escape to
+the OK/primary action. `closeOnScrimClick` is off by default so destructive or
+high-cost decisions cannot disappear from an accidental outside click.
+
 ## Graph Surfaces
 
 Graph UI starts from retained `widgets::graphSurface(...)`: the caller owns
@@ -905,6 +938,10 @@ members).
   `MenuItem::rightText` draws shortcut/value text on the right; `danger` adds a
   destructive-action cue. Retained menus expose `Role::Menu`,
   `Role::MenuItem`, and `Role::ComboBox` semantics.
+- `widgets::modalDialog(...)`, `widgets::alertDialog(...)`,
+  `widgets::confirmDialog(...)` -> retained overlay nodes. They draw a scrim,
+  trap Tab focus, consume background input, expose `Role::Dialog` /
+  `Role::Alert`, and close according to `ModalEscapePolicy`.
 
 ### Continuous controls
 
