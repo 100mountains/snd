@@ -50,7 +50,52 @@ section{margin-top:46px;scroll-margin-top:20px;}
 canvas{display:block;image-rendering:auto;}
 canvas.live{outline:1px solid transparent;border-radius:6px;transition:outline-color .12s;}
 canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%);}
+.tkey{width:56px;height:44px;display:grid;place-items:center;border:none;cursor:pointer;border-radius:5px;
+  background:linear-gradient(180deg,#e0e3e8,#c1c5cd 60%,#b0b4bd);color:#2b2e34;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -2px 4px rgba(20,22,28,.2),0 2px 0 #6f727a,0 4px 8px rgba(0,0,0,.5);
+  font-family:'mdf';font-size:22px;transition:transform .05s,box-shadow .05s,background .05s,color .05s;}
+.tkey.lc{font-family:'lcf';}
+.tkey:hover{background:linear-gradient(180deg,#e9ecf1,#c9cdd5 60%,#b8bcc4);}
+.tkey:active,.tkey.press{transform:translateY(3px);color:var(--accent);
+  background:linear-gradient(180deg,#f8f9fb,#e6e8ed 64%,#d5d8df);
+  box-shadow:inset 0 3px 6px rgba(80,84,96,.28),inset 0 1px 0 rgba(255,255,255,.95),0 1px 2px rgba(0,0,0,.38);}
 .btn{padding:6px 14px;border-radius:4px;border:1px solid var(--frameB);background:var(--frame);color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit;}
+.btn.hov{background:var(--frameB);}
+.btn.act{background:color-mix(in srgb,var(--frame),var(--accent) 40%);}
+.btn.sel{background:color-mix(in srgb,var(--frame),var(--accent) 40%);position:relative;}
+.btn.sel::after{content:"";position:absolute;left:2px;right:2px;bottom:2px;height:2px;border-radius:2px;background:var(--accent);}
+.btn.dis{opacity:.5;cursor:default;}
+.outlinebtn{appearance:none;-webkit-appearance:none;min-width:96px;height:30px;padding:0 14px;border-radius:0;border:1px solid transparent;background:transparent;color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit;outline:none;box-shadow:none;-webkit-tap-highlight-color:transparent;}
+.outlinebtn:hover,.outlinebtn.hov{border-color:var(--accent);}
+.outlinebtn:active,.outlinebtn.act{border-color:var(--accent);background:color-mix(in srgb,transparent,var(--accent) 16%);}
+.outlinebtn:focus-visible{outline:1px solid var(--accent);outline-offset:2px;}
+.outlinebtn.sel{border-color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent);}
+.outlinebtn.custom{border-color:#8de3ff;background:rgba(141,227,255,.08);color:#d8fbff;}
+.outlinebtn.tb{min-width:0;width:42px;padding:0;display:grid;place-items:center;color:var(--ink);}
+.outlinebtn.tb svg{width:16px;height:16px;display:block;}
+.outlinebtn.tb.sel{background:color-mix(in srgb,transparent,var(--accent) 22%);box-shadow:none;}
+.outlinebtn.tb.rec.sel{background:#c03930;border-color:#ff6b66;color:#fff;box-shadow:none;}
+.badge{display:inline-block;padding:3px 8px;border-radius:3px;font-size:11px;letter-spacing:.05em;background:color-mix(in srgb,transparent,var(--accent) 27%);color:var(--ink);}
+.li{width:150px;padding:7px 10px;border-radius:3px;border:1px solid var(--frameB);background:var(--frame);color:var(--ink);font-size:12.5px;cursor:pointer;}
+.li.sel{border-color:var(--accent);background:color-mix(in srgb,transparent,var(--accent) 22%);box-shadow:inset 3px 0 0 var(--accent);}
+.iconstrip{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:8px;margin-top:6px;}
+.ikey{aspect-ratio:1;border:none;border-radius:8px;cursor:pointer;color:#23262c;
+  background:linear-gradient(180deg,#dfe2e7,#b9bdc5);box-shadow:inset 0 1px 0 rgba(255,255,255,.85),0 2px 5px rgba(0,0,0,.4);
+  display:grid;place-items:center;transition:transform .05s,background .05s,color .05s,box-shadow .05s;}
+.ikey .ig{font-family:var(--gf);font-size:20px;line-height:1;}
+.ikey:active,.ikey.press{transform:translateY(2px);color:var(--accent);background:linear-gradient(180deg,#30333b,#25272d);box-shadow:inset 0 2px 6px rgba(0,0,0,.7);}
+
+.genbtn,.custombtn{position:relative;isolation:isolate;overflow:hidden;height:52px;min-width:124px;border-radius:5px;border:1px solid rgba(0,0,0,.55);color:white;font-weight:760;letter-spacing:.08em;cursor:pointer;background:linear-gradient(180deg,var(--accent),var(--accentDim));box-shadow:inset 0 3px 0 rgba(255,255,255,.25),0 3px 12px rgba(0,0,0,.36);}
+.genbtn::after{content:"";position:absolute;inset:0 auto 0 -45%;width:42%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.38),transparent);transform:skewX(-14deg);animation:sweep 2.4s linear infinite;}
+.custombtn{background:radial-gradient(circle at 30% 20%,rgba(255,255,255,.28),transparent 30%),linear-gradient(135deg,#26313d,#141820 52%,color-mix(in srgb,var(--accent),#16191f 55%));box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 0 -9px 16px rgba(0,0,0,.35),0 3px 12px rgba(0,0,0,.36);}
+.custombtn span{position:relative;z-index:1;text-shadow:0 1px 1px rgba(0,0,0,.6);}
+.custombtn::before{content:"";position:absolute;left:9px;right:9px;bottom:7px;height:3px;border-radius:99px;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+@keyframes sweep{to{left:120%;}}
+.vrows{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;width:100%;}
+.vrow{height:28px;border:1px solid var(--frameB);border-radius:4px;background:var(--frame);display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 9px;font-size:12.5px;color:var(--ink);box-shadow:inset 0 1px 0 rgba(255,255,255,.03);}
+.vrow b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--dim);font-weight:520;}
+.vrow.drag{cursor:ew-resize;border-color:color-mix(in srgb,var(--frameB),var(--accent) 35%);}
+.vrow.drag::before{content:"↔";color:var(--accent);font-size:12px;margin-right:-6px;}
 .iconbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;width:100%;}
 .iconbar input{flex:1 1 260px;min-width:170px;height:32px;border:1px solid var(--frameB);border-radius:6px;background:#101217;color:var(--ink);padding:0 10px;font:13px system-ui,sans-serif;}
 .iconbar .seg{display:flex;gap:4px;padding:3px;border:1px solid var(--frameB);border-radius:7px;background:#11141a;}
@@ -77,11 +122,48 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .feature p{margin:0;color:var(--dim);font-size:12px;line-height:1.45;}
 .surfaceops{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;}
 .opchip{font:11px ui-monospace,Menlo,monospace;color:var(--ink);border:1px solid var(--frameB);border-radius:6px;background:#101319;padding:5px 7px;}
+.menudemo{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;}
+.menupanel{width:230px;border:1px solid #333846;border-radius:7px;background:#101319;box-shadow:0 16px 36px rgba(0,0,0,.38);padding:5px;}
+.menurow{height:28px;display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:8px;border-radius:5px;padding:0 8px;color:var(--ink);font-size:12px;}
+.menurow.hover{background:rgba(240,190,90,.14);outline:1px solid rgba(240,190,90,.28);}
+.menurow.sel{background:rgba(240,190,90,.2);}
+.menurow.dis{color:#5e6470;}
+.menurow.danger{color:#ff847d;}
+.menurow .mi{font-family:mdf;font-size:17px;text-align:center;color:var(--dim);}
+.menurow.hover .mi,.menurow.sel .mi{color:var(--accent);}
+.menurow .right{font-size:11px;color:var(--faint);}
+.menusep{height:1px;background:#272c36;margin:5px 8px;}
+.selectface{height:32px;min-width:190px;border:1px solid var(--frameB);border-radius:7px;background:#151820;color:var(--ink);display:grid;grid-template-columns:1fr 18px;align-items:center;padding:0 10px;font:12px system-ui,sans-serif;box-shadow:inset 0 -2px 0 var(--accent);}
+.selectface span:last-child{font-family:mdf;color:var(--accent);text-align:right;}
+.contexttarget{width:190px;height:92px;border:1px dashed var(--frameB);border-radius:8px;background:linear-gradient(135deg,#11151d,#171b23);position:relative;display:grid;place-items:center;color:var(--dim);font-size:12px;}
+.contexttarget:after{content:"";position:absolute;left:116px;top:42px;width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px rgba(240,190,90,.14);}
+.modaldemo{position:relative;width:100%;min-height:236px;border:1px solid var(--frame);background:#101319;overflow:hidden;display:grid;place-items:center;}
+.modalback{position:absolute;inset:0;padding:18px;display:grid;grid-template-columns:repeat(3,minmax(80px,1fr));gap:10px;opacity:.5;}
+.modalghost{height:54px;border:1px solid #2b303b;background:#151922;color:var(--dim);font-size:11px;display:grid;place-items:center;}
+.modalscrim{position:absolute;inset:0;background:rgba(0,0,0,.62);}
+.modalpanel{position:relative;width:min(360px,calc(100% - 36px));border:1px solid var(--frameB);background:#171b22;box-shadow:0 20px 46px rgba(0,0,0,.45);padding:16px;}
+.modalpanel h3{margin:0 0 8px;color:var(--ink);font-size:16px;font-weight:700;letter-spacing:0;}
+.modalpanel p{margin:0 0 18px;color:var(--dim);font-size:12px;line-height:1.45;}
+.modalbuttons{display:flex;justify-content:flex-end;gap:8px;}
+.modalbtn{height:28px;min-width:74px;border:1px solid var(--frameB);background:transparent;color:var(--ink);font:12px system-ui,sans-serif;padding:0 12px;}
+.modalbtn.primary{border-color:var(--accent);box-shadow:inset 0 -2px 0 rgba(240,190,90,.24);}
+.fielddemo{min-width:230px;display:grid;gap:9px;}
+.textfield{height:34px;border:1px solid var(--frameB);border-radius:7px;background:#101319;color:var(--ink);display:grid;grid-template-columns:1fr auto;align-items:center;padding:0 10px;font:13px ui-monospace,Menlo,monospace;box-shadow:0 0 0 1px rgba(240,190,90,.12);}
+.textfield .caret{width:1px;height:17px;background:var(--accent);display:inline-block;margin-left:2px;}
+.scrollsplit{display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:16px;width:100%;}
+.scrollbox{height:150px;border:1px solid var(--frameB);border-radius:8px;background:#101319;position:relative;overflow:hidden;padding:9px 22px 9px 9px;}
+.scrollrow{height:26px;border-bottom:1px solid #252a34;color:var(--ink);font-size:12px;display:flex;align-items:center;justify-content:space-between;}
+.scrollrow span:last-child{color:var(--dim);}
+.scrollthumb{position:absolute;right:6px;top:24px;width:7px;height:56px;border-radius:4px;background:var(--accent);}
+.splitbox{height:150px;border:1px solid var(--frameB);border-radius:8px;display:grid;grid-template-columns:42% 8px 1fr;background:#101319;overflow:hidden;}
+.splitpane{padding:10px;color:var(--dim);font-size:12px;background:#131720;}
+.splitpane b{display:block;color:var(--ink);margin-bottom:8px;}
+.splitbar{background:linear-gradient(180deg,#2d3340,#171b22);box-shadow:inset 0 0 0 1px #3a4050;cursor:col-resize;}
 .graphwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;width:100%;}
 .matrixnotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;width:100%;margin-top:2px;}
 .matrixnotes .feature{min-height:78px;padding:10px;}
-@media (prefers-reduced-motion:reduce){.sw,canvas.live{transition:none;}}
-@media (max-width:820px){.shell{grid-template-columns:1fr;}nav{position:static;height:auto;border-right:none;border-bottom:1px solid #202329;}main{padding:28px 20px 70px;}}
+@media (prefers-reduced-motion:reduce){.tkey,.ikey,.sw,canvas.live{transition:none;}}
+@media (max-width:820px){.shell{grid-template-columns:1fr;}nav{position:static;height:auto;border-right:none;border-bottom:1px solid #202329;}main{padding:28px 20px 70px;}.scrollsplit{grid-template-columns:1fr;}}
 </style>
 
 <div class="shell">
@@ -94,13 +176,19 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <a href="#ghost" class="nl">Randomise window</a>
     <a href="#fader" class="nl">Fader</a>
     <a href="#toggle" class="nl">Toggle</a>
+    <a href="#buttons" class="nl">Buttons</a>
+    <a href="#transport" class="nl">Transport</a>
     <a href="#segmented" class="nl">Segmented</a>
     <a href="#cycle" class="nl">Cycle button</a>
-    <a href="#custom-paint" class="nl">Custom paint</a>
+    <a href="#custom-paint" class="nl">Animated · custom</a>
+    <a href="#tactile" class="nl">Tactile key</a>
     <a href="#ledbtn" class="nl">LED button</a>
     <div class="grp">Indicators</div>
     <a href="#led" class="nl">LED</a>
     <a href="#meter" class="nl">Meter</a>
+    <a href="#badge" class="nl">Badge · header</a>
+    <a href="#list" class="nl">List item</a>
+    <a href="#value-row" class="nl">Value row</a>
     <div class="grp">Instruments</div>
     <a href="#grid" class="nl">Pattern grid</a>
     <a href="#matrix" class="nl">Sequencer matrix</a>
@@ -109,16 +197,19 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <a href="#keys" class="nl">Keyboard</a>
     <div class="grp">aGooey</div>
     <a href="#agooey" class="nl">Render surface</a>
+    <a href="#menus" class="nl">Menus</a>
+    <a href="#dialogs" class="nl">Modal dialogs</a>
     <a href="#graph" class="nl">Graph surface</a>
+    <a href="#fields" class="nl">Text field</a>
+    <a href="#scrollsplit" class="nl">Scroll · splitter</a>
     <div class="grp">Assets</div>
     <a href="#icons" class="nl">Icon catalogue</a>
   </nav>
   <main>
     <div class="eyebrow">SND · component library</div>
     <h1>The aGooey UI toolkit</h1>
-    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, graph nodes, a keyboard, an XY pad, a step grid, a sequencer matrix — belongs to the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
+    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, menus, modal dialogs, graph nodes, a keyboard, an XY pad, a step grid, a sequencer matrix — rendered here from the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
     <div class="tryhint"><b>Try it —</b><span>drag the knobs &amp; faders (hold <b>⇧&nbsp;Shift</b> for 10× fine adjust), grab the XY handle, play the keys, click the switches and grid cells. The meter and the mod ring run on their own.</span></div>
-    <div class="tryhint"><b>Showcase integrity —</b><span>CSS imitation widget sections have been removed. Any restored primitive must be generated from SND paint/aGooey output first, then wired into this page as the real library result.</span></div>
 
     <div class="themebar">
       <span class="cap">Accent</span>
@@ -183,6 +274,45 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       </div>
     </section>
 
+    <section id="buttons">
+      <div class="sechead"><h2>Buttons</h2><span class="tag">paint::drawButton · drawOutlineButton</span></div>
+      <p class="desc">The <b>flat control button</b> — SND's button for text labels, tabs and menu actions. The accent underline marks the selected one. Shown across its states:</p>
+      <div class="rack">
+        <div class="statebar">
+          <div class="statecol"><button class="btn">Default</button><div class="cellcap">default</div></div>
+          <div class="statecol"><button class="btn hov">Hover</button><div class="cellcap">hover</div></div>
+          <div class="statecol"><button class="btn act">Active</button><div class="cellcap">active</div></div>
+          <div class="statecol"><button class="btn sel">Selected</button><div class="cellcap">selected</div></div>
+          <div class="statecol"><button class="btn dis">Disabled</button><div class="cellcap">disabled</div></div>
+        </div>
+      </div>
+      <p class="desc"><b>Outline buttons</b> are the quiet option: no fill and no resting border by default, with fill, text and border colours selectable per state.</p>
+      <div class="rack">
+        <div class="statebar">
+          <div class="statecol"><button class="outlinebtn">Default</button><div class="cellcap">no fill</div></div>
+          <div class="statecol"><button class="outlinebtn hov">Hover</button><div class="cellcap">hover border</div></div>
+          <div class="statecol"><button class="outlinebtn act">Active</button><div class="cellcap">active fill</div></div>
+          <div class="statecol"><button class="outlinebtn sel">Selected</button><div class="cellcap">selected</div></div>
+          <div class="statecol"><button class="outlinebtn custom">Custom</button><div class="cellcap">custom colours</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="transport">
+      <div class="sechead"><h2>Transport buttons</h2><span class="tag">widgets::transportButton · paint::drawTransportGlyph</span></div>
+      <p class="desc">The building block of a transport bar: the outline-button chrome with a crisp <b>vector</b> transport glyph (drawn, not a font), picked by <b>intent</b> (<code>Icon::Record</code>, <code>Play</code>, <code>Stop</code>, <code>Loop</code>). The engaged fill marks the state — blue for play/cycle, and <b>record goes red</b>, its ring filling to a disc while armed. Fires on mouse-down for no-latency feel. <b class="try">Hover them.</b></p>
+      <div class="rack">
+        <div class="statebar">
+          <div class="statecol"><button class="outlinebtn tb rec"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg></button><div class="cellcap">record</div></div>
+          <div class="statecol"><button class="outlinebtn tb rec sel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg></button><div class="cellcap">recording</div></div>
+          <div class="statecol"><button class="outlinebtn tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button><div class="cellcap">play</div></div>
+          <div class="statecol"><button class="outlinebtn tb sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button><div class="cellcap">playing</div></div>
+          <div class="statecol"><button class="outlinebtn tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button><div class="cellcap">loop</div></div>
+          <div class="statecol"><button class="outlinebtn tb sel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg></button><div class="cellcap">cycling</div></div>
+        </div>
+      </div>
+    </section>
+
     <section id="segmented">
       <div class="sechead"><h2>Segmented</h2><span class="tag">snd::ui::segmented · paint::drawSegmented</span></div>
       <p class="desc">A pill group of mutually exclusive options — mono/stereo, filter slope, A/B. One selection; Left/Right arrows move it when focused; equal-width segments sized to the widest label. <b class="try">Click a segment.</b></p>
@@ -204,13 +334,27 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 
 
     <section id="custom-paint">
-      <div class="sechead"><h2>Custom paint hooks</h2><span class="tag">KnobPainter · XYPadPainter · PatternCellPainter</span></div>
-      <p class="desc">Custom painter hooks let a consumer draw a knob, XY-pad, or pattern-grid-cell body without owning hit-testing, focus, keyboard, value mapping, or accessibility. SND draws the required focus treatment after the painter runs. The gradient knob and velocity cells below also use the shared <code>drawGradientArc</code> / <code>drawGradientRect</code> primitives.</p>
+      <div class="sechead"><h2>Animated &amp; custom paint</h2><span class="tag">animatedButton · ButtonPainter · KnobPainter · XYPadPainter · PatternCellPainter</span></div>
+      <p class="desc">Generation/action buttons can carry a subtle live sweep, while custom painter hooks let a consumer draw a knob, button, XY-pad, or pattern-grid-cell body without owning hit-testing, focus, keyboard, value mapping, or accessibility. SND draws the required focus treatment after the painter runs. The gradient knob and velocity cells below also use the shared <code>drawGradientArc</code> / <code>drawGradientRect</code> primitives.</p>
       <div class="rack">
+        <div class="statecol"><button class="genbtn">GENERATE</button><div class="cellcap">animatedButton</div></div>
+        <div class="statecol"><button class="custombtn"><span>RENDER</span></button><div class="cellcap">custom ButtonPainter</div></div>
         <div class="unit"><canvas class="cv live" data-w="custom" width="72" height="72"></canvas><div class="cellcap">custom KnobPainter</div></div>
         <div class="unit"><canvas class="cv live" data-w="gradknob" width="72" height="72"></canvas><div class="cellcap">gradient-arc painter</div></div>
         <div class="unit"><canvas class="cv live" data-w="velgrid" width="240" height="96"></canvas><div class="cellcap">PatternCellPainter · velocity</div></div>
         <div class="unit"><canvas class="cv live" data-w="puck" width="96" height="96"></canvas><div class="cellcap">XYPadPainter · puck map</div></div>
+      </div>
+    </section>
+
+    <section id="tactile">
+      <div class="sechead"><h2>Tactile key</h2><span class="tag">paint::drawTactileIconButton</span></div>
+      <p class="desc">The <b>other</b> button family — a hardware key for <b>icon &amp; tool</b> buttons (transport, momentary/toggle tools), not text. Light-grey raised, presses into a soft off-white inset with the glyph lit in the accent. <b class="try">Press one.</b> Text buttons stay on the flat style above — tactile isn't every button.</p>
+      <div class="rack">
+        <div class="statecol"><button class="tkey">&#xe037;</button><div class="cellcap">play</div></div>
+        <div class="statecol"><button class="tkey">&#xe047;</button><div class="cellcap">stop</div></div>
+        <div class="statecol"><button class="tkey">&#xe61b;</button><div class="cellcap">tune</div></div>
+        <div class="statecol"><button class="tkey press">&#xe029;</button><div class="cellcap">held</div></div>
+        <div class="statecol"><button class="tkey lc">&#xe3fb;</button><div class="cellcap">lucide</div></div>
       </div>
     </section>
 
@@ -241,6 +385,42 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <div class="unit"><canvas class="cv" data-w="meterL" width="12" height="120"></canvas><div class="cellcap">L</div></div>
         <div class="unit"><canvas class="cv" data-w="meterR" width="12" height="120"></canvas><div class="cellcap">R</div></div>
         <div class="unit" style="align-self:center"><canvas class="cv" data-w="meterH" width="220" height="14"></canvas><div class="cellcap">bus · horizontal</div></div>
+      </div>
+    </section>
+
+    <section id="badge">
+      <div class="sechead"><h2>Badge &amp; section header</h2><span class="tag">paint::drawBadge · drawSectionHeader</span></div>
+      <p class="desc">Small labels: a tinted pill and a dim caption with a trailing rule.</p>
+      <div class="rack" style="gap:26px;align-items:center">
+        <span class="badge">aGooey</span>
+        <span class="badge">VST3</span>
+        <span class="badge">MIDI</span>
+        <div style="flex:1;min-width:180px"><canvas class="cv" data-w="header" width="260" height="20"></canvas></div>
+      </div>
+    </section>
+
+    <section id="list">
+      <div class="sechead"><h2>List item</h2><span class="tag">paint::drawListItem</span></div>
+      <p class="desc">Selectable row — the accent rail and tint mark the current selection while text stays aligned. <b class="try">Click a row.</b></p>
+      <div class="rack" style="gap:8px">
+        <div class="li">Kick 909</div>
+        <div class="li sel">Snare — rimshot</div>
+        <div class="li">Hat closed</div>
+        <div class="li">Clap</div>
+      </div>
+    </section>
+
+
+    <section id="value-row">
+      <div class="sechead"><h2>Value row &amp; drag number</h2><span class="tag">paint::drawValueRow · dragNumber</span></div>
+      <p class="desc">Compact readouts and horizontal drag values share the same value-row paint in immediate and retained modes. Drag numbers keep model state caller-owned; SND owns the row body, focus and fine-drag affordance.</p>
+      <div class="rack">
+        <div class="vrows">
+          <div class="vrow"><span>Osc Pitch</span><b>+7.00 st</b></div>
+          <div class="vrow drag"><span>Cutoff</span><b>0.72</b></div>
+          <div class="vrow"><span>Voice Mode</span><b>poly</b></div>
+          <div class="vrow drag"><span>Drive</span><b>3.4 dB</b></div>
+        </div>
       </div>
     </section>
 
@@ -298,6 +478,63 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       </div>
     </section>
 
+    <section id="menus">
+      <div class="sechead"><h2>Menus</h2><span class="tag">popupMenu · dropdownMenu · contextMenuRegion</span></div>
+      <p class="desc">Compact action menus with icons, checked rows, disabled rows, separators, nested submenus, typeahead, keyboard focus, Escape/click-outside close, and anchored context popups. Dropdowns expose the current value and can inherit an outline-button face style.</p>
+      <div class="rack menudemo">
+        <div>
+          <div class="cellcap" style="text-align:left">popup action list</div>
+          <div class="menupanel">
+            <div class="menurow hover"><span class="mi">&#xe145;</span><span>Add module</span><span class="right">Enter</span></div>
+            <div class="menurow"><span class="mi">&#xe5ca;</span><span>Snap to grid</span><span class="right">on</span></div>
+            <div class="menurow"><span></span><span>Route audio</span><span class="right">&#xe5cc;</span></div>
+            <div class="menusep"></div>
+            <div class="menurow dis"><span class="mi">&#xe14d;</span><span>Paste</span><span class="right">⌘V</span></div>
+            <div class="menurow danger"><span class="mi">&#xe872;</span><span>Delete</span><span class="right">⌫</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="cellcap" style="text-align:left">dropdown/select face</div>
+          <div class="selectface"><span>Graph skin · Neo</span><span>&#xe5c5;</span></div>
+          <div class="menupanel" style="margin-top:8px;width:190px">
+            <div class="menurow"><span></span><span>TechSquare</span><span></span></div>
+            <div class="menurow sel"><span class="mi">&#xe5ca;</span><span>Neo</span><span></span></div>
+            <div class="menurow"><span></span><span>Gold</span><span></span></div>
+          </div>
+        </div>
+        <div>
+          <div class="cellcap" style="text-align:left">context anchor</div>
+          <div class="contexttarget">right-click canvas/list/module</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dialogs">
+      <div class="sechead"><h2>Modal dialogs</h2><span class="tag">modalDialog · alertDialog · confirmDialog</span></div>
+      <p class="desc">Retained blocking overlays with a scrim, centred dialog chrome, real button children, Escape policy, Tab focus trap, inert background input, and Dialog/Alert semantics.</p>
+      <div class="rack">
+        <div class="modaldemo">
+          <div class="modalback">
+            <div class="modalghost">graph surface</div>
+            <div class="modalghost">module list</div>
+            <div class="modalghost">transport</div>
+            <div class="modalghost">meter bank</div>
+            <div class="modalghost">pattern grid</div>
+            <div class="modalghost">value rows</div>
+          </div>
+          <div class="modalscrim"></div>
+          <div class="modalpanel">
+            <h3>Delete module?</h3>
+            <p>This removes the module and its cables. Background controls are inert until Cancel, Confirm, Escape, or the configured scrim policy resolves the dialog.</p>
+            <div class="modalbuttons">
+              <button class="modalbtn">Cancel</button>
+              <button class="modalbtn primary">Confirm</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="graph">
       <div class="sechead"><h2>Graph surface</h2><span class="tag">widgets::graphSurface · drawGraphGrid · drawCable · drawModuleBox</span></div>
       <p class="desc">Retained graph surfaces own pan/zoom, grid/backdrop, selection, cables, module chrome, ports, hit regions, anchored context menus, keyboard traversal, and virtual semantic children. The caller owns graph data and mutations.</p>
@@ -306,6 +543,39 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <div class="unit"><canvas class="cv live" data-w="graphAurora" width="360" height="190"></canvas><div class="cellcap">Aurora backdrop · selected module · ports</div></div>
       </div>
     </section>
+
+    <section id="fields">
+      <div class="sechead"><h2>Text field &amp; value field</h2><span class="tag">widgets::textField · widgets::valueField</span></div>
+      <p class="desc">Pure retained text editing: caret, selection, keyboard editing, semantic value text, and caller-owned strings. Value fields use the same compact row language as drag numbers when editing numeric values.</p>
+      <div class="rack">
+        <div class="fielddemo">
+          <div class="textfield"><span>oscillator.name = "sub fold"</span><span class="caret"></span></div>
+          <div class="vrow drag"><span>Gain</span><b>-6.0 dB</b></div>
+          <div class="vrow"><span>Mode</span><b>latch</b></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="scrollsplit">
+      <div class="sechead"><h2>Scroll view &amp; splitter</h2><span class="tag">widgets::scrollView · widgets::splitter</span></div>
+      <p class="desc">Retained layout primitives for real tool surfaces: scroll views keep content clipped with semantic children intact, and splitters bind to caller-owned proportions so panes rebuild from app state.</p>
+      <div class="rack scrollsplit">
+        <div class="scrollbox">
+          <div class="scrollrow"><b>Device A</b><span>ready</span></div>
+          <div class="scrollrow"><b>Oscillator</b><span>2 outs</span></div>
+          <div class="scrollrow"><b>Filter</b><span>mod</span></div>
+          <div class="scrollrow"><b>Delay</b><span>sync</span></div>
+          <div class="scrollrow"><b>Recorder</b><span>armed</span></div>
+          <div class="scrollthumb"></div>
+        </div>
+        <div class="splitbox">
+          <div class="splitpane"><b>Inspector</b>Node controls, meters, actions.</div>
+          <div class="splitbar" aria-hidden="true"></div>
+          <div class="splitpane"><b>Graph</b>Surface, cables, modules.</div>
+        </div>
+      </div>
+    </section>
+
 
     <section id="icons">
       <div class="sechead"><h2>Icon catalogue</h2><span class="tag">Material · Apache-2.0 &nbsp;/&nbsp; Lucide · ISC</span></div>
@@ -341,7 +611,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     </section>
 
     <div class="foot">
-      Showcase cleanup in progress: widget pixels must come from SND paint/aGooey rendering, never CSS imitation. CSS here is reserved for page layout, captions, navigation, spacing, and wrappers.
+      Rendered from the SND toolkit: controls trace <code>snd::ui::paint</code> geometry, icons come from <code>third_party/fonts</code>, and new retained surfaces draw through <code>snd::ui::draw::Surface</code>.
       aGooey is the preferred retained path; Dear ImGui remains the compatibility layer for existing immediate-mode hosts.
     </div>
   </main>
@@ -549,6 +819,12 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     g.beginPath();pts.forEach(function(p,i){var x=p[0]*W,y=(1-p[1])*H;if(i)g.lineTo(x,y);else g.moveTo(x,y);});g.strokeStyle=acc;g.lineWidth=2.2;g.stroke();
     pts.forEach(function(p,i){var x=p[0]*W,y=(1-p[1])*H;g.beginPath();g.arc(x,y,i===s.hot?6:4.5,0,7);g.fillStyle=i===s.active?'#fff':acc;g.fill();g.strokeStyle='#111319';g.lineWidth=1;g.stroke();});
     g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,.5,.5,W-1,H-1,3);g.stroke();
+  }
+
+  function header(g,W,H){
+    g.font='12px system-ui,sans-serif';g.textBaseline='top';g.fillStyle=PAL.dim;
+    var t='OSCILLATOR';g.fillText(t,0,4);var tw=g.measureText(t).width;
+    g.strokeStyle=rgba(PAL.frameB,0.67);g.lineWidth=1;g.beginPath();g.moveTo(tw+8,11);g.lineTo(W,11);g.stroke();
   }
 
   var RM=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -837,6 +1113,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       case 'meterL': meter(g,W,H,prog(T,0),peak('meterL',T,0));break;
       case 'meterR': meter(g,W,H,prog(T,1.3),peak('meterR',T,1.3));break;
       case 'meterH': meter(g,W,H,prog(T,0.6),peak('meterH',T,0.6));break;
+      case 'header': header(g,W,H);break;
       case 'grid': patternGrid(g,W,H,pat,ROWS,STEPS,-1);break;
       case 'matrix': sequencerMatrix(g,W,H,s);break;
       case 'xy': xy(g,W,H,s.x,s.y);break;
@@ -942,6 +1219,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     else if(k==='grid') gridClick(cv);
   });
 
+  // list items: click to select
+  var lis=[].slice.call(document.querySelectorAll('#list .li'));
+  lis.forEach(function(li){li.addEventListener('click',function(){lis.forEach(function(o){o.classList.remove('sel');});li.classList.add('sel');});});
+
   // ── initial paint + the one animation (meters) ──
   drawAll();
   var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
@@ -962,6 +1243,12 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     root.style.setProperty('--accent',sw.dataset.a);root.style.setProperty('--accentDim',sw.dataset.d);
     document.querySelectorAll('.sw').forEach(function(o){o.setAttribute('aria-pressed',o===sw);});
     drawAll();});});
+
+  // tactile / icon tap flash (CSS :active covers press-hold)
+  document.querySelectorAll('.tkey,.ikey').forEach(function(k){
+    k.addEventListener('pointerdown',function(){k.classList.add('press');});
+    ['pointerup','pointerleave','pointercancel'].forEach(function(ev){k.addEventListener(ev,function(){setTimeout(function(){k.classList.remove('press');},110);});});});
+
 
   function setupIconCatalogue(){
     var grid=document.getElementById('iconGrid'), meta=document.getElementById('iconMeta'), search=document.getElementById('iconSearch'), more=document.getElementById('iconMore'), all=document.getElementById('iconAll');
