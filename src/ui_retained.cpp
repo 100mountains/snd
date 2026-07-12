@@ -1148,35 +1148,54 @@ bool Tree::dispatch(const Event& event)
         return false;
 
     Node* current = focused();
-    if (!current)
-        return false;
-    if (current->handleEvent(event))
-        return true;
+    if (current) {
+        if (current->handleEvent(event))
+            return true;
 
-    if (event.type != EventType::KeyDown)
-        return false;
-
-    switch (event.key) {
-    case Key::Enter:
-    case Key::Space:
-        return current->perform(Action::Activate);
-    case Key::Down:
-        if (effectiveRole(*current) == Role::ListItem ||
-            effectiveRole(*current) == Role::MenuItem)
-            return focusNext(false);
-        return current->perform(Action::Decrement);
-    case Key::Up:
-        if (effectiveRole(*current) == Role::ListItem ||
-            effectiveRole(*current) == Role::MenuItem)
-            return focusNext(true);
-        return current->perform(Action::Increment);
-    case Key::Right:
-        return current->perform(Action::Increment);
-    case Key::Left:
-        return current->perform(Action::Decrement);
-    default:
-        return false;
+        if (event.type == EventType::KeyDown) {
+            switch (event.key) {
+            case Key::Enter:
+            case Key::Space:
+                if (current->perform(Action::Activate))
+                    return true;
+                break;
+            case Key::Down:
+                if (effectiveRole(*current) == Role::ListItem ||
+                    effectiveRole(*current) == Role::MenuItem)
+                    return focusNext(false);
+                if (current->perform(Action::Decrement))
+                    return true;
+                break;
+            case Key::Up:
+                if (effectiveRole(*current) == Role::ListItem ||
+                    effectiveRole(*current) == Role::MenuItem)
+                    return focusNext(true);
+                if (current->perform(Action::Increment))
+                    return true;
+                break;
+            case Key::Right:
+                if (current->perform(Action::Increment))
+                    return true;
+                break;
+            case Key::Left:
+                if (current->perform(Action::Decrement))
+                    return true;
+                break;
+            default:
+                break;
+            }
+        }
     }
+
+    // Global accelerators: a KeyDown/TextInput that no focused widget claimed
+    // (including when nothing is focused) falls through to the root node's
+    // onEvent, so an app can register shortcut keys -- transport, delete --
+    // that fire regardless of which widget holds focus. Pointer focus and the
+    // focused widget's own keys still get first refusal above.
+    if ((event.type == EventType::KeyDown || event.type == EventType::TextInput) &&
+        root_ && root_.get() != current)
+        return root_->handleEvent(event);
+    return false;
 }
 
 bool Tree::performAction(const NodeId& id, Action action, double value)
