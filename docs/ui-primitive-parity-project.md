@@ -1,6 +1,6 @@
 # UI Primitive Parity Project
 
-Status: active architecture checklist. Inspected commit: `5f6ef4b`.
+Status: active architecture checklist. Inspected commit: `b331166`.
 
 Goal: keep SND as one UI toolkit with two authoring front ends. Reusable
 primitives should have an immediate API, retained API, shared `paint::drawX`
@@ -16,11 +16,11 @@ Full or near-full parity:
   icon button basics, and `transportButton`.
 - Choice controls: `segmented`, `tabBar`, `cycleButton`.
 - Menus: popup, dropdown, context menu model and retained semantic fallback.
-- Continuous/status controls: `knob`, `toggle`, `led`, `meter`, `fader`,
-  `dragNumber`, `knobDb`.
+- Continuous/status controls: `knob`, `toggle`, `checkbox`, `led`, `meter`,
+  `fader`, `dragNumber`, `knobDb`.
 - Audio surfaces: `keyboard`, `patternGrid`, `envelopeEditor`, `xyPad`.
 - Chrome/help: `gradientPanel`, `badge`, `sectionHeader`, `tooltip`.
-- Lists/files: `selectableList`; `fileBrowser` API exists on both sides.
+- Lists/files: `selectableList`, `fileBrowser`.
 
 Retained-primary primitives:
 
@@ -60,10 +60,6 @@ Paint-wrapper gaps:
 
 Open behaviour caveats:
 
-- `fileBrowser` currently shares state/filtering/sorting and a retained API, but
-  pointer activation must match the immediate click-select, double-click-pick
-  model before calling it full interaction parity. Semantic/keyboard activation
-  should remain a direct accessible pick/enter action.
 - `knobDb` has a retained convenience API with dB range/formatting; confirm
   whether the immediate 0 dB tick is a required retained visual affordance or a
   style-detail follow-up.
@@ -87,7 +83,6 @@ Open behaviour caveats:
    - keep a short table in the UI guide or this file: full parity,
      retained-primary, immediate-primary, paint-only, adapter-only.
 4. Authoring parity decisions:
-   - finish `fileBrowser` pointer pick parity;
    - decide whether paint-only randomise overlays should stay building blocks or
      become paired authoring APIs.
 5. Coverage:
@@ -107,9 +102,9 @@ Preferred shape for the first implementation slice:
   automatic rendering of every `Semantics::description`; existing descriptions
   often describe control type rather than user help.
 - Retained core exposes `Semantics::tooltip` and carries it through
-  `SemanticNode`; UI should render that field and may add a small helper such as
-  `attachTooltip(node, text, maxWidth)` for convenience. Use
-  `Semantics::description` separately for accessible descriptive text.
+  `SemanticNode`; `widgets::attachTooltip(node, text)` is the convenience
+  helper. Use `Semantics::description` separately for accessible descriptive
+  text.
 - Graph port tooltips can remain graph-specific because ports are virtual parts,
   but they should reuse the same tooltip timing/painter path.
 

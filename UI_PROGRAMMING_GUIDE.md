@@ -515,10 +515,11 @@ painters using the same `paint::ButtonPaintArgs` and `paint::KnobPaintArgs`
 contract as immediate mode.
 Small parity wrappers should stay boring and named the same as their immediate
 counterpart: `widgets::gradientButton`, `widgets::transportButton`,
-`widgets::knobDb`, `widgets::selectableList`, and `widgets::fileBrowser` exist
-so users do not have to rebuild common controls from lower-level retained
-pieces. Use `widgets::attachTooltip(node, text)` for retained hover help;
-accessible descriptions remain separate in `Semantics::description`.
+`widgets::checkbox`, `widgets::knobDb`, `widgets::selectableList`, and
+`widgets::fileBrowser` exist so users do not have to rebuild common controls
+from lower-level retained pieces. Use `widgets::attachTooltip(node, text)` for
+retained hover help; accessible descriptions remain separate in
+`Semantics::description`.
 
 ## Semantics, focus, and headless testing
 
