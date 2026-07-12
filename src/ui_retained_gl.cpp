@@ -121,6 +121,11 @@ struct GlWindow::Impl {
     std::array<double, 3> lastClickTime{{0.0, 0.0, 0.0}};
     std::array<Vec2, 3> lastClickPos{};
     bool frameOpen = false;
+    // undecorated-window management (title-bar-driven; see GlWindow::beginNativeDrag)
+    bool dragging = false;
+    double dragStartCursorX = 0.0, dragStartCursorY = 0.0; // window-relative cursor at drag start
+    bool fullscreen = false;
+    int savedX = 0, savedY = 0, savedW = 0, savedH = 0;    // windowed geometry, for fullscreen restore
 
     static Impl* from(GLFWwindow* w)
     {
@@ -364,6 +369,21 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
         return false;
 
     glfwPollEvents();
+    // native window drag: while the title bar is held, move the OS window so the
+    // grabbed point stays under the cursor (self-correcting via the window-relative
+    // delta, so it doesn't feed back as the window moves).
+    if (impl_->dragging) {
+        if (glfwGetMouseButton(impl_->window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS) {
+            impl_->dragging = false;
+        } else {
+            double cx = 0.0, cy = 0.0;
+            glfwGetCursorPos(impl_->window, &cx, &cy);
+            int wx = 0, wy = 0;
+            glfwGetWindowPos(impl_->window, &wx, &wy);
+            glfwSetWindowPos(impl_->window, wx + (int)(cx - impl_->dragStartCursorX),
+                             wy + (int)(cy - impl_->dragStartCursorY));
+        }
+    }
     snd::platform::processMainQueue();
     glfwMakeContextCurrent(impl_->window);
 
@@ -480,6 +500,58 @@ void GlWindow::setTitle(const std::string& title)
 void GlWindow::setClearColor(draw::Color color)
 {
     impl_->clearColor = color;
+}
+
+void GlWindow::minimize()
+{
+    if (impl_ && impl_->window)
+        glfwIconifyWindow(impl_->window);
+}
+
+void GlWindow::toggleMaximize()
+{
+    if (!impl_ || !impl_->window)
+        return;
+    if (glfwGetWindowAttrib(impl_->window, GLFW_MAXIMIZED))
+        glfwRestoreWindow(impl_->window);
+    else
+        glfwMaximizeWindow(impl_->window);
+}
+
+void GlWindow::toggleFullscreen()
+{
+    if (!impl_ || !impl_->window)
+        return;
+    GLFWwindow* w = impl_->window;
+    if (!impl_->fullscreen) {
+        glfwGetWindowPos(w, &impl_->savedX, &impl_->savedY);
+        glfwGetWindowSize(w, &impl_->savedW, &impl_->savedH);
+        GLFWmonitor* mon = glfwGetPrimaryMonitor();
+        if (const GLFWvidmode* mode = mon ? glfwGetVideoMode(mon) : nullptr) {
+            glfwSetWindowMonitor(w, mon, 0, 0, mode->width, mode->height, mode->refreshRate);
+            impl_->fullscreen = true;
+        }
+    } else {
+        glfwSetWindowMonitor(w, nullptr, impl_->savedX, impl_->savedY,
+                             impl_->savedW > 0 ? impl_->savedW : 1280,
+                             impl_->savedH > 0 ? impl_->savedH : 800, 0);
+        impl_->fullscreen = false;
+    }
+}
+
+void GlWindow::setMouseCaptured(bool captured)
+{
+    if (impl_ && impl_->window)
+        glfwSetInputMode(impl_->window, GLFW_CURSOR,
+                         captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+void GlWindow::beginNativeDrag()
+{
+    if (!impl_ || !impl_->window)
+        return;
+    impl_->dragging = true;
+    glfwGetCursorPos(impl_->window, &impl_->dragStartCursorX, &impl_->dragStartCursorY);
 }
 
 draw::FrameContext GlWindow::frameContext() const

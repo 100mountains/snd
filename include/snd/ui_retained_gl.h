@@ -42,6 +42,14 @@ public:
     draw::FrameContext frameContext() const;
     std::vector<std::string> takeDroppedFiles();
 
+    // Window management for undecorated shells (an app that draws its own title
+    // bar drives these from the bar's hit regions).
+    void minimize();
+    void toggleMaximize();
+    void toggleFullscreen();
+    void setMouseCaptured(bool captured); // relative-cursor mode: drags run past the edge
+    void beginNativeDrag();               // move the OS window by dragging the title bar
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
