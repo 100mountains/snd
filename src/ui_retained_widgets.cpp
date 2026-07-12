@@ -2074,6 +2074,29 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                                     : 0.90f);
         break;
     }
+    case VisualKind::TabBar: {
+        const int count = (int)style.segments.size();
+        std::vector<const char*> labels;
+        labels.reserve(style.segments.size());
+        for (const std::string& s : style.segments)
+            labels.push_back(s.c_str());
+        const int selected = std::clamp((int)std::lround(valueOf(node, sem)),
+                                        0, std::max(0, count - 1));
+        int hoverIdx = -1;
+        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f &&
+            context.pointerValid) {
+            const float lx = context.pointer.x - bounds.x;
+            if (lx >= 0.0f && lx <= bounds.w)
+                hoverIdx = std::clamp((int)(lx / (bounds.w / (float)count)),
+                                      0, count - 1);
+        }
+        paint::drawTabBar(drawList, font, topLeft(bounds),
+                          sizeOf(bounds), labels.data(), count, selected,
+                          hoverIdx, pal, state,
+                          style.fontScale > 0.0f ? style.fontScale * 0.90f
+                                                 : 0.90f);
+        break;
+    }
     case VisualKind::CycleButton: {
         const int count = (int)style.segments.size();
         const int index = std::clamp((int)std::lround(valueOf(node, sem)),
@@ -2358,6 +2381,30 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                                              : 0.90f),
                              topLeftDraw(bounds), sizeOfDraw(bounds), labels.data(),
                              count, selected, hoverIdx, pal, state);
+        break;
+    }
+    case VisualKind::TabBar: {
+        const int count = (int)style.segments.size();
+        std::vector<const char*> labels;
+        labels.reserve(style.segments.size());
+        for (const std::string& s : style.segments)
+            labels.push_back(s.c_str());
+        const int selected = std::clamp((int)std::lround(valueOf(node, sem)),
+                                        0, std::max(0, count - 1));
+        int hoverIdx = -1;
+        if (count > 0 && (state.hovered || state.active) && bounds.w > 0.0f &&
+            context.pointerValid) {
+            const float lx = context.pointer.x - bounds.x;
+            if (lx >= 0.0f && lx <= bounds.w)
+                hoverIdx = std::clamp((int)(lx / (bounds.w / (float)count)),
+                                      0, count - 1);
+        }
+        paint::drawTabBar(surface, font,
+                          fontSize * (style.fontScale > 0.0f
+                                          ? style.fontScale * 0.90f
+                                          : 0.90f),
+                          topLeftDraw(bounds), sizeOfDraw(bounds), labels.data(),
+                          count, selected, hoverIdx, pal, state);
         break;
     }
     case VisualKind::CycleButton: {
@@ -6432,6 +6479,94 @@ Node::Ptr segmented(NodeId id, std::string name, std::vector<std::string> labels
     if (renderer) {
         VisualStyle style;
         style.kind = VisualKind::Segmented;
+        style.segments = std::move(labels);
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr tabBar(NodeId id, std::string name, std::vector<std::string> labels,
+                 ValueBinding binding, PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    const int count = (int)labels.size();
+    auto node = Node::make(std::move(id), Role::Group);
+    if (size.x <= 0.0f)
+        size.x = (float)std::max(1, count) * optionRowWidth(labels, 28.0f, 64.0f);
+    if (size.y <= 0.0f)
+        size.y = 26.0f;
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+
+    ValueBinding indexBinding = optionIndexBinding(std::move(binding), labels);
+    Semantics sem = named(Role::Group, name);
+    sem.description = "Tab strip";
+    setBindingSemantics(sem, indexBinding);
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(indexBinding));
+
+    node->setOnEvent([count](Node& n, const Event& event) {
+        if (event.type == EventType::MouseDown) {
+            if (event.button != MouseButton::Left)
+                return false;
+            const Rect bounds = n.bounds();
+            if (bounds.w <= 0.0f || count <= 0)
+                return false;
+            const double frac = (event.position.x - bounds.x) / bounds.w;
+            const int tab = std::clamp((int)(frac * count), 0, count - 1);
+            return setBindingValue(n, (double)tab);
+        }
+        if (event.type == EventType::KeyDown) {
+            if (event.key == Key::Home)
+                return setBindingValue(n, 0.0);
+            if (event.key == Key::End)
+                return setBindingValue(n, (double)std::max(0, count - 1));
+        }
+        return false;
+    });
+
+    node->setSemanticChildren([sid, labels](const Node& n,
+                                            std::vector<SemanticNode>& out) {
+        const int count = (int)labels.size();
+        if (count <= 0)
+            return;
+        const Rect b = n.bounds();
+        const float tabW = b.w / (float)count;
+        const int selected = std::clamp((int)std::lround(valueOf(n, nullptr)),
+                                        0, count - 1);
+        for (int i = 0; i < count; ++i) {
+            SemanticNode child;
+            child.id = sid + ".tab." + std::to_string(i);
+            child.parent = n.id();
+            child.bounds = {b.x + tabW * (float)i, b.y,
+                            i == count - 1 ? b.w - tabW * (float)i : tabW,
+                            b.h};
+            child.role = Role::Button;
+            child.name = labels[(size_t)i];
+            child.value.text = child.name;
+            child.states = stateMask(SemanticState::Focusable);
+            if (i == selected)
+                child.states |= SemanticState::Selected;
+            child.actions = {Action::Focus, Action::Activate, Action::SetValue};
+            out.push_back(std::move(child));
+        }
+    });
+
+    node->setOnSemanticAction([sid, count](Node& n, const NodeId& semanticId,
+                                           Action action, double) {
+        if (action != Action::Focus && action != Action::Activate &&
+            action != Action::SetValue)
+            return false;
+        for (int i = 0; i < count; ++i)
+            if (semanticId == sid + ".tab." + std::to_string(i))
+                return setBindingValue(n, (double)i);
+        return false;
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::TabBar;
         style.segments = std::move(labels);
         renderer->setStyle(sid, style);
     }

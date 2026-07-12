@@ -132,6 +132,12 @@ bool itemFocusVisible();
 bool segmented(const char* id, const char* const* labels, int count,
                int* selected, const ImVec2& size = ImVec2(0, 0));
 
+// Tab strip for switching between pages/views. Click a tab, or use
+// Left/Right/Home/End when focused. size 0 = equal-width tabs sized to the
+// widest label. Returns true when the selection changes.
+bool tabBar(const char* id, const char* const* labels, int count,
+            int* selected, const ImVec2& size = ImVec2(0, 0));
+
 // Multi-state value button: shows the current option and cycles on click
 // (right-click steps back). Pips under the label mark the position in the
 // cycle. Sized to the widest option so it stays stable while cycling.

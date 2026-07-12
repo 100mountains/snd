@@ -370,7 +370,7 @@ Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `sectionHeader`, `badge`, `listItem`, `menuItem`, `popupMenu`,
 `dropdownMenu`, `contextMenuRegion`, `modalDialog`, `alertDialog`,
 `confirmDialog`, `button`, `outlineButton`,
-`segmented`, `cycleButton`, `ledButton`,
+`segmented`, `tabBar`, `cycleButton`, `ledButton`,
 `animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
 `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`, `valueField`,
 `envelopeEditor`, `canvas`, `textField`, `scrollView`, `splitter`, and
@@ -470,6 +470,10 @@ pill group of mutually exclusive options. The binding holds the selected
 index (min/max/step are forced to `0..count-1` step 1, and a default format
 reports the selected label); clicking picks a segment and Left/Right arrows
 move the selection through the retained Increment/Decrement actions.
+Use `widgets::tabBar(id, name, labels, binding, &renderer, size)` for a
+page/view tab strip. It uses the same caller-owned selected-index binding as
+`segmented`, paints through shared `paint::drawTabBar`, and exposes each tab
+as a virtual semantic child with selected state.
 Use `widgets::cycleButton(id, name, labels, binding, &renderer, size)` for a
 multi-state value button: Enter/Space/click advance through the options with
 wrap-around, arrows step without wrapping, and the binding is the option
@@ -906,6 +910,9 @@ members).
   of mutually exclusive options (mono/stereo, filter slope, A/B). Click a
   segment or use Left/Right when focused; `size=0` gives equal-width segments
   sized to the widest label.
+- `tabBar(id, labels, count, int* selected, size={})` → changed. Tab strip for
+  switching pages/views. Click a tab, or use Left/Right/Home/End when focused;
+  `size=0` gives equal-width tabs sized to the widest label.
 - `cycleButton(id, labels, count, int* index, size={})` → changed. Multi-state
   value button: click cycles the options in place, right-click steps back;
   pips mark the position. Sized to the widest option so it stays stable.

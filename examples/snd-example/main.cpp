@@ -500,6 +500,11 @@ static bool selftestRetainedUi()
                               {30.0f, 5.0f}, 1.0f, 0.5f, -48.0f, recPal);
     snd::ui::paint::drawFader(controlRecording, {0.0f, 40.0f},
                               {18.0f, 50.0f}, 0.65f, recPal, helperState);
+    snd::ui::draw::RecordingSurface tabRecording;
+    const char* tabLabels[] = {"Osc", "Filter", "Env"};
+    snd::ui::paint::drawTabBar(tabRecording, {}, 12.0f, {0.0f, 0.0f},
+                               {120.0f, 24.0f}, tabLabels, 3, 1, 2,
+                               recPal, helperState);
 
     snd::ui::draw::RecordingSurface keyboardRecording;
     snd::ui::paint::drawKeyboard(keyboardRecording, {0.0f, 0.0f},
@@ -554,6 +559,7 @@ static bool selftestRetainedUi()
     const auto& gridOps = gridRecording.ops();
     const auto& bodyOps = bodyRecording.ops();
     const auto& controlOps = controlRecording.ops();
+    const auto& tabOps = tabRecording.ops();
     const auto& keyboardOps = keyboardRecording.ops();
     const auto& moduleOps = moduleRecording.ops();
     const auto& bridgeOps = bridgeRecording.ops();
@@ -562,6 +568,14 @@ static bool selftestRetainedUi()
     r::PaintRenderer surfaceRenderer;
     auto surfaceRoot = w::column("surface.root", 3.0f, r::Insets::all(2.0f));
     surfaceRoot->setSemantics(named(r::Role::Group, "Surface render proof"));
+    double surfaceTab = 1.0;
+    r::ValueBinding tabBinding;
+    tabBinding.get = [&] { return surfaceTab; };
+    tabBinding.set = [&](double value) { surfaceTab = value; };
+    surfaceRoot->addChild(w::tabBar("surface.tabs", "View",
+                                    {"Patch", "Mix", "Mod"},
+                                    std::move(tabBinding), &surfaceRenderer,
+                                    {112.0f, 24.0f}));
     surfaceRoot->addChild(w::button("surface.button", "Go", {}, &surfaceRenderer));
     bool surfaceCells[] = {true, false, false, true};
     surfaceRoot->addChild(w::patternGrid("surface.pattern", "Pattern",
@@ -586,7 +600,15 @@ static bool selftestRetainedUi()
                                             &surfaceRenderer, {72.0f, 24.0f},
                                             0xAA332211u, 0xAA554433u, false));
     r::Tree surfaceTree(std::move(surfaceRoot));
-    surfaceTree.layout({120.0f, 132.0f});
+    surfaceTree.layout({120.0f, 160.0f});
+    r::SemanticNode tabSem;
+    bool tabOk = surfaceTree.semanticNode("surface.tabs.tab.1", tabSem) &&
+                 tabSem.role == r::Role::Button &&
+                 hasAction(&tabSem, r::Action::Activate) &&
+                 r::hasState(tabSem.states, r::SemanticState::Selected) &&
+                 surfaceTree.performSemanticAction("surface.tabs.tab.0",
+                                                   r::Action::Activate) &&
+                 std::abs(surfaceTab - 0.0) < 0.0001;
     snd::ui::draw::RecordingSurface retainedRecording;
     snd::ui::draw::FrameContext frameContext;
     frameContext.fontSizePx = 12.0f;
@@ -848,6 +870,12 @@ static bool selftestRetainedUi()
         controlOps[13].name == "strokeRect" &&
         controlOps[14].name == "fillRect" &&
         controlOps[19].name == "line" &&
+        tabOps.size() >= 8 &&
+        tabOps[0].name == "line" &&
+        std::find_if(tabOps.begin(), tabOps.end(),
+                     [](const snd::ui::draw::RecordedOp& op) {
+                         return op.name == "text" && op.text == "Filter";
+                     }) != tabOps.end() &&
         keyboardOps.size() >= 2 &&
         keyboardOps[0].name == "fillRect" &&
         closeEnough(keyboardOps[0].b,
@@ -874,9 +902,11 @@ static bool selftestRetainedUi()
         hasRetainedOp("fillRect") &&
         hasRetainedOp("strokeRect") &&
         hasRetainedOp("fillCircle") &&
+        hasRetainedText("Patch") &&
         hasRetainedText("Go") &&
         hasRetainedText("Render") &&
         hasDefaultContextText("Go") &&
+        tabOk &&
         matrixOk;
 
     auto root = r::Node::make("root", r::Role::Group);

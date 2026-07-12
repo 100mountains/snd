@@ -1373,6 +1373,88 @@ void drawSegmented(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                   count, selected, hovered, pal, state);
 }
 
+void drawTabBar(draw::Surface& surface, draw::FontRef font,
+                float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                const char* const* labels, int count, int selected,
+                int hovered, const Palette& pal, const ControlState& state)
+{
+    if (!labels || count <= 0)
+        return;
+
+    const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
+    const float tabW = size.x / (float)count;
+    const float railY = mx.y - 1.0f;
+    const int sel = std::clamp(selected, 0, count - 1);
+
+    surface.line({topLeft.x, railY}, {mx.x, railY},
+                 withAlpha(pal.frameBright, 0xD0), 1.0f);
+
+    for (int i = 0; i < count; ++i) {
+        const float x0 = topLeft.x + tabW * (float)i;
+        const float x1 = (i == count - 1) ? mx.x : x0 + tabW;
+        const bool isSel = i == sel;
+        const bool isHot = !state.disabled && i == hovered;
+        const draw::Vec2 mn{x0, topLeft.y};
+        const draw::Vec2 tabMx{x1, mx.y};
+
+        ImU32 fill = 0;
+        if (isSel)
+            fill = mix(pal.frame, pal.accent, state.disabled ? 0.10f : 0.18f);
+        else if (isHot)
+            fill = state.active ? mix(pal.frameBright, pal.accent, 0.18f)
+                                : withAlpha(pal.frameBright, 0x80);
+        if (visible(fill))
+            surface.fillRect({mn.x + 1.0f, mn.y + 1.0f},
+                             {tabMx.x - 1.0f, tabMx.y}, fill, 4.0f);
+
+        if (i > 0 && !isSel && sel != i - 1) {
+            surface.line({x0, topLeft.y + 5.0f}, {x0, mx.y - 6.0f},
+                         withAlpha(pal.frameBright, 0x80), 1.0f);
+        }
+
+        const char* text = labels[i] ? labels[i] : "";
+        const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
+        const ImU32 txt = state.disabled ? pal.textDim
+                          : isSel        ? pal.text
+                          : isHot        ? mix(pal.textDim, pal.text, 0.65f)
+                                         : pal.textDim;
+        if (fontSizePx > 0.0f)
+            surface.text(font, fontSizePx,
+                         {x0 + std::max(0.0f, tabW - ts.x) * 0.5f,
+                          topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f -
+                              1.0f},
+                         txt, text);
+
+        if (isSel) {
+            surface.line({x0 + 3.0f, mx.y - 2.0f},
+                         {x1 - 3.0f, mx.y - 2.0f},
+                         state.disabled ? withAlpha(pal.frameBright, 0xAA)
+                                        : pal.accent,
+                         2.0f);
+        }
+    }
+
+    if (state.focused && !state.disabled) {
+        const float x0 = topLeft.x + tabW * (float)sel;
+        const float x1 = sel == count - 1 ? mx.x : x0 + tabW;
+        drawFocusRing(surface, {x0 + 1.0f, topLeft.y + 1.0f},
+                      {x1 - 1.0f, mx.y - 2.0f}, pal, 4.0f, 1.5f);
+    }
+}
+
+void drawTabBar(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                const ImVec2& size, const char* const* labels, int count,
+                int selected, int hovered, const Palette& pal,
+                const ControlState& state, float fontScale)
+{
+    if (!dl || !font)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTabBar(surface, draw::fontRef(font), ImGui::GetFontSize() * fontScale,
+               draw::toDrawVec2(topLeft), draw::toDrawVec2(size), labels,
+               count, selected, hovered, pal, state);
+}
+
 void drawCycleButton(draw::Surface& surface, draw::FontRef font,
                      float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
                      const char* text, int index, int count,

@@ -412,6 +412,68 @@ bool segmented(const char* id, const char* const* labels, int count,
     return changed;
 }
 
+bool tabBar(const char* id, const char* const* labels, int count,
+            int* selected, const ImVec2& size)
+{
+    if (!labels || count <= 0 || !selected)
+        return false;
+
+    ImFont* font = ImGui::GetFont();
+    const float fs = ImGui::GetFontSize() * 0.90f;
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f) {
+        float maxW = 0.0f;
+        for (int i = 0; i < count; ++i)
+            if (labels[i])
+                maxW = std::max(maxW,
+                                font->CalcTextSizeA(fs, FLT_MAX, 0.0f, labels[i]).x);
+        sz.x = (maxW + 28.0f) * (float)count;
+    }
+    if (sz.y <= 0.0f)
+        sz.y = ImGui::GetFrameHeight() + 2.0f;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, sz);
+
+    const float tabW = sz.x / (float)count;
+    int hovered = -1;
+    if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+        const float lx = ImGui::GetIO().MousePos.x - p.x;
+        if (lx >= 0.0f && lx <= sz.x)
+            hovered = std::clamp((int)(lx / tabW), 0, count - 1);
+    }
+
+    bool changed = false;
+    if (ImGui::IsItemActivated() && hovered >= 0 && *selected != hovered) {
+        *selected = hovered;
+        changed = true;
+    }
+    if (ImGui::IsItemFocused()) {
+        int next = *selected;
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+            next = std::max(0, *selected - 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+            next = std::min(count - 1, *selected + 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_Home))
+            next = 0;
+        if (ImGui::IsKeyPressed(ImGuiKey_End))
+            next = count - 1;
+        if (next != *selected) {
+            *selected = std::clamp(next, 0, count - 1);
+            changed = true;
+        }
+    }
+
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = itemFocusVisible();
+    paint::drawTabBar(ImGui::GetWindowDrawList(), font, p, sz, labels, count,
+                      std::clamp(*selected, 0, count - 1), hovered, gPalette,
+                      state);
+    return changed;
+}
+
 bool cycleButton(const char* id, const char* const* labels, int count,
                  int* index, const ImVec2& size)
 {

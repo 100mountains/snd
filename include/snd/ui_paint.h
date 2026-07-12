@@ -449,6 +449,17 @@ void drawSegmented(draw::Surface& surface, draw::FontRef font,
                    int hovered, const Palette& pal,
                    const ControlState& state);
 
+// Tab strip for switching views/pages. Equal-width tabs by default; `selected`
+// is the active page, `hovered` is the tab under the pointer (-1 = none).
+void drawTabBar(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                const ImVec2& size, const char* const* labels, int count,
+                int selected, int hovered, const Palette& pal,
+                const ControlState& state, float fontScale = 0.90f);
+void drawTabBar(draw::Surface& surface, draw::FontRef font,
+                float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                const char* const* labels, int count, int selected,
+                int hovered, const Palette& pal, const ControlState& state);
+
 // Multi-state value button body: flat button face with the current option
 // label and a pip row marking `index` within `count` states.
 void drawCycleButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

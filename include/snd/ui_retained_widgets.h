@@ -26,6 +26,7 @@ enum class VisualKind {
     OutlineButton,
     OutlineIconButton,
     Segmented,
+    TabBar,
     CycleButton,
     LedButton,
     Toggle,
@@ -594,6 +595,13 @@ Node::Ptr segmented(NodeId id, std::string name,
                     std::vector<std::string> labels, ValueBinding binding,
                     PaintRenderer* renderer = nullptr,
                     Vec2 size = {0.0f, 24.0f});
+
+// Tab strip for switching pages/views. The binding holds the selected tab
+// index as in segmented(). Click picks a tab; Left/Right increment/decrement.
+Node::Ptr tabBar(NodeId id, std::string name,
+                 std::vector<std::string> labels, ValueBinding binding,
+                 PaintRenderer* renderer = nullptr,
+                 Vec2 size = {0.0f, 26.0f});
 
 // Multi-state value button: Enter/Space/click advance through the options
 // (wrapping); Up/Right and Down/Left step without wrapping. The binding holds
