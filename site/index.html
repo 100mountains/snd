@@ -57,8 +57,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .tkey.lc{font-family:'lcf';}
 .tkey:hover{background:linear-gradient(180deg,#e9ecf1,#c9cdd5 60%,#b8bcc4);}
 .tkey:active,.tkey.press{transform:translateY(3px);color:var(--accent);
-  background:linear-gradient(180deg,#31343c,#25272d);
-  box-shadow:inset 0 3px 7px rgba(0,0,0,.78),inset 0 1px 0 rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.5);}
+  background:linear-gradient(180deg,#f8f9fb,#e6e8ed 64%,#d5d8df);
+  box-shadow:inset 0 3px 6px rgba(80,84,96,.28),inset 0 1px 0 rgba(255,255,255,.95),0 1px 2px rgba(0,0,0,.38);}
 .btn{padding:6px 14px;border-radius:4px;border:1px solid var(--frameB);background:var(--frame);color:var(--ink);font-size:12.5px;cursor:pointer;font-family:inherit;}
 .btn.hov{background:var(--frameB);}
 .btn.act{background:color-mix(in srgb,var(--frame),var(--accent) 40%);}
@@ -150,6 +150,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 .splitpane b{display:block;color:var(--ink);margin-bottom:8px;}
 .splitbar{background:linear-gradient(180deg,#2d3340,#171b22);box-shadow:inset 0 0 0 1px #3a4050;cursor:col-resize;}
 .graphwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px;width:100%;}
+.matrixnotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;width:100%;margin-top:2px;}
+.matrixnotes .feature{min-height:78px;padding:10px;}
 @media (prefers-reduced-motion:reduce){.tkey,.ikey,.sw,canvas.live{transition:none;}}
 @media (max-width:820px){.shell{grid-template-columns:1fr;}nav{position:static;height:auto;border-right:none;border-bottom:1px solid #202329;}main{padding:28px 20px 70px;}.scrollsplit{grid-template-columns:1fr;}}
 </style>
@@ -179,6 +181,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <a href="#value-row" class="nl">Value row</a>
     <div class="grp">Instruments</div>
     <a href="#grid" class="nl">Pattern grid</a>
+    <a href="#matrix" class="nl">Sequencer matrix</a>
     <a href="#xy" class="nl">XY pad</a>
     <a href="#envelope" class="nl">Envelope</a>
     <a href="#keys" class="nl">Keyboard</a>
@@ -194,7 +197,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   <main>
     <div class="eyebrow">SND · component library</div>
     <h1>The aGooey UI toolkit</h1>
-    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, menus, graph nodes, a keyboard, an XY pad, a step grid — rendered here from the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
+    <p class="lede">Every graphic SND draws — knobs, faders, meters, LEDs, tactile keys, menus, graph nodes, a keyboard, an XY pad, a step grid, a sequencer matrix — rendered here from the same shared paint vocabulary that powers <code style="color:var(--dim)">snd::ui::retained</code>, Dear ImGui compatibility, and the renderer-neutral <code style="color:var(--dim)">draw::Surface</code> path.</p>
     <div class="tryhint"><b>Try it —</b><span>drag the knobs &amp; faders (hold <b>⇧&nbsp;Shift</b> for 10× fine adjust), grab the XY handle, play the keys, click the switches and grid cells. The meter and the mod ring run on their own.</span></div>
 
     <div class="themebar">
@@ -334,7 +337,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
 
     <section id="tactile">
       <div class="sechead"><h2>Tactile key</h2><span class="tag">paint::drawTactileIconButton</span></div>
-      <p class="desc">The <b>other</b> button family — a hardware key for <b>icon &amp; tool</b> buttons (transport, momentary/toggle tools), not text. Light-grey raised, recesses to a dark inset on press with the glyph lit in the accent. <b class="try">Press one.</b> Text buttons stay on the flat style above — tactile isn't every button.</p>
+      <p class="desc">The <b>other</b> button family — a hardware key for <b>icon &amp; tool</b> buttons (transport, momentary/toggle tools), not text. Light-grey raised, presses into a soft off-white inset with the glyph lit in the accent. <b class="try">Press one.</b> Text buttons stay on the flat style above — tactile isn't every button.</p>
       <div class="rack">
         <div class="statecol"><button class="tkey">&#xe037;</button><div class="cellcap">play</div></div>
         <div class="statecol"><button class="tkey">&#xe047;</button><div class="cellcap">stop</div></div>
@@ -433,6 +436,19 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Keyboard</h2><span class="tag">paint::drawKeyboard</span></div>
       <p class="desc">Playable range — white and black keys light in the accent. <b class="try">Click / drag across the keys to play.</b></p>
       <div class="rack"><canvas class="cv live" data-w="keys" width="420" height="80"></canvas></div>
+    </section>
+
+    <section id="matrix">
+      <div class="sechead"><h2>Sequencer matrix</h2><span class="tag">MatrixGridGeometry · SequencerMatrix · GhostFence</span></div>
+      <p class="desc">Retained audio-editor primitives for sequencers and table editors: shared matrix geometry, continuous bars, gate cells, route cells, band spans, playhead, selections, drag preview, help labels, and pass-through ghost fences. <b class="try">Drag rows in the matrix.</b></p>
+      <div class="rack" style="flex-direction:column;align-items:stretch">
+        <canvas class="cv live" data-w="matrix" width="520" height="152"></canvas>
+        <div class="matrixnotes">
+          <div class="feature"><b>Measured geometry</b><p>One object returns row, gutter, cell, and playhead rects for paint, hit-test, and semantics.</p></div>
+          <div class="feature"><b>Row policies</b><p>Continuous bars interpolate across skipped columns; gate and route rows drag-paint.</p></div>
+          <div class="feature"><b>Overlays</b><p>GhostFence, Help, Playhead, Selection, and DragPreview draw above rows without stealing input by default.</p></div>
+        </div>
+      </div>
     </section>
 
     <section id="agooey">
@@ -681,6 +697,32 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       var col=on?(c==ph?PAL.ink:A.accent):rgba(PAL.frameB,((c/4|0)%2)?0.19:0.33);
       g.fillStyle=col;roundRect(g,c*cw+1.5,r*ch+1.5,cw-3,ch-3,2);g.fill();}
     g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,0.5,0.5,W-1,H-1,3);g.stroke();
+  }
+  function sequencerMatrix(g,W,H,s){
+    var cols=16,active=12,gut=58,ph=5,rowGap=2,rowH=[28,24,24,28],labels=['note','gate','route','band'];
+    var gridW=W-gut-2,cw=gridW/cols,y=ph+4,acc=A.accent;
+    g.fillStyle=PAL.frame;roundRect(g,0,0,W,H,4);g.fill();
+    for(var c=0;c<cols;c++){if(c>=active){g.fillStyle='rgba(0,0,0,.22)';g.fillRect(gut+c*cw,ph, cw,H-ph);}}
+    var play=Math.floor((T*3)%cols);g.fillStyle=rgba(PAL.ink,.86);g.fillRect(gut+play*cw+1,2,cw-2,ph);
+    for(var r=0;r<4;r++){
+      var h=rowH[r];g.fillStyle='rgba(20,22,28,.78)';g.fillRect(0,y,gut,h);
+      g.font='12px system-ui,sans-serif';g.textBaseline='middle';g.fillStyle=PAL.dim;g.fillText(labels[r],8,y+h/2);
+      for(c=0;c<cols;c++){var x=gut+c*cw+1,w=cw-2;
+        g.fillStyle=rgba(PAL.frameB,c<active ? 0.32 : 0.15);g.fillRect(x,y,w,h);
+        if(r===0){var v=s.note[c];g.fillStyle=rgba(acc,c<active ? 0.88 : 0.36);g.fillRect(x,y+h*(1-v),w,h*v);}
+        else if(r===1&&s.gate[c]){g.fillStyle=c===play?PAL.ink:A.accent;roundRect(g,x+4,y+5,w-8,h-10,1);g.fill();}
+        else if(r===2){var rc=s.route[c]%3,cols2=[PAL.low,PAL.mid,'#6fa7ff'];g.fillStyle=rgba(cols2[rc],c<active ? 0.78 : 0.32);roundRect(g,x+3,y+4,w-6,h-8,1);g.fill();}
+        g.strokeStyle=rgba(PAL.frameB,.44);g.lineWidth=1;g.strokeRect(x+.5,y+.5,w-1,h-1);}
+      if(r===3){[[1,4,'A'],[6,3,'B'],[11,4,'C']].forEach(function(b,i){var x=gut+b[0]*cw+2,w=b[1]*cw-4;g.fillStyle=rgba(i===1?PAL.mid:'#6fa7ff',.82);roundRect(g,x,y+4,w,h-8,3);g.fill();g.fillStyle=PAL.ink;g.fillText(b[2],x+6,y+h/2);});}
+      y+=h+rowGap;
+    }
+    var fy=ph+4,fh=rowH[0]+rowGap+rowH[1]+rowGap+rowH[2],fx=gut+3*cw,fw=6*cw;
+    g.fillStyle=rgba(PAL.low,.11);g.fillRect(fx,fy,fw,fh);g.strokeStyle=rgba(PAL.low,.7);g.lineWidth=1;g.strokeRect(fx+.5,fy+.5,fw-1,fh-1);
+    g.fillStyle=rgba(PAL.low,.92);g.fillText('ghost fence',fx+5,fy+12);
+    var sy=ph+4+rowH[0]+rowGap,sx=gut+4*cw;g.strokeStyle=A.accent;g.lineWidth=2;g.strokeRect(sx+1,sy+2,4*cw-2,rowH[1]-4);
+    g.fillStyle=PAL.ink;g.fillText('drag-paint',gut+9*cw,sy+rowH[1]/2);
+    g.fillStyle=rgba(PAL.ink,.12);g.fillRect(gut+play*cw,ph+4,cw,H-ph-6);
+    g.strokeStyle=PAL.frameB;g.lineWidth=1;roundRect(g,.5,.5,W-1,H-1,4);g.stroke();
   }
   function xy(g,W,H,x,y){
     var acc=A.accent;g.fillStyle=PAL.frame;roundRect(g,0,0,W,H,3);g.fill();
@@ -987,6 +1029,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     gradknob:{v:0.62},puck:{x:0.62,y:0.38},
     velgrid:{rows:4,steps:16,vel:(function(){var v=[];var seed=[[0,.9],[4,.7],[8,1],[12,.6],[19,.5],[23,.8],[34,.65],[38,.45],[42,.95],[51,.75],[55,.55],[60,.85]];
       for(var i=0;i<64;i++)v[i]=0;seed.forEach(function(p){v[p[0]]=p[1];});return v;})()},
+    matrix:{note:[.72,.66,.54,.31,.42,.75,.83,.48,.36,.24,.58,.8,.62,.46,.32,.21],
+      gate:[1,0,0,1,1,0,1,0,0,1,0,1,0,0,1,0],
+      route:[0,0,1,1,2,2,0,1,2,0,1,1,2,0,0,1]},
     xy:{x:0.5,y:0.6},env:{points:[[0,0.35],[0.24,0.82],[0.52,0.28],[0.78,0.62],[1,0.48]],hot:-1,active:-1},keys:{lit:-1}};
 
   var dpr=Math.max(1,window.devicePixelRatio||1);
@@ -1033,6 +1078,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       case 'meterH': meter(g,W,H,prog(T,0.6),peak('meterH',T,0.6));break;
       case 'header': header(g,W,H);break;
       case 'grid': patternGrid(g,W,H,pat,ROWS,STEPS,-1);break;
+      case 'matrix': sequencerMatrix(g,W,H,s);break;
       case 'xy': xy(g,W,H,s.x,s.y);break;
       case 'env': envelope(g,W,H,s);break;
       case 'keys': keyboard(g,W,H,48,3,s.lit);break;
@@ -1100,6 +1146,18 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
   function gridClick(cv){cv.style.cursor='pointer';cv.addEventListener('pointerdown',function(e){
     var r=cv.getBoundingClientRect();var c=Math.floor((e.clientX-r.left)/(cv._w/STEPS));var rr=Math.floor((e.clientY-r.top)/(cv._h/ROWS));
     if(c>=0&&c<STEPS&&rr>=0&&rr<ROWS){pat[rr*STEPS+c]=!pat[rr*STEPS+c];drawOne(cv);}e.preventDefault();});}
+  function matrixDrag(cv,s){cv.style.cursor='crosshair';cv.style.touchAction='none';var d=false,paint=1,route=1;
+    function hit(e){var r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,gut=58,ph=9,rowH=[28,24,24,28],gap=2,cw=(cv._w-gut-2)/16,yy=ph;
+      var row=-1;for(var i=0;i<rowH.length;i++){if(y>=yy&&y<=yy+rowH[i]){row=i;break;}yy+=rowH[i]+gap;}
+      return{row:row,col:Math.max(0,Math.min(15,Math.floor((x-gut)/cw))),y:y-yy,h:rowH[row]||1};}
+    function set(e,first){var h=hit(e);if(h.row<0||h.col<0)return;
+      if(h.row===0)s.note[h.col]=cl(1-h.y/h.h);
+      else if(h.row===1){if(first)paint=s.gate[h.col]?0:1;s.gate[h.col]=paint;}
+      else if(h.row===2){if(first)route=(s.route[h.col]+1)%3;s.route[h.col]=route;}
+      drawOne(cv);}
+    cv.addEventListener('pointerdown',function(e){d=true;cap(cv,e);set(e,true);e.preventDefault();});
+    cv.addEventListener('pointermove',function(e){if(d)set(e,false);});
+    end(cv,function(){d=false;});}
   function clickToggle(cv,fn){cv.style.cursor='pointer';cv.addEventListener('pointerdown',function(e){fn();e.preventDefault();});}
 
   cvs.forEach(function(cv){var k=cv._k,s=S[k];
@@ -1118,6 +1176,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       if(c>=0&&c<s.steps&&rr>=0&&rr<s.rows){var i=rr*s.steps+c;s.vel[i]=s.vel[i]>0?0:(e.altKey?0.4:0.85);drawOne(cv);}e.preventDefault();});}
     else if(/^led/.test(k)) clickToggle(cv,function(){s.on=!s.on;drawOne(cv);});
     else if(k==='xy') xyDrag(cv,s);
+    else if(k==='matrix') matrixDrag(cv,s);
     else if(k==='env') envDrag(cv,s);
     else if(k==='keys') keysDrag(cv,s);
     else if(k==='grid') gridClick(cv);

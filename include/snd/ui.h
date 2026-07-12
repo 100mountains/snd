@@ -164,18 +164,18 @@ void loadFonts();           // internal: Window::create calls this per context
 ImFont* iconFontMaterial(); // the default font (Material glyphs merged in)
 ImFont* iconFontLucide();
 
-// Tactile icon button: a raised light-grey face that presses into a dark inset
-// (the bevel flips on press/toggle). `glyph` is an icon string from
-// <snd/icons.h>. size 0 = a square sized to the frame height. `font` null =
-// the Material/default font (pass iconFontLucide() for the Lucide style).
-// `toggled` holds the pressed/inset look (on/off buttons); `face` 0 = the
-// default light grey, else a themed face colour. Returns true on click.
+// Tactile icon button: a raised light-grey face that presses into a soft
+// off-white inset. `glyph` is an icon string from <snd/icons.h>. size 0 = a
+// square sized to the frame height. `font` null = the Material/default font
+// (pass iconFontLucide() for the Lucide style). `toggled` holds the
+// pressed/inset look (on/off buttons); `face` 0 = the default light grey,
+// else a themed face colour. Returns true on click.
 bool iconButton(const char* id, const char* glyph, const ImVec2& size = ImVec2(0, 0),
                 ImFont* font = nullptr, bool toggled = false, ImU32 face = 0);
 
 // Tactile key with an integrated status LED ring (record-arm, monitor,
-// transport latches). Click toggles *on; the face holds the inset look and
-// the ring lights while latched. `blink` pulses the lit ring for armed/
+// transport latches). Click toggles *on; the face holds the soft inset look
+// and the ring lights while latched. `blink` pulses the lit ring for armed/
 // pending states. ledColor 0 = palette accent; font/face as iconButton.
 // Returns true on click.
 bool ledButton(const char* id, const char* glyph, bool* on, bool blink = false,

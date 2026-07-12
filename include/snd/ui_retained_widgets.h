@@ -12,6 +12,7 @@
 
 #include "snd/ui_paint.h"
 #include "snd/ui_retained.h"
+#include "snd/ui_retained_matrix.h"
 
 namespace snd::ui::retained {
 

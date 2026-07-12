@@ -618,6 +618,160 @@ static bool selftestRetainedUi()
                             }) != defaultContextOps.end();
     };
 
+    r::MatrixGridConfig matrixConfig;
+    matrixConfig.columns = 8;
+    matrixConfig.activeColumns = 6;
+    matrixConfig.columnWidth = 10.0f;
+    matrixConfig.columnWidths = {10.0f, 12.0f};
+    matrixConfig.columnGap = 2.0f;
+    matrixConfig.rowGap = 3.0f;
+    matrixConfig.gutterWidth = 30.0f;
+    matrixConfig.topPad = 1.0f;
+    matrixConfig.bottomPad = 2.0f;
+    matrixConfig.playheadHeight = 4.0f;
+    std::vector<r::MatrixRowBand> matrixRows = {
+        {"note", "note", r::MatrixRowType::ContinuousBar, 20.0f},
+        {"gate", "gate", r::MatrixRowType::GateCell, 12.0f},
+        {"hidden", "hidden", r::MatrixRowType::RouteCell, 10.0f, -1.0f, false},
+        {"route", "route", r::MatrixRowType::RouteCell, 12.0f},
+        {"band", "band", r::MatrixRowType::Band, 14.0f},
+    };
+    r::MatrixGridGeometry matrixGeom(matrixConfig, matrixRows);
+    matrixGeom.setBounds({5.0f, 7.0f, 200.0f, 100.0f});
+    const r::Vec2 matrixPreferred =
+        r::MatrixGridGeometry::preferredSize(matrixConfig, matrixRows);
+    const r::Rect matrixCell00 = matrixGeom.cellRect(0, 0);
+    const r::Rect matrixCell01 = matrixGeom.cellRect(0, 1);
+    const r::Rect matrixGutter1 = matrixGeom.gutterRect(1);
+    const r::Rect matrixPlay1 = matrixGeom.playheadRect(1);
+    const r::MatrixHit matrixHit = matrixGeom.hitTest({36.0f, 36.0f});
+    bool matrixOk =
+        closeEnough(matrixPreferred.x, 126.0f) &&
+        closeEnough(matrixPreferred.y, 74.0f) &&
+        closeEnough(matrixCell00.x, 35.0f) &&
+        closeEnough(matrixCell00.y, 12.0f) &&
+        closeEnough(matrixCell00.w, 10.0f) &&
+        closeEnough(matrixCell00.h, 20.0f) &&
+        closeEnough(matrixCell01.x, 47.0f) &&
+        closeEnough(matrixCell01.w, 12.0f) &&
+        closeEnough(matrixGutter1.y, 35.0f) &&
+        closeEnough(matrixGutter1.w, 30.0f) &&
+        closeEnough(matrixPlay1.x, 47.0f) &&
+        closeEnough(matrixPlay1.y, 8.0f) &&
+        closeEnough(matrixPlay1.h, 4.0f) &&
+        matrixGeom.rowIndex("route") == 2 &&
+        matrixHit.kind == r::MatrixHitKind::Cell &&
+        matrixHit.row == 1 && matrixHit.column == 0 &&
+        matrixHit.rowId == "gate";
+
+    r::SequencerMatrixState seq;
+    seq.config.columns = 8;
+    seq.config.activeColumns = 6;
+    seq.config.columnWidth = 10.0f;
+    seq.config.columnGap = 0.0f;
+    seq.config.rowGap = 0.0f;
+    seq.config.gutterWidth = 20.0f;
+    seq.config.playheadHeight = 0.0f;
+    seq.config.topPad = 0.0f;
+    seq.config.bottomPad = 0.0f;
+    seq.rows = {
+        {"note", "note", r::MatrixRowType::ContinuousBar, 20.0f},
+        {"gate", "gate", r::MatrixRowType::GateCell, 20.0f},
+        {"route", "route", r::MatrixRowType::RouteCell, 20.0f},
+        {"band", "band", r::MatrixRowType::Band, 20.0f},
+    };
+    std::vector<double> matrixValues(8, 0.0);
+    std::vector<int> matrixGates(8, 0);
+    std::vector<int> matrixRoutes(8, 0);
+    seq.continuousRows.push_back(
+        {"note",
+         [&](int c) { return matrixValues[(std::size_t)c]; },
+         [&](int c, double v) { matrixValues[(std::size_t)c] = v; },
+         0.0,
+         1.0,
+         0.1,
+         0xFFE8D25Cu});
+    seq.gateRows.push_back(
+        {"gate",
+         [&](int c) { return matrixGates[(std::size_t)c] != 0; },
+         [&](int c, bool v) { matrixGates[(std::size_t)c] = v ? 1 : 0; },
+         0xFF58F07Au});
+    seq.routeRows.push_back(
+        {"route",
+         [&](int c) { return matrixRoutes[(std::size_t)c]; },
+         [&](int c, int v) { matrixRoutes[(std::size_t)c] = v; },
+         [](int route) {
+             return route == 1 ? 0xFFE58A4Fu : 0xFF6FA7FFu;
+         },
+         3});
+    seq.bandRows.push_back({"band", [] {
+                                return std::vector<r::MatrixBandCell>{
+                                    {1, 3, "A", 0xFF6FA7FFu}};
+                            }});
+    seq.ghostFences.push_back({"fence.safe", "safe", 2, 5, 0, 2});
+    seq.helpOverlays.push_back({"paint", 1, 1});
+    seq.playhead.column = 3;
+
+    r::PaintRenderer matrixRenderer;
+    r::Tree matrixTree(w::sequencerMatrix("matrix.test", "Matrix", seq,
+                                          &matrixRenderer));
+    matrixTree.layout({120.0f, 80.0f});
+    r::Event matrixEvent;
+    matrixEvent.type = r::EventType::MouseDown;
+    matrixEvent.position = {25.0f, 2.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseMove;
+    matrixEvent.position = {55.0f, 18.0f};
+    matrixEvent.delta = {30.0f, 16.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseUp;
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixOk = matrixOk && std::abs(matrixValues[0] - 0.9) < 0.0001 &&
+               std::abs(matrixValues[1] - 0.6333333333) < 0.0001 &&
+               std::abs(matrixValues[2] - 0.3666666667) < 0.0001 &&
+               std::abs(matrixValues[3] - 0.1) < 0.0001;
+
+    matrixEvent.type = r::EventType::MouseDown;
+    matrixEvent.position = {35.0f, 22.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseMove;
+    matrixEvent.position = {65.0f, 22.0f};
+    matrixEvent.delta = {30.0f, 0.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseUp;
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixOk = matrixOk && matrixGates[1] && matrixGates[2] &&
+               matrixGates[3] && matrixGates[4];
+    matrixOk = matrixOk &&
+               matrixTree.performSemanticAction("matrix.test.cell.1.2",
+                                                r::Action::Activate) &&
+               !matrixGates[2];
+
+    matrixEvent.type = r::EventType::MouseDown;
+    matrixEvent.position = {25.0f, 42.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseMove;
+    matrixEvent.position = {45.0f, 42.0f};
+    matrixEvent.delta = {20.0f, 0.0f};
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixEvent.type = r::EventType::MouseUp;
+    matrixOk = matrixOk && matrixTree.dispatch(matrixEvent);
+    matrixOk = matrixOk && matrixRoutes[0] == 1 && matrixRoutes[1] == 1 &&
+               matrixRoutes[2] == 1;
+
+    r::SemanticNode matrixSem;
+    matrixOk = matrixOk &&
+               matrixTree.semanticNode("matrix.test.cell.0.0", matrixSem) &&
+               matrixSem.role == r::Role::Slider &&
+               closeEnough(matrixSem.bounds.x, 20.0f) &&
+               closeEnough(matrixSem.bounds.y, 0.0f) &&
+               hasAction(&matrixSem, r::Action::Increment);
+    snd::ui::draw::RecordingSurface matrixRecording;
+    snd::ui::draw::FrameContext matrixFrame;
+    matrixFrame.fontSizePx = 12.0f;
+    matrixRenderer.render(matrixTree, matrixRecording, matrixFrame);
+    matrixOk = matrixOk && matrixRecording.ops().size() > 40;
+
     const auto& ops = recording.ops();
     bool recordingOk = ops.size() == 8 &&
         ops[0].name == "fillRect" && ops[0].colors[0] == 0x01020304u &&
@@ -722,7 +876,8 @@ static bool selftestRetainedUi()
         hasRetainedOp("fillCircle") &&
         hasRetainedText("Go") &&
         hasRetainedText("Render") &&
-        hasDefaultContextText("Go");
+        hasDefaultContextText("Go") &&
+        matrixOk;
 
     auto root = r::Node::make("root", r::Role::Group);
     r::Layout rootLayout;

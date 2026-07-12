@@ -898,16 +898,13 @@ void drawTactileIconButton(draw::Surface& surface, draw::FontRef font,
     if (!glyph)
         return;
 
-    // A subtly RAISED icon button: a quiet static bevel (light top / dark
-    // bottom) that reads as gently lifted off the bar and NEVER inverts, plus a
-    // fixed glyph -- so nothing appears to click down. Pressed/lit changes the
-    // face COLOUR to the accent (not a darken-to-black, not a push). Owner:
-    // "subtle raised button that just goes a different colour when pressed with
-    // no movement."
+    // A subtly raised icon key: light face, soft off-white inset on press.
+    // The face never drops to a dark slab; the pressed state is a small colour
+    // and shadow change with the glyph lit by the accent.
     down = down && !state.disabled;
-    const ImU32 base = face ? face : pal.frame;
-    const ImU32 rest = mix(base, IM_COL32(255, 255, 255, 255), 0.10f);
-    ImU32 faceCol = down ? pal.accent : rest;
+    const ImU32 base = face ? face : IM_COL32(224, 227, 232, 255);
+    const ImU32 rest = face ? mix(base, IM_COL32(255, 255, 255, 255), 0.10f) : base;
+    ImU32 faceCol = down ? mix(rest, IM_COL32(255, 255, 255, 255), 0.30f) : rest;
     if (state.hovered && !down && !state.disabled)
         faceCol = mix(rest, IM_COL32(255, 255, 255, 255), 0.08f);
     if (state.disabled)
@@ -916,17 +913,25 @@ void drawTactileIconButton(draw::Surface& surface, draw::FontRef font,
     const float r = 4.0f;
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
     surface.fillRect(topLeft, mx, faceCol, r);
-    // static bevel: same light-top / dark-bottom in every state (no flip)
     surface.line({topLeft.x + r, topLeft.y + 1.0f},
-                 {mx.x - r, topLeft.y + 1.0f}, IM_COL32(255, 255, 255, 55), 1.0f);
+                 {mx.x - r, topLeft.y + 1.0f},
+                 down ? IM_COL32(255, 255, 255, 150)
+                      : IM_COL32(255, 255, 255, 210),
+                 1.0f);
     surface.line({topLeft.x + r, mx.y - 1.0f},
-                 {mx.x - r, mx.y - 1.0f}, IM_COL32(0, 0, 0, 90), 1.0f);
-    surface.strokeRect(topLeft, mx, IM_COL32(0, 0, 0, 110), r, 1.0f);
+                 {mx.x - r, mx.y - 1.0f},
+                 down ? IM_COL32(96, 101, 114, 72)
+                      : IM_COL32(80, 84, 96, 118),
+                 1.0f);
+    surface.strokeRect(topLeft, mx,
+                       down ? IM_COL32(80, 84, 96, 128)
+                            : IM_COL32(80, 84, 96, 170),
+                       r, 1.0f);
 
     const float iconPx = size.y * 0.60f;
-    // glyph stays legible in every state (near-white on both the grey rest and
-    // the accent press); no tint-to-accent that would vanish on the blue face.
-    const ImU32 iconCol = state.disabled ? pal.textDim : pal.text;
+    const ImU32 iconCol =
+        state.disabled ? pal.textDim
+                       : down ? pal.accent : IM_COL32(43, 46, 52, 255);
     if (iconPx > 0.0f) {
         draw::Vec2 ts = surface.measureText(font, iconPx, glyph);
         draw::Vec2 gp{topLeft.x + (size.x - ts.x) * 0.5f,

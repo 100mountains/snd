@@ -431,6 +431,11 @@ Use `widgets::patternGrid(id, name, cells, rows, steps, &renderer, size,
 playheadFn, cellPainter)` for step grids. `cells` stays caller-owned, mouse
 drag paints, and Alt-drag erases; the optional trailing
 `paint::PatternCellPainter` custom-draws cell bodies. Use
+`widgets::sequencerMatrix(id, name, state, &renderer, size)` for retained
+audio-editor matrices. `MatrixGridGeometry` owns the measured column/row/gutter
+rects; row policies own continuous bars, gate cells, route cells, and band
+spans; overlays add ghost fences, help, playhead, selection, and drag preview
+layers. Use
 `widgets::xyPad(id, name, xBinding, yBinding, &renderer, size, painter)` for
 two-axis controls over normalized values; the optional trailing
 `paint::XYPadPainter` custom-draws the pad body. Use
@@ -876,8 +881,8 @@ members).
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
 - `iconButton(id, glyph, size={}, font=nullptr, toggled=false, face=0)` →
   clicked. Tactile hardware key for a Material/Lucide glyph from
-  `<snd/icons.h>`; raised light-grey face that recesses to a dark inset on
-  press. `toggled` holds the inset look; `font=nullptr` = the default
+  `<snd/icons.h>`; raised light-grey face that presses into a soft off-white
+  inset. `toggled` holds the inset look; `font=nullptr` = the default
   (Material) font; `face` themes the key colour.
 - `badge(text, fill=0)` — small tag ("VST3", "48k"); `fill=0` = translucent
   accent.
@@ -949,6 +954,13 @@ Shift drags 10× slower.
   alt-drag erases; `playheadStep` highlights a column. The overload taking a
   `paint::PatternCellPainter` custom-draws each cell body (SND keeps
   backdrop, playhead, border, focus, and the drag interaction).
+- `MatrixGridGeometry` + `widgets::sequencerMatrix(...)` → sequencer/table
+  editors. The geometry returns stable cell, row, gutter, and playhead rects
+  for both paint and hit-test. `ContinuousBarRow` interpolates drag edits across
+  skipped columns; `GateCellRow` and `RouteCellRow` drag-paint from the first
+  clicked value; `BandRow` draws span cells. `GhostFenceOverlay`,
+  `HelpOverlay`, `PlayheadOverlay`, `SelectionOverlay`, and
+  `DragPreviewOverlay` are reusable overlay data, not hidden widget state.
 - `envelopeEditor(id, std::vector<EnvPoint>& pts, size, tensions=nullptr)` →
   editing. Breakpoints over 0..1 in both axes; drag to move, double-click empty
   space to add, right-click a point to delete. Endpoints stay pinned to x=0/1.
