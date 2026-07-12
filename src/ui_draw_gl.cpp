@@ -521,19 +521,13 @@ void OpenGLSurface::polyline(const Vec2* points, int count, Color color,
 {
     if (!points || count < 2)
         return;
-    for (int i = 0; i + 1 < count; ++i)
-        line(points[i], points[i + 1], color, thickness);
-    if (closed)
-        line(points[count - 1], points[0], color, thickness);
-    // Each segment is a butt-capped quad with no join, so a corner leaves a
-    // triangular notch on the outside of the bend and an open end is square.
-    // Cap every vertex with a disc of the half-width: it fills the notch (a
-    // round join) and rounds the caps, so stroked glyphs/shapes read cleanly.
-    // Only needed once the stroke is wide enough for a notch to show.
-    const float half = std::max(1.0f, thickness) * 0.5f;
-    if (thickness > 1.0f)
-        for (int i = 0; i < count; ++i)
-            fillCircle(points[i], half, color, 10);
+    // One continuous mitered strip (the same builder as polylineGradient):
+    // spans share averaged-normal edge vertices, so there is no per-segment
+    // overlap to double-blend a translucent stroke into beads, and no corner
+    // notch. Replaces the old butt-quad chain + per-vertex disc caps, which
+    // beaded every joint of any stroke drawn with alpha < 1.
+    std::vector<Color> uniform((size_t)count, color);
+    polylineGradient(points, count, uniform.data(), thickness, closed);
 }
 
 void OpenGLSurface::fillTriangle(Vec2 a, Vec2 b, Vec2 c, Color color)
