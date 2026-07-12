@@ -1386,6 +1386,7 @@ void Tree::collectSemantics(const Node& node, const NodeId& parent,
     current.role = effectiveRole(node);
     current.name = sem.name;
     current.description = sem.description;
+    current.tooltip = sem.tooltip;
     current.labelledBy = sem.labelledBy;
     current.value = currentValue(node);
     current.states = derivedStates(node);

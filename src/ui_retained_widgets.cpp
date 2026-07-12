@@ -1,5 +1,6 @@
 #include "snd/ui_retained_widgets.h"
 
+#include "snd/ui.h"
 #include "ui_draw_imgui.h"
 
 #include "imgui.h"
@@ -13,8 +14,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <limits>
 #include <memory>
+#include <system_error>
 #include <unordered_set>
 #include <unordered_map>
 #include <utility>
@@ -40,6 +43,91 @@ Rect offset(Rect r, draw::Vec2 origin)
     r.x += origin.x;
     r.y += origin.y;
     return r;
+}
+
+constexpr double kTooltipDelaySeconds = 0.4;
+
+bool tooltipDelayReady(std::string& currentKey, double& startSeconds,
+                       const std::string& nextKey, double nowSeconds)
+{
+    if (nextKey.empty()) {
+        currentKey.clear();
+        startSeconds = nowSeconds;
+        return false;
+    }
+    if (currentKey != nextKey) {
+        currentKey = nextKey;
+        startSeconds = nowSeconds;
+        return false;
+    }
+    if (nowSeconds < startSeconds)
+        startSeconds = nowSeconds;
+    return nowSeconds - startSeconds >= kTooltipDelaySeconds;
+}
+
+const SemanticNode* semanticForNode(
+    const Node& node,
+    const std::unordered_map<NodeId, SemanticNode>* semantics)
+{
+    if (!semantics)
+        return nullptr;
+    const auto it = semantics->find(node.id());
+    return it != semantics->end() ? &it->second : nullptr;
+}
+
+const std::string* tooltipForNode(
+    const Node& node,
+    const std::unordered_map<NodeId, SemanticNode>* semantics)
+{
+    if (!node.visible() || !node.enabled())
+        return nullptr;
+
+    const SemanticNode* sem = semanticForNode(node, semantics);
+    if (semantics && !sem)
+        return nullptr;
+    const Semantics& local = node.semantics();
+    if (local.hidden || hasState(local.states, SemanticState::Hidden))
+        return nullptr;
+    if (sem && hasState(sem->states, SemanticState::Hidden))
+        return nullptr;
+    if (sem && hasState(sem->states, SemanticState::Disabled))
+        return nullptr;
+
+    const std::string& text = sem ? sem->tooltip : local.tooltip;
+    return text.empty() ? nullptr : &text;
+}
+
+const Node* tooltipNodeForHover(
+    const Node* hovered,
+    const std::unordered_map<NodeId, SemanticNode>* semantics)
+{
+    for (const Node* node = hovered; node != nullptr; node = node->parent()) {
+        if (tooltipForNode(*node, semantics))
+            return node;
+    }
+    return nullptr;
+}
+
+draw::Vec2 tooltipAnchor(const Node& node, draw::Vec2 origin,
+                         const draw::FrameContext& context)
+{
+    if (context.pointerValid)
+        return context.pointer;
+    const Rect bounds = offset(node.bounds(), origin);
+    return {bounds.x + bounds.w * 0.5f, bounds.y + bounds.h * 0.5f};
+}
+
+draw::Vec2 tooltipClipMax(const Node& root, draw::Vec2 origin)
+{
+    const Rect bounds = offset(root.bounds(), origin);
+    if (bounds.w <= 0.0f || bounds.h <= 0.0f)
+        return {};
+    return {bounds.x + bounds.w, bounds.y + bounds.h};
+}
+
+std::string tooltipKeyForNode(const Node& node, const std::string& text)
+{
+    return node.id().empty() ? text : node.id() + "\n" + text;
 }
 
 // Vertical scrollbar geometry for a scroll container: the thumb rect on the
@@ -695,6 +783,22 @@ void setCheckedState(Node& node, bool on)
         sem.value.value = on ? sem.value.max : sem.value.min;
         sem.value.text = on ? "On" : "Off";
     }
+}
+
+bool setSelectedState(Node& node, bool selected)
+{
+    const Semantics& current = static_cast<const Node&>(node).semantics();
+    const bool wasSelected = hasState(current.states, SemanticState::Selected);
+    if (wasSelected == selected)
+        return false;
+
+    Semantics next = current;
+    if (selected)
+        next.states |= SemanticState::Selected;
+    else
+        next.states &= ~stateMask(SemanticState::Selected);
+    node.setSemantics(next);
+    return true;
 }
 
 void setBindingSemantics(Semantics& sem, const ValueBinding& binding)
@@ -1782,6 +1886,7 @@ void PaintRenderer::render(const Tree& tree, const ImVec2& origin,
     renderNode(tree.root(), &semMap, origin, dl, context, &overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i) // grows as nested defer
         renderNode(*overlays[i], &semMap, origin, dl, context, &overlays);
+    renderTooltip(tree, semMap, origin, dl, context);
 }
 
 void PaintRenderer::render(const Node& root, ImDrawList* drawList) const
@@ -1798,6 +1903,7 @@ void PaintRenderer::render(const Node& root, const ImVec2& origin,
     renderNode(root, nullptr, origin, dl, context, &overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i)
         renderNode(*overlays[i], nullptr, origin, dl, context, &overlays);
+    renderTooltip(root, nullptr, origin, dl, context);
 }
 
 void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
@@ -1813,6 +1919,7 @@ void PaintRenderer::render(const Tree& tree, draw::Surface& surface,
     renderNode(tree.root(), &semMap, origin, surface, ctx, &overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i)
         renderNode(*overlays[i], &semMap, origin, surface, ctx, &overlays);
+    renderTooltip(tree, semMap, origin, surface, ctx);
 }
 
 void PaintRenderer::render(const Node& root, draw::Surface& surface,
@@ -1824,6 +1931,7 @@ void PaintRenderer::render(const Node& root, draw::Surface& surface,
     renderNode(root, nullptr, origin, surface, ctx, &overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i)
         renderNode(*overlays[i], nullptr, origin, surface, ctx, &overlays);
+    renderTooltip(root, nullptr, origin, surface, ctx);
 }
 
 void PaintRenderer::renderMain(const Tree& tree, const ImVec2& origin,
@@ -1850,6 +1958,7 @@ void PaintRenderer::renderOverlays(const Tree& tree, const ImVec2& origin,
     collectOverlays(tree.root(), overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i)
         renderNode(*overlays[i], &semMap, origin, dl, context, &overlays);
+    renderTooltip(tree, semMap, origin, dl, context);
 }
 
 void PaintRenderer::renderMain(const Tree& tree, draw::Surface& surface,
@@ -1876,6 +1985,117 @@ void PaintRenderer::renderOverlays(const Tree& tree, draw::Surface& surface,
     collectOverlays(tree.root(), overlays);
     for (std::size_t i = 0; i < overlays.size(); ++i)
         renderNode(*overlays[i], &semMap, origin, surface, ctx, &overlays);
+    renderTooltip(tree, semMap, origin, surface, ctx);
+}
+
+void PaintRenderer::renderTooltip(const Tree& tree, const SemanticMap& semantics,
+                                  const ImVec2& origin, ImDrawList* drawList,
+                                  const draw::FrameContext& context) const
+{
+    const Node* hovered = tree.hovered();
+    if (!hovered && context.pointerValid) {
+        hovered = tree.hitTest(
+            {context.pointer.x - origin.x, context.pointer.y - origin.y});
+    }
+    const Node* node = tooltipNodeForHover(hovered, &semantics);
+    const std::string* text = node ? tooltipForNode(*node, &semantics) : nullptr;
+    if (!text) {
+        tooltipDelayReady(tooltipKey_, tooltipStart_, {}, context.timeSeconds);
+        return;
+    }
+
+    const std::string key = tooltipKeyForNode(*node, *text);
+    if (!tooltipDelayReady(tooltipKey_, tooltipStart_, key, context.timeSeconds))
+        return;
+
+    const draw::Vec2 drawOrigin{origin.x, origin.y};
+    const draw::Vec2 anchor = tooltipAnchor(*node, drawOrigin, context);
+    const draw::Vec2 clipMax = tooltipClipMax(tree.root(), drawOrigin);
+    paint::drawTooltip(drawList, draw::imFont(context.font),
+                       context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f,
+                       ImVec2(anchor.x, anchor.y), text->c_str(), palette(),
+                       ImVec2(clipMax.x, clipMax.y));
+}
+
+void PaintRenderer::renderTooltip(const Node& root, const SemanticMap* semantics,
+                                  const ImVec2& origin, ImDrawList* drawList,
+                                  const draw::FrameContext& context) const
+{
+    const Node* hovered = nullptr;
+    if (context.pointerValid) {
+        hovered = root.hitTest(
+            {context.pointer.x - origin.x, context.pointer.y - origin.y});
+    }
+    const Node* node = tooltipNodeForHover(hovered, semantics);
+    const std::string* text = node ? tooltipForNode(*node, semantics) : nullptr;
+    if (!text) {
+        tooltipDelayReady(tooltipKey_, tooltipStart_, {}, context.timeSeconds);
+        return;
+    }
+
+    const std::string key = tooltipKeyForNode(*node, *text);
+    if (!tooltipDelayReady(tooltipKey_, tooltipStart_, key, context.timeSeconds))
+        return;
+
+    const draw::Vec2 drawOrigin{origin.x, origin.y};
+    const draw::Vec2 anchor = tooltipAnchor(*node, drawOrigin, context);
+    const draw::Vec2 clipMax = tooltipClipMax(root, drawOrigin);
+    paint::drawTooltip(drawList, draw::imFont(context.font),
+                       context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f,
+                       ImVec2(anchor.x, anchor.y), text->c_str(), palette(),
+                       ImVec2(clipMax.x, clipMax.y));
+}
+
+void PaintRenderer::renderTooltip(const Tree& tree, const SemanticMap& semantics,
+                                  draw::Vec2 origin, draw::Surface& surface,
+                                  const draw::FrameContext& context) const
+{
+    const Node* hovered = tree.hovered();
+    if (!hovered && context.pointerValid) {
+        hovered = tree.hitTest(
+            {context.pointer.x - origin.x, context.pointer.y - origin.y});
+    }
+    const Node* node = tooltipNodeForHover(hovered, &semantics);
+    const std::string* text = node ? tooltipForNode(*node, &semantics) : nullptr;
+    if (!text) {
+        tooltipDelayReady(tooltipKey_, tooltipStart_, {}, context.timeSeconds);
+        return;
+    }
+
+    const std::string key = tooltipKeyForNode(*node, *text);
+    if (!tooltipDelayReady(tooltipKey_, tooltipStart_, key, context.timeSeconds))
+        return;
+
+    paint::drawTooltip(surface, context.font,
+                       context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f,
+                       tooltipAnchor(*node, origin, context), text->c_str(),
+                       palette(), tooltipClipMax(tree.root(), origin));
+}
+
+void PaintRenderer::renderTooltip(const Node& root, const SemanticMap* semantics,
+                                  draw::Vec2 origin, draw::Surface& surface,
+                                  const draw::FrameContext& context) const
+{
+    const Node* hovered = nullptr;
+    if (context.pointerValid) {
+        hovered = root.hitTest(
+            {context.pointer.x - origin.x, context.pointer.y - origin.y});
+    }
+    const Node* node = tooltipNodeForHover(hovered, semantics);
+    const std::string* text = node ? tooltipForNode(*node, semantics) : nullptr;
+    if (!text) {
+        tooltipDelayReady(tooltipKey_, tooltipStart_, {}, context.timeSeconds);
+        return;
+    }
+
+    const std::string key = tooltipKeyForNode(*node, *text);
+    if (!tooltipDelayReady(tooltipKey_, tooltipStart_, key, context.timeSeconds))
+        return;
+
+    paint::drawTooltip(surface, context.font,
+                       context.fontSizePx > 0.0f ? context.fontSizePx : 13.0f,
+                       tooltipAnchor(*node, origin, context), text->c_str(),
+                       palette(), tooltipClipMax(root, origin));
 }
 
 void PaintRenderer::collectOverlays(const Node& node,
@@ -2134,6 +2354,14 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                      state.disabled ? pal.textDim : pal.text, Align::Start);
         }
         break;
+    case VisualKind::Checkbox: {
+        const std::string name = nodeName(node, sem);
+        paint::drawCheckbox(drawList, font, topLeft(bounds), sizeOf(bounds),
+                            name.c_str(), checked(node, sem), pal, state,
+                            style.fontScale > 0.0f ? style.fontScale * 0.90f
+                                                   : 0.90f);
+        break;
+    }
     case VisualKind::Knob: {
         const float d = std::min(bounds.w, bounds.h);
         const ImVec2 p(bounds.x + (bounds.w - d) * 0.5f, bounds.y);
@@ -2446,6 +2674,16 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
                      state.disabled ? pal.textDim : pal.text, Align::Start);
         }
         break;
+    case VisualKind::Checkbox: {
+        const std::string name = nodeName(node, sem);
+        paint::drawCheckbox(surface, font,
+                            fontSize * (style.fontScale > 0.0f
+                                            ? style.fontScale * 0.90f
+                                            : 0.90f),
+                            topLeftDraw(bounds), sizeOfDraw(bounds),
+                            name.c_str(), checked(node, sem), pal, state);
+        break;
+    }
     case VisualKind::Knob: {
         const float d = std::min(bounds.w, bounds.h);
         const draw::Vec2 p{bounds.x + (bounds.w - d) * 0.5f, bounds.y};
@@ -3881,11 +4119,8 @@ void drawGraphPortTooltip(draw::Surface& surface, GraphSurfaceState& state,
         return;
     }
     const std::string key = state.hovered.nodeId + "/" + state.hovered.portId;
-    if (state.tooltipKey != key) {
-        state.tooltipKey = key;
-        state.tooltipStart = context.timeSeconds;
-    }
-    if (context.timeSeconds - state.tooltipStart < 0.4)
+    if (!tooltipDelayReady(state.tooltipKey, state.tooltipStart, key,
+                           context.timeSeconds))
         return;
 
     draw::Vec2 at;
@@ -4021,6 +4256,16 @@ void fitGraphViewport(GraphSurfaceState& state,
 }
 
 namespace widgets {
+
+Node& attachTooltip(Node& node, std::string text)
+{
+    if (static_cast<const Node&>(node).semantics().tooltip == text)
+        return node;
+    Semantics sem = static_cast<const Node&>(node).semantics();
+    sem.tooltip = std::move(text);
+    node.setSemantics(sem);
+    return node;
+}
 
 Node::Ptr panel(NodeId id, Layout layout, Insets padding)
 {
@@ -4327,6 +4572,392 @@ Node::Ptr listItem(NodeId id, std::string text, bool selected,
         renderer->setStyle(sid, style);
     }
     return node;
+}
+
+namespace {
+
+bool refreshSelectableListSelection(Node& list, const int* selected)
+{
+    bool changed = false;
+    for (std::size_t i = 0; i < list.childCount(); ++i) {
+        Node* child = list.child(i);
+        if (!child || child->role() != Role::ListItem)
+            continue;
+        changed = setSelectedState(*child, selected && *selected == (int)i) || changed;
+    }
+    return changed;
+}
+
+bool setNodeName(Node& node, const std::string& name)
+{
+    const Semantics& current = static_cast<const Node&>(node).semantics();
+    if (current.name == name)
+        return false;
+    Semantics next = current;
+    next.name = name;
+    node.setSemantics(next);
+    return true;
+}
+
+struct FileBrowserEntry {
+    std::string name;
+    std::string path;
+    bool directory = false;
+};
+
+std::string fileBrowserHomeDirectory()
+{
+    const char* home = std::getenv("HOME");
+#if defined(_WIN32)
+    if (!home)
+        home = std::getenv("USERPROFILE");
+#endif
+    return home ? std::string(home) : std::string(".");
+}
+
+void ensureFileBrowserDirectory(FileBrowserState& state)
+{
+    if (state.dir.empty())
+        state.dir = fileBrowserHomeDirectory();
+}
+
+bool fileBrowserMatchesExtensions(const std::filesystem::path& path,
+                                  const char* extensions)
+{
+    if (!extensions)
+        return true;
+    std::string ext = path.extension().string();
+    if (!ext.empty() && ext[0] == '.')
+        ext.erase(0, 1);
+    for (char& c : ext)
+        c = (char)std::tolower((unsigned char)c);
+
+    std::string list = extensions;
+    std::size_t pos = 0;
+    while (pos != std::string::npos) {
+        const std::size_t comma = list.find(',', pos);
+        const std::string one =
+            list.substr(pos, comma == std::string::npos
+                                 ? std::string::npos
+                                 : comma - pos);
+        if (one == ext)
+            return true;
+        pos = comma == std::string::npos ? comma : comma + 1;
+    }
+    return false;
+}
+
+std::vector<FileBrowserEntry> fileBrowserEntries(const std::string& dir,
+                                                 const char* extensions)
+{
+    namespace fs = std::filesystem;
+    std::vector<fs::directory_entry> dirs;
+    std::vector<fs::directory_entry> files;
+
+    std::error_code ec;
+    for (auto it = fs::directory_iterator(dir, ec);
+         !ec && it != fs::directory_iterator(); it.increment(ec)) {
+        const std::string name = it->path().filename().string();
+        if (!name.empty() && name[0] == '.')
+            continue;
+
+        std::error_code typeEc;
+        if (it->is_directory(typeEc) && !typeEc) {
+            dirs.push_back(*it);
+        } else if (!typeEc && fileBrowserMatchesExtensions(it->path(), extensions)) {
+            files.push_back(*it);
+        }
+    }
+
+    const auto byName = [](const fs::directory_entry& a,
+                           const fs::directory_entry& b) {
+        return a.path().filename() < b.path().filename();
+    };
+    std::sort(dirs.begin(), dirs.end(), byName);
+    std::sort(files.begin(), files.end(), byName);
+
+    std::vector<FileBrowserEntry> entries;
+    entries.reserve(dirs.size() + files.size());
+    for (const auto& d : dirs) {
+        entries.push_back({d.path().filename().string(), d.path().string(), true});
+    }
+    for (const auto& f : files) {
+        entries.push_back({f.path().filename().string(), f.path().string(), false});
+    }
+    return entries;
+}
+
+std::string fileBrowserEntryId(const NodeId& rootId,
+                               const FileBrowserEntry& entry)
+{
+    constexpr std::uint64_t kOffset = 1469598103934665603ull;
+    constexpr std::uint64_t kPrime = 1099511628211ull;
+    std::uint64_t hash = kOffset;
+    const auto feed = [&](const std::string& text) {
+        for (unsigned char c : text) {
+            hash ^= c;
+            hash *= kPrime;
+        }
+    };
+    feed(entry.directory ? std::string("dir:") : std::string("file:"));
+    feed(entry.path);
+
+    char suffix[17];
+    std::snprintf(suffix, sizeof suffix, "%016llx",
+                  (unsigned long long)hash);
+    return rootId + ".entry." + suffix;
+}
+
+bool refreshFileBrowserSelection(
+    Node& list,
+    const std::shared_ptr<const std::vector<FileBrowserEntry>>& entries,
+    const FileBrowserState& state)
+{
+    bool changed = false;
+    const std::size_t count = std::min(list.childCount(), entries->size());
+    for (std::size_t i = 0; i < count; ++i) {
+        Node* child = list.child(i);
+        if (!child || child->role() != Role::ListItem)
+            continue;
+        const FileBrowserEntry& entry = (*entries)[i];
+        changed = setSelectedState(*child,
+                                   !entry.directory &&
+                                       state.selected == entry.path) ||
+                  changed;
+    }
+    return changed;
+}
+
+void refreshFileBrowserSelectionFor(Node& itemNode,
+                                    const std::shared_ptr<const std::vector<FileBrowserEntry>>& entries,
+                                    const FileBrowserState& state)
+{
+    if (Node* parent = itemNode.parent())
+        refreshFileBrowserSelection(*parent, entries, state);
+}
+
+void selectFileBrowserEntry(FileBrowserState& state,
+                            const FileBrowserEntry& entry)
+{
+    if (!entry.directory)
+        state.selected = entry.path;
+}
+
+void activateFileBrowserEntry(FileBrowserState& state, std::string* outPath,
+                              const FileBrowserEntry& entry)
+{
+    if (entry.directory) {
+        state.dir = entry.path;
+        state.selected.clear();
+        return;
+    }
+
+    state.selected = entry.path;
+    if (outPath)
+        *outPath = entry.path;
+}
+
+void addFileBrowserActivationSemantics(Node& node)
+{
+    Semantics sem = static_cast<const Node&>(node).semantics();
+    pushAction(sem.actions, Action::Activate);
+    node.setSemantics(sem);
+}
+
+} // namespace
+
+Node::Ptr selectableList(NodeId id, std::string name,
+                         std::vector<std::string> items, int* selected,
+                         PaintRenderer* renderer, Vec2 size,
+                         std::function<void(Node&, int)> onSelect)
+{
+    if (size.x <= 0.0f)
+        size.x = 180.0f;
+    if (size.y <= 0.0f)
+        size.y = 120.0f;
+
+    NodeId sid = id;
+    auto node = scrollView(std::move(id), 2.0f, Insets::all(4.0f), renderer);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::fixed(size.x), Length::fixed(size.y));
+    node->setSemantics(named(Role::Group, std::move(name)));
+
+    for (int i = 0; i < (int)items.size(); ++i) {
+        const NodeId itemId = sid + ".item." + std::to_string(i);
+        auto item = listItem(itemId, std::move(items[(std::size_t)i]),
+                             selected && *selected == i,
+                             [selected, onSelect, i](Node& itemNode) {
+                                 if (selected)
+                                     *selected = i;
+                                 if (Node* parent = itemNode.parent())
+                                     refreshSelectableListSelection(*parent, selected);
+                                 if (onSelect)
+                                     onSelect(itemNode, i);
+                             },
+                             renderer);
+        node->addChild(std::move(item));
+    }
+
+    node->setOnRefresh([selected](Node& n) {
+        return refreshSelectableListSelection(n, selected);
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        style.panelBorder = true;
+        style.panelRounding = 0.0f;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
+Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
+                      std::string* outPath, PaintRenderer* renderer,
+                      Vec2 size, const char* extensions)
+{
+    namespace fs = std::filesystem;
+    if (size.x <= 0.0f)
+        size.x = 260.0f;
+    if (size.y <= 0.0f)
+        size.y = 180.0f;
+
+    ensureFileBrowserDirectory(state);
+
+    NodeId sid = id;
+    const NodeId headerId = sid + ".header";
+    const NodeId upId = sid + ".up";
+    const NodeId dirId = sid + ".dir";
+    const NodeId listId = sid + ".files";
+    constexpr float headerHeight = 24.0f;
+    const float listHeight = std::max(24.0f, size.y - headerHeight - 4.0f);
+    auto entries = std::make_shared<const std::vector<FileBrowserEntry>>(
+        fileBrowserEntries(state.dir, extensions));
+
+    auto root = column(std::move(id), 4.0f);
+    root->setIntrinsicSize(size);
+    root->setSize(Length::fixed(size.x), Length::fixed(size.y));
+    root->setSemantics(named(Role::Group, name));
+
+    auto header = row(headerId, 6.0f);
+    header->setIntrinsicSize({size.x, headerHeight});
+    header->setSize(Length::fixed(size.x), Length::fixed(headerHeight));
+    header->setSemantics(named(Role::Group, std::string{}));
+
+    auto up = outlineButton(
+        upId, "^ up",
+        [&state](Node&) {
+            const fs::path parent = fs::path(state.dir).parent_path();
+            if (!parent.empty())
+                state.dir = parent.string();
+            state.selected.clear();
+        },
+        renderer, {54.0f, headerHeight});
+
+    auto dirLabel = label(dirId, state.dir, renderer);
+    dirLabel->setIntrinsicSize({std::max(24.0f, size.x - 60.0f),
+                                headerHeight});
+    dirLabel->setSize(Length::fill(), Length::fixed(headerHeight));
+    dirLabel->setOnRefresh([&state](Node& n) {
+        return setNodeName(n, state.dir);
+    });
+
+    header->addChild(std::move(up));
+    header->addChild(std::move(dirLabel));
+
+    auto list = scrollView(listId, 2.0f, Insets::all(4.0f), renderer);
+    list->setIntrinsicSize({size.x, listHeight});
+    list->setSize(Length::fixed(size.x), Length::fixed(listHeight));
+    list->setSemantics(named(Role::Group, name.empty() ? "Files"
+                                                       : name + " files"));
+
+    for (const FileBrowserEntry& entry : *entries) {
+        const std::string itemLabel =
+            entry.directory ? "[dir] " + entry.name : entry.name;
+        auto item = listItem(
+            fileBrowserEntryId(sid, entry), itemLabel,
+            !entry.directory && state.selected == entry.path,
+            {},
+            renderer);
+        addFileBrowserActivationSemantics(*item);
+        auto suppressPointerActivate = std::make_shared<bool>(false);
+        auto handledPointerDoubleClick = std::make_shared<bool>(false);
+        item->setOnEvent(
+            [&state, outPath, entries, entry, suppressPointerActivate,
+             handledPointerDoubleClick](Node& itemNode, const Event& event) {
+                if (event.button != MouseButton::Left)
+                    return false;
+
+                if (event.type == EventType::MouseDown) {
+                    *suppressPointerActivate = true;
+                    *handledPointerDoubleClick = event.clickCount >= 2;
+                    if (*handledPointerDoubleClick) {
+                        activateFileBrowserEntry(state, outPath, entry);
+                        refreshFileBrowserSelectionFor(itemNode, entries, state);
+                        return true;
+                    }
+                    return false;
+                }
+
+                if (event.type != EventType::MouseUp)
+                    return false;
+
+                if (!itemNode.bounds().contains(event.position)) {
+                    *suppressPointerActivate = false;
+                    *handledPointerDoubleClick = false;
+                    return false;
+                }
+
+                if (event.clickCount >= 2) {
+                    if (!*handledPointerDoubleClick) {
+                        activateFileBrowserEntry(state, outPath, entry);
+                        refreshFileBrowserSelectionFor(itemNode, entries, state);
+                    }
+                    *handledPointerDoubleClick = false;
+                    *suppressPointerActivate = true;
+                    return true;
+                }
+
+                selectFileBrowserEntry(state, entry);
+                refreshFileBrowserSelectionFor(itemNode, entries, state);
+                return false;
+            });
+        item->setOnAction(
+            [&state, outPath, entries, entry, suppressPointerActivate,
+             handledPointerDoubleClick](Node& itemNode, Action action, double) {
+                if (action != Action::Activate)
+                    return false;
+
+                if (*suppressPointerActivate) {
+                    *suppressPointerActivate = false;
+                    *handledPointerDoubleClick = false;
+                    return true;
+                }
+
+                activateFileBrowserEntry(state, outPath, entry);
+                refreshFileBrowserSelectionFor(itemNode, entries, state);
+                return true;
+            });
+        list->addChild(std::move(item));
+    }
+
+    list->setOnRefresh([entries, &state](Node& n) {
+        return refreshFileBrowserSelection(n, entries, state);
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        style.panelBorder = true;
+        style.panelRounding = 0.0f;
+        renderer->setStyle(listId, style);
+    }
+
+    root->addChild(std::move(header));
+    root->addChild(std::move(list));
+    return root;
 }
 
 Node::Ptr menuItem(NodeId id, MenuItem item,
@@ -6302,6 +6933,16 @@ Node::Ptr animatedButton(NodeId id, std::string name,
     return node;
 }
 
+Node::Ptr gradientButton(NodeId id, std::string name,
+                         std::function<void(Node&)> onActivate,
+                         PaintRenderer* renderer, Vec2 size,
+                         ImU32 top, ImU32 bottom)
+{
+    return animatedButton(std::move(id), std::move(name),
+                          std::move(onActivate), renderer, size, top, bottom,
+                          false);
+}
+
 Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate,
                      PaintRenderer* renderer, IconFont font, Vec2 size,
@@ -6687,6 +7328,58 @@ Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
     return node;
 }
 
+Node::Ptr checkbox(NodeId id, std::string name, ValueBinding binding,
+                   PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    if (size.y <= 0.0f)
+        size.y = 22.0f;
+    if (size.x <= 0.0f)
+        size.x = std::max(22.0f, 26.0f + 7.5f * (float)name.size());
+    if (binding.step <= 0.0)
+        binding.step = 1.0;
+    if (!binding.format) {
+        binding.format = [](double value) {
+            return value >= 0.5 ? std::string("Checked")
+                                : std::string("Unchecked");
+        };
+    }
+
+    auto node = Node::make(std::move(id), Role::Toggle);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setFocusable(true);
+
+    Semantics sem = named(Role::Toggle, name);
+    sem.description = "Checkbox";
+    setBindingSemantics(sem, binding);
+    const double mid = (binding.min + binding.max) * 0.5;
+    if (sem.value.value >= mid)
+        sem.states |= SemanticState::Checked;
+    node->setSemantics(sem);
+    node->setValueBinding(std::move(binding));
+    node->setOnActivate([](Node& n) {
+        const ValueBinding* b = n.valueBinding();
+        if (!b || !b->get || !b->set)
+            return;
+        const bool next = b->get() < (b->min + b->max) * 0.5;
+        if (!setBindingValue(n, next ? b->max : b->min))
+            return;
+        Semantics& sem = n.semantics();
+        if (next)
+            sem.states |= SemanticState::Checked;
+        else
+            sem.states &= ~stateMask(SemanticState::Checked);
+    });
+
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Checkbox;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
                PaintRenderer* renderer, KnobStyle knobStyle, bool bipolar,
                float diameter, paint::KnobPainter painter)
@@ -6715,6 +7408,23 @@ Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
         renderer->setStyle(sid, style);
     }
     return node;
+}
+
+Node::Ptr knobDb(NodeId id, std::string name, ValueBinding binding,
+                 double minDb, double maxDb, PaintRenderer* renderer,
+                 float diameter, paint::KnobPainter painter)
+{
+    binding.min = minDb;
+    binding.max = maxDb;
+    if (!binding.format) {
+        binding.format = [](double value) {
+            char buf[32];
+            std::snprintf(buf, sizeof buf, "%.1f dB", value);
+            return std::string(buf);
+        };
+    }
+    return knob(std::move(id), std::move(name), std::move(binding), renderer,
+                KnobStyle::Ring, false, diameter, std::move(painter));
 }
 
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,

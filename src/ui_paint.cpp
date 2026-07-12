@@ -1201,6 +1201,15 @@ void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
     }
 }
 
+void drawTransportGlyph(ImDrawList* dl, Icon icon, const ImVec2& c,
+                        float r, ImU32 fg, float thickness)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTransportGlyph(surface, icon, draw::toDrawVec2(c), r, fg, thickness);
+}
+
 void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
                          draw::Vec2 size, const Palette& pal,
                          const ControlState& state,
@@ -1293,6 +1302,69 @@ void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
     drawButton(surface, draw::fontRef(font), ImGui::GetFontSize() * fontScale,
                draw::toDrawVec2(topLeft), draw::toDrawVec2(size), text, pal,
                state);
+}
+
+void drawCheckbox(draw::Surface& surface, draw::FontRef font,
+                  float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                  const char* text, bool checked, const Palette& pal,
+                  const ControlState& state)
+{
+    const float box = std::max(12.0f, std::min(size.y, 18.0f));
+    const float boxY = topLeft.y + std::max(0.0f, size.y - box) * 0.5f;
+    const draw::Vec2 boxMin{topLeft.x, boxY};
+    const draw::Vec2 boxMax{topLeft.x + box, boxY + box};
+    const draw::Vec2 outerMax{topLeft.x + size.x, topLeft.y + size.y};
+
+    ImU32 fill = checked ? mix(pal.frame, pal.accent, 0.34f) : pal.frame;
+    if (state.hovered && !state.disabled)
+        fill = checked ? mix(pal.frame, pal.accent, 0.44f) : pal.frameBright;
+    if (state.active && !state.disabled)
+        fill = mix(fill, pal.accent, checked ? 0.22f : 0.14f);
+    if (state.disabled)
+        fill = mix(fill, IM_COL32(0, 0, 0, 255), 0.35f);
+
+    ImU32 border = checked ? pal.accent : pal.frameBright;
+    if (state.hovered && !state.disabled)
+        border = checked ? mix(pal.accent, pal.text, 0.25f) : pal.accent;
+    if (state.disabled)
+        border = mix(border, pal.frameBright, 0.65f);
+
+    surface.fillRect(boxMin, boxMax, fill, 0.0f);
+    surface.strokeRect(boxMin, boxMax, border, 0.0f, 1.25f);
+
+    if (checked) {
+        const ImU32 tick = state.disabled ? pal.textDim : pal.text;
+        const draw::Vec2 a{boxMin.x + box * 0.24f, boxMin.y + box * 0.54f};
+        const draw::Vec2 b{boxMin.x + box * 0.43f, boxMin.y + box * 0.72f};
+        const draw::Vec2 c{boxMin.x + box * 0.76f, boxMin.y + box * 0.30f};
+        surface.line(a, b, tick, 2.0f);
+        surface.line(b, c, tick, 2.0f);
+    }
+
+    if (text && text[0] && fontSizePx > 0.0f) {
+        const float gap = 7.0f;
+        const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
+        const draw::Vec2 p{boxMax.x + gap,
+                           topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f};
+        surface.text(font, fontSizePx, p,
+                     state.disabled ? pal.textDim : pal.text, text);
+    }
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(surface, topLeft, outerMax, pal, 0.0f, 2.0f);
+}
+
+void drawCheckbox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                  const ImVec2& size, const char* text, bool checked,
+                  const Palette& pal, const ControlState& state,
+                  float fontScale)
+{
+    if (!dl || !font)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawCheckbox(surface, draw::fontRef(font), ImGui::GetFontSize() * fontScale,
+                 draw::toDrawVec2(topLeft), draw::toDrawVec2(size), text,
+                 checked, pal, state);
 }
 
 void drawSegmented(draw::Surface& surface, draw::FontRef font,
@@ -3264,6 +3336,17 @@ void drawTooltip(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     surface.fillRect(tl, br, pal.frame, 3.0f);
     surface.strokeRect(tl, br, pal.frameBright, 3.0f);
     surface.text(font, fontSizePx, {tl.x + padX, tl.y + padY}, pal.text, text);
+}
+
+void drawTooltip(ImDrawList* dl, ImFont* font, float fontSizePx,
+                 const ImVec2& anchor, const char* text, const Palette& pal,
+                 const ImVec2& clipMax)
+{
+    if (!dl || !font)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTooltip(surface, draw::fontRef(font), fontSizePx,
+                draw::toDrawVec2(anchor), text, pal, draw::toDrawVec2(clipMax));
 }
 
 void drawSectionHeader(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

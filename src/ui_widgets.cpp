@@ -214,6 +214,42 @@ bool toggle(const char* label, bool* on)
     return changed;
 }
 
+bool checkbox(const char* label, bool* checked)
+{
+    if (!checked)
+        return false;
+
+    const char* display = label ? label : "##checkbox";
+    const char* labelEnd = visibleLabelEnd(display);
+    const bool hasLabel = labelEnd > display;
+    ImFont* font = ImGui::GetFont();
+    const float fontSize = ImGui::GetFontSize() * 0.90f;
+    const float box = std::max(12.0f, ImGui::GetFrameHeight() * 0.82f);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec2 labelSize =
+        hasLabel ? font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, display, labelEnd)
+                 : ImVec2(0.0f, 0.0f);
+    const ImVec2 size(box + (hasLabel ? style.ItemInnerSpacing.x + labelSize.x : 0.0f),
+                      std::max(box, labelSize.y));
+
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool changed = ImGui::InvisibleButton(display, size);
+    if (changed)
+        *checked = !*checked;
+
+    paint::ControlState state;
+    state.hovered = ImGui::IsItemHovered();
+    state.active = ImGui::IsItemActive();
+    state.focused = itemFocusVisible();
+    state.selected = *checked;
+    std::string visible;
+    if (hasLabel)
+        visible.assign(display, labelEnd);
+    paint::drawCheckbox(ImGui::GetWindowDrawList(), font, p, size,
+                        visible.c_str(), *checked, gPalette, state, 0.90f);
+    return changed;
+}
+
 bool led(const char* id, bool on, float radius, bool clickable, ImU32 onColor)
 {
     if (onColor == 0)

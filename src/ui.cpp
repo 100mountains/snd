@@ -846,6 +846,41 @@ bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent, boo
     return pressed;
 }
 
+bool transportButton(const char* id, Icon icon, const ImVec2& size,
+                     bool selected, bool actOnPress)
+{
+    paint::OutlineButtonStyle style;
+    return transportButton(id, icon, size, style, selected, actOnPress);
+}
+
+bool transportButton(const char* id, Icon icon, const ImVec2& size,
+                     const paint::OutlineButtonStyle& style, bool selected,
+                     bool actOnPress)
+{
+    ImVec2 sz = size;
+    if (sz.x <= 0.0f)
+        sz.x = 36.0f;
+    if (sz.y <= 0.0f)
+        sz.y = 18.0f;
+
+    ImGuiButtonFlags flags = ImGuiButtonFlags_EnableNav;
+    if (actOnPress)
+        flags |= ImGuiButtonFlags_PressedOnClick;
+
+    ImVec2 p = ImGui::GetCursorScreenPos();
+    const bool pressed = ImGui::InvisibleButton(id, sz, flags);
+    const bool disabled = (ImGui::GetItemFlags() & ImGuiItemFlags_Disabled) != 0;
+    paint::ControlState state;
+    state.hovered = !disabled && ImGui::IsItemHovered();
+    state.active = !disabled && ImGui::IsItemActive();
+    state.focused = !disabled && itemFocusVisible();
+    state.disabled = disabled;
+    state.selected = selected;
+    paint::drawTransportButton(ImGui::GetWindowDrawList(), icon, p, sz, palette(),
+                               state, style);
+    return pressed && !disabled;
+}
+
 void openPopupMenu(const char* popupId)
 {
     if (popupId && popupId[0])

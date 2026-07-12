@@ -49,6 +49,20 @@ Immediate compatibility consequences:
 - Every widget takes a string `id`/`label`. Identical visible labels need
   distinct ids: use the `"Label##uniqueid"` suffix or `ImGui::PushID`.
 
+Primitive parity contract:
+
+- A reusable SND primitive needs an immediate API, a retained API, and a shared
+  `paint::drawX` path unless it is explicitly documented as mode-specific.
+- Input behaviour must be equivalent in both authoring models: pointer,
+  keyboard, modifiers, focus-visible treatment, disabled state, and value
+  change rules should match.
+- Retained widgets must expose accessibility/semantics: role, name, state,
+  value range/text, focusability, and semantic actions where relevant.
+- Docs, examples, and tests should cover both front ends when a primitive has
+  parity.
+- Any change to one side of a paired primitive needs a parity review before it
+  lands.
+
 ## The aGooey window and frame loop
 
 For a new retained/aGooey app, include the retained headers and use
@@ -371,7 +385,7 @@ Current helpers cover `row`, `column`, `panel`, `gradientPanel`, `label`,
 `dropdownMenu`, `contextMenuRegion`, `modalDialog`, `alertDialog`,
 `confirmDialog`, `button`, `outlineButton`,
 `segmented`, `tabBar`, `cycleButton`, `ledButton`,
-`animatedButton`, `iconButton`, `toggle`, `knob`, `fader`, `meter`, `led`,
+`animatedButton`, `iconButton`, `toggle`, `checkbox`, `knob`, `fader`, `meter`, `led`,
 `patternGrid`, `xyPad`, `keyboard`, `valueRow`, `dragNumber`, `valueField`,
 `envelopeEditor`, `canvas`, `textField`, `scrollView`, `splitter`, and
 `graphSurface`. Value controls use `ValueBinding`; the caller still owns
@@ -482,6 +496,10 @@ Use `widgets::ledButton(id, name, glyph, binding, blink, &renderer, size,
 ledColor, font)` for tactile keys with an integrated status LED ring
 (record-arm, monitor, latches). The binding is the on/off state as in
 `toggle`; `blink` pulses the lit ring for armed/pending states.
+Use `widgets::checkbox(id, name, binding, &renderer, size)` for a square
+checked/unchecked control. It shares `Role::Toggle` semantics with `toggle`,
+uses caller-owned `ValueBinding`, and exposes checked state plus Activate /
+SetValue actions.
 Retained faders share the immediate fine-adjust behaviour: Shift switches the
 drag from jump-to-position to a relative drag at 10% rate, and Shift on knob
 drags is 10× slower.
@@ -495,16 +513,23 @@ use the string-glyph overload for Material/Lucide tactile icon buttons.
 Retained `widgets::button(...)` and `widgets::knob(...)` accept optional custom
 painters using the same `paint::ButtonPaintArgs` and `paint::KnobPaintArgs`
 contract as immediate mode.
+Small parity wrappers should stay boring and named the same as their immediate
+counterpart: `widgets::gradientButton`, `widgets::transportButton`,
+`widgets::knobDb`, `widgets::selectableList`, and `widgets::fileBrowser` exist
+so users do not have to rebuild common controls from lower-level retained
+pieces. Use `widgets::attachTooltip(node, text)` for retained hover help;
+accessible descriptions remain separate in `Semantics::description`.
 
 ## Semantics, focus, and headless testing
 
 The retained core is the accessibility surface. Every node carries
 `Semantics`: a `Role` (`Button`, `Toggle`, `Slider`, `Meter`, `ListItem`,
-`Menu`, `Canvas`, ...), an accessible `name`, a `ValueRange` (numeric
-value/min/max/step plus display `text`), state bits, and the `Action`s it
-supports (`Activate`, `Increment`, `Decrement`, `SetValue`, `OpenMenu`,
-`Focus`). The built-in widget helpers fill all of this in; custom nodes must
-do the same — `validate()` returns `ValidationIssue`s for empty IDs,
+`Menu`, `Canvas`, ...), an accessible `name`, optional `description` and
+`tooltip` help text, a `ValueRange` (numeric value/min/max/step plus display
+`text`), state bits, and the `Action`s it supports (`Activate`, `Increment`,
+`Decrement`, `SetValue`, `OpenMenu`, `Focus`). The built-in widget helpers fill
+all of this in; custom nodes must do the same — `validate()` returns
+`ValidationIssue`s for empty IDs,
 duplicate IDs, and visible interactive nodes without an accessible name, and
 belongs in headless tests for any non-trivial tree.
 
@@ -594,6 +619,9 @@ mouse down for no-latency transport feel. Pick buttons by intent
 (`transportButton("play", Icon::Play, …)`) rather than wiring glyph constants.
 For a solid/filled transport glyph instead of the outline, use the vector
 `iconButton(id, Icon, …)`.
+Immediate `snd::ui::transportButton(id, Icon, size, selected, actOnPress)`
+uses the same outline body and glyph painter; the styled overload takes
+`paint::OutlineButtonStyle`.
 
 **Fire on press.** Both `outlineButton` and `outlineIconButton` (and thus
 `transportButton`) take a trailing `actOnPress` flag. Default `false` = the
@@ -787,8 +815,8 @@ straddle the edge keep the classic full outline.
 Hovering a pin shows a connector tooltip with that port's `GraphPort::label`
 (same look as `snd::ui::tooltip`, after a short delay) — `graphSurface` owns
 the timing and draws it; `GraphSurfaceStyle::portTooltips` (default on) opts
-out. `paint::drawTooltip(surface, font, sizePx, anchor, text, pal, clipMax)`
-is the reusable helper.
+out. `paint::drawTooltip(...)` has `draw::Surface&` and `ImDrawList*` overloads;
+the surface overload is the primary reusable helper.
 
 Double-click on a module (`NodeBody`/`NodeTitle`/`NodePart`) fires
 `GraphSurfaceCallbacks::onNodeDoubleClicked(hit)`, typically to open an
@@ -898,6 +926,8 @@ members).
 
 - `gradientPanel(size, tl, tr, br, bl)` — filled rect with a 4-corner gradient.
 - `gradientButton(label, size, top, bottom)` → clicked.
+  Retained: `widgets::gradientButton(id, name, onActivate, renderer, size,
+  top, bottom)`.
 - `animatedButton(label, size, top=0, bottom=0)` → clicked. Gradient action
   button with a subtle live sweep; `0` colours use the current palette accent.
 - `button(label, size, painter)` → clicked. Generic custom-painted button;
@@ -919,6 +949,10 @@ members).
 - `iconButton(id, Icon, size, accent, active=false)` → clicked. Vector
   transport/tool icons (`Play, Stop, Record, SkipToStart, SkipToEnd, Loop,
   Waveform, Spectrum, Follow`), crisp at any size. `active` draws lit.
+- `transportButton(id, Icon, size={36,18}, selected=false, actOnPress=false)`
+  → fired. Outline-chrome transport button matching retained
+  `widgets::transportButton`; the styled overload takes
+  `paint::OutlineButtonStyle`.
 - `iconButton(id, glyph, size={}, font=nullptr, toggled=false, face=0)` →
   clicked. Tactile hardware key for a Material/Lucide glyph from
   `<snd/icons.h>`; raised light-grey face that presses into a soft off-white
@@ -930,6 +964,8 @@ members).
 - `tooltip(text, maxWidth=400)` — JUCE-style tooltip for the previous item:
   standard hover delay, wraps at `maxWidth` with auto height, palette-drawn.
   The SND replacement for calling `ImGui::SetTooltip` directly.
+  Retained: `widgets::attachTooltip(node, text)` stores
+  `Semantics::tooltip`; retained renderers draw it after the same delay.
 
 ### Menus
 
@@ -963,6 +999,9 @@ Shift drags 10× slower.
   Same knobs with the modulation-ring overlay (depth arc + live position dot).
 - `knobDb(label, float* db, minDb, maxDb, size=0)` → changing. Rotary over a dB
   range; a tick marks 0 dB when in range.
+  Retained: `widgets::knobDb(id, name, binding, minDb, maxDb, renderer,
+  diameter, painter)` uses the same caller-owned binding model and default dB
+  display text.
 - `fader(id, float* v, size)` → dragging. Vertical fader 0..1; Shift switches
   from jump-to-position to relative fine drag.
 - `dragNumber(label, float* v, speed, min, max, format="%.2f")` → changing.
@@ -971,6 +1010,9 @@ Shift drags 10× slower.
 ### Switches and indicators
 
 - `toggle(label, bool* on)` → toggled. Animated on/off switch.
+- `checkbox(label, bool* checked)` → toggled. Square checkbox with optional
+  label, using the same shared checked-state paint as retained
+  `widgets::checkbox`.
 - `led(id, bool on, radius=5, clickable=false, onColor=0)` → clicked (only when
   `clickable`). Glows when on; `onColor=0` uses the accent.
 - `ledButton(id, glyph, bool* on, blink=false, size={}, font=nullptr,
@@ -1029,10 +1071,19 @@ Shift drags 10× slower.
 
 - `selectableList(id, const std::vector<std::string>& items, int* selected,
   size)` → selection changed. Themed scrolling list.
+  Retained: `widgets::selectableList(id, name, items, selected, renderer,
+  size, onSelect)` exposes `Role::ListItem` children, keeps selection in the
+  caller-owned `int*`, and refreshes selected state through
+  `refreshBoundValues()`. Rebuild the retained subtree when item text/order
+  changes.
 - `fileBrowser(id, FileBrowserState& st, size, std::string* outPath,
   extensions=nullptr)` → a file was picked (path written to `outPath`).
   `FileBrowserState{dir, selected}`: `dir=""` starts in HOME. `extensions` is a
   comma list ("wav,flac"); `nullptr` shows everything.
+  Retained: `widgets::fileBrowser(id, name, state, outPath, renderer, size,
+  extensions)` uses the same `FileBrowserState`, filtering, and caller-owned
+  output path. Directory content is enumerated when the subtree is built, so
+  rebuild after changing `state.dir` or when the filesystem changes.
 
 ## Idioms
 

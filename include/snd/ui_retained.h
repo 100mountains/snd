@@ -114,6 +114,7 @@ struct Semantics {
     Role role = Role::None;
     std::string name;
     std::string description;
+    std::string tooltip;
     std::string labelledBy;
     ValueRange value;
     SemanticStates states = 0;
@@ -128,6 +129,7 @@ struct SemanticNode {
     Role role = Role::None;
     std::string name;
     std::string description;
+    std::string tooltip;
     std::string labelledBy;
     ValueRange value;
     SemanticStates states = 0;

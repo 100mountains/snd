@@ -500,6 +500,10 @@ static bool selftestRetainedUi()
                               {30.0f, 5.0f}, 1.0f, 0.5f, -48.0f, recPal);
     snd::ui::paint::drawFader(controlRecording, {0.0f, 40.0f},
                               {18.0f, 50.0f}, 0.65f, recPal, helperState);
+    snd::ui::draw::RecordingSurface checkboxRecording;
+    snd::ui::paint::drawCheckbox(checkboxRecording, {}, 12.0f,
+                                 {0.0f, 0.0f}, {72.0f, 20.0f},
+                                 "Snap", true, recPal, helperState);
     snd::ui::draw::RecordingSurface tabRecording;
     const char* tabLabels[] = {"Osc", "Filter", "Env"};
     snd::ui::paint::drawTabBar(tabRecording, {}, 12.0f, {0.0f, 0.0f},
@@ -559,6 +563,7 @@ static bool selftestRetainedUi()
     const auto& gridOps = gridRecording.ops();
     const auto& bodyOps = bodyRecording.ops();
     const auto& controlOps = controlRecording.ops();
+    const auto& checkboxOps = checkboxRecording.ops();
     const auto& tabOps = tabRecording.ops();
     const auto& keyboardOps = keyboardRecording.ops();
     const auto& moduleOps = moduleRecording.ops();
@@ -599,8 +604,18 @@ static bool selftestRetainedUi()
     surfaceRoot->addChild(w::animatedButton("surface.anim", "Render", {},
                                             &surfaceRenderer, {72.0f, 24.0f},
                                             0xAA332211u, 0xAA554433u, false));
+    double surfaceCheck = 1.0;
+    r::ValueBinding checkBinding;
+    checkBinding.get = [&] { return surfaceCheck; };
+    checkBinding.set = [&](double value) { surfaceCheck = value; };
+    checkBinding.min = 0.0;
+    checkBinding.max = 1.0;
+    checkBinding.step = 1.0;
+    surfaceRoot->addChild(w::checkbox("surface.checkbox", "Snap",
+                                      std::move(checkBinding), &surfaceRenderer,
+                                      {80.0f, 22.0f}));
     r::Tree surfaceTree(std::move(surfaceRoot));
-    surfaceTree.layout({120.0f, 160.0f});
+    surfaceTree.layout({120.0f, 190.0f});
     r::SemanticNode tabSem;
     bool tabOk = surfaceTree.semanticNode("surface.tabs.tab.1", tabSem) &&
                  tabSem.role == r::Role::Button &&
@@ -609,6 +624,16 @@ static bool selftestRetainedUi()
                  surfaceTree.performSemanticAction("surface.tabs.tab.0",
                                                    r::Action::Activate) &&
                  std::abs(surfaceTab - 0.0) < 0.0001;
+    r::SemanticNode checkboxSem;
+    bool checkboxOk =
+        surfaceTree.semanticNode("surface.checkbox", checkboxSem) &&
+        checkboxSem.role == r::Role::Toggle &&
+        checkboxSem.value.text == "Checked" &&
+        r::hasState(checkboxSem.states, r::SemanticState::Checked) &&
+        hasAction(&checkboxSem, r::Action::Activate) &&
+        surfaceTree.performSemanticAction("surface.checkbox",
+                                          r::Action::Activate) &&
+        std::abs(surfaceCheck - 0.0) < 0.0001;
     snd::ui::draw::RecordingSurface retainedRecording;
     snd::ui::draw::FrameContext frameContext;
     frameContext.fontSizePx = 12.0f;
@@ -870,6 +895,13 @@ static bool selftestRetainedUi()
         controlOps[13].name == "strokeRect" &&
         controlOps[14].name == "fillRect" &&
         controlOps[19].name == "line" &&
+        checkboxOps.size() == 5 &&
+        checkboxOps[0].name == "fillRect" &&
+        checkboxOps[1].name == "strokeRect" &&
+        checkboxOps[2].name == "line" &&
+        checkboxOps[3].name == "line" &&
+        checkboxOps[4].name == "text" &&
+        checkboxOps[4].text == "Snap" &&
         tabOps.size() >= 8 &&
         tabOps[0].name == "line" &&
         std::find_if(tabOps.begin(), tabOps.end(),
@@ -905,8 +937,10 @@ static bool selftestRetainedUi()
         hasRetainedText("Patch") &&
         hasRetainedText("Go") &&
         hasRetainedText("Render") &&
+        hasRetainedText("Snap") &&
         hasDefaultContextText("Go") &&
         tabOk &&
+        checkboxOk &&
         matrixOk;
 
     auto root = r::Node::make("root", r::Role::Group);
@@ -931,6 +965,7 @@ static bool selftestRetainedUi()
     play->setSize(r::Length::fixed(60.0f), r::Length::fill());
     play->setFocusable(true);
     play->setSemantics(named(r::Role::Button, "Play"));
+    w::attachTooltip(*play, "Start transport");
     play->setOnActivate([&](r::Node&) { ++activated; });
 
     double gain = 0.5;
@@ -1235,7 +1270,8 @@ static bool selftestRetainedUi()
          std::abs(oneValue.value - 0.15) < 0.0001;
 
     ok = ok && playSem && playSem->role == r::Role::Button &&
-         playSem->name == "Play" && hasAction(playSem, r::Action::Activate);
+         playSem->name == "Play" && playSem->tooltip == "Start transport" &&
+         hasAction(playSem, r::Action::Activate);
     ok = ok && gainSem && gainSem->role == r::Role::Slider &&
          gainSem->value.hasNumeric && std::abs(gainSem->value.value - 0.15) < 0.0001 &&
          gainSem->value.text == "15%" && hasAction(gainSem, r::Action::Increment) &&
@@ -1364,6 +1400,82 @@ static bool selftestRetainedUi()
          !hasAction(&readonlySem, r::Action::Decrement) &&
          !readonlyTree.setValue("readonly.meter", 0.2) &&
          !readonlyTree.incrementValue("readonly.meter");
+
+    int retainedWrapperClicks = 0;
+    double retainedDb = -12.0;
+    auto wrapperRoot = w::column("wrapper.root", 4.0f);
+    auto gradient = w::gradientButton(
+        "wrapper.gradient", "Gradient",
+        [&](r::Node&) { ++retainedWrapperClicks; });
+    w::attachTooltip(*gradient, "Run gradient action");
+    wrapperRoot->addChild(std::move(gradient));
+    r::ValueBinding dbBinding;
+    dbBinding.get = [&] { return retainedDb; };
+    dbBinding.set = [&](double value) { retainedDb = value; };
+    wrapperRoot->addChild(w::knobDb("wrapper.gain", "Gain", dbBinding,
+                                    -60.0, 12.0));
+    r::Tree wrapperTree(std::move(wrapperRoot));
+    wrapperTree.layout({140.0f, 100.0f});
+    r::SemanticNode gradientSem;
+    r::SemanticNode knobDbSem;
+    ok = ok && wrapperTree.validate().empty() &&
+         wrapperTree.semanticNode("wrapper.gradient", gradientSem) &&
+         gradientSem.role == r::Role::Button &&
+         gradientSem.tooltip == "Run gradient action" &&
+         hasAction(&gradientSem, r::Action::Activate) &&
+         wrapperTree.performSemanticAction("wrapper.gradient",
+                                           r::Action::Activate) &&
+         retainedWrapperClicks == 1 &&
+         wrapperTree.semanticNode("wrapper.gain", knobDbSem) &&
+         knobDbSem.role == r::Role::Slider &&
+         knobDbSem.value.hasNumeric &&
+         std::abs(knobDbSem.value.min + 60.0) < 0.0001 &&
+         std::abs(knobDbSem.value.max - 12.0) < 0.0001 &&
+         knobDbSem.value.text.find("dB") != std::string::npos &&
+         hasAction(&knobDbSem, r::Action::SetValue) &&
+         wrapperTree.setValue("wrapper.gain", -6.0) &&
+         std::abs(retainedDb + 6.0) < 0.0001;
+
+    int selectedIndex = 0;
+    int selectedCallback = -1;
+    auto listRoot = w::selectableList(
+        "choices", "Choices", {"A", "B", "C"}, &selectedIndex, nullptr,
+        {120.0f, 80.0f},
+        [&](r::Node&, int index) { selectedCallback = index; });
+    r::Tree listTree(std::move(listRoot));
+    listTree.layout({140.0f, 100.0f});
+    auto listSemantics = listTree.semanticSnapshot();
+    auto findListSem = [&](const char* id) -> const r::SemanticNode* {
+        auto it = std::find_if(listSemantics.begin(), listSemantics.end(),
+                               [&](const r::SemanticNode& node) {
+                                   return node.id == id;
+                               });
+        return it == listSemantics.end() ? nullptr : &*it;
+    };
+    const r::SemanticNode* choice0 = findListSem("choices.item.0");
+    const r::SemanticNode* choice2 = findListSem("choices.item.2");
+    ok = ok && listTree.validate().empty() && choice0 && choice2 &&
+         r::hasState(choice0->states, r::SemanticState::Selected) &&
+         !r::hasState(choice2->states, r::SemanticState::Selected) &&
+         hasAction(choice2, r::Action::Activate) &&
+         listTree.performSemanticAction("choices.item.2",
+                                        r::Action::Activate) &&
+         selectedIndex == 2 && selectedCallback == 2;
+    listSemantics = listTree.semanticSnapshot();
+    choice0 = findListSem("choices.item.0");
+    choice2 = findListSem("choices.item.2");
+    ok = ok && choice0 && choice2 &&
+         !r::hasState(choice0->states, r::SemanticState::Selected) &&
+         r::hasState(choice2->states, r::SemanticState::Selected);
+    listTree.clearDirty();
+    selectedIndex = 1;
+    ok = ok && listTree.refreshBoundValues() && listTree.dirty();
+    listSemantics = listTree.semanticSnapshot();
+    const r::SemanticNode* choice1 = findListSem("choices.item.1");
+    choice2 = findListSem("choices.item.2");
+    ok = ok && choice1 && choice2 &&
+         r::hasState(choice1->states, r::SemanticState::Selected) &&
+         !r::hasState(choice2->states, r::SemanticState::Selected);
 
     double fieldValue = 120.0;
     r::PaintRenderer fieldRenderer;

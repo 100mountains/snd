@@ -228,6 +228,9 @@ void drawFocusRing(ImDrawList* dl, const ImVec2& min, const ImVec2& max,
 void drawTooltip(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                  draw::Vec2 anchor, const char* text, const Palette& pal,
                  draw::Vec2 clipMax = {0.0f, 0.0f});
+void drawTooltip(ImDrawList* dl, ImFont* font, float fontSizePx,
+                 const ImVec2& anchor, const char* text, const Palette& pal,
+                 const ImVec2& clipMax = ImVec2(0.0f, 0.0f));
 
 void drawGradientPanel(draw::Surface& surface, draw::Vec2 topLeft,
                        draw::Vec2 size, ImU32 topLeftColor,
@@ -405,6 +408,8 @@ void drawVectorIconButton(ImDrawList* dl, const ImVec2& topLeft,
 // icon set. Crisp at any size.
 void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 center,
                         float r, ImU32 color, float thickness = 0.0f);
+void drawTransportGlyph(ImDrawList* dl, Icon icon, const ImVec2& center,
+                        float r, ImU32 color, float thickness = 0.0f);
 
 // drawTransportGlyph blits the real Lucide transport SVGs rasterised to textures
 // so the glyphs stay crisp at button sizes -- a hand-stroked thin polyline's
@@ -435,6 +440,17 @@ void drawButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 void drawButton(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                 draw::Vec2 topLeft, draw::Vec2 size, const char* text,
                 const Palette& pal, const ControlState& state);
+
+// Square checkbox with optional label. `checked` is the caller-owned on/off
+// state; state.hovered/active/focused/disabled drive transient chrome.
+void drawCheckbox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                  draw::Vec2 topLeft, draw::Vec2 size, const char* text,
+                  bool checked, const Palette& pal,
+                  const ControlState& state);
+void drawCheckbox(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                  const ImVec2& size, const char* text, bool checked,
+                  const Palette& pal, const ControlState& state,
+                  float fontScale = 0.90f);
 
 // Pill group of mutually exclusive segments. `selected` is the current
 // option, `hovered` the segment under the pointer (-1 = none); the pressed

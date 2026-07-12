@@ -160,6 +160,15 @@ enum class Icon {
 };
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);
+// Outline-chrome transport button using SND transport semantics. Default
+// behaviour fires on release; actOnPress fires on mouse down / Enter / Space
+// for transport bars.
+bool transportButton(const char* id, Icon icon,
+                     const ImVec2& size = ImVec2(36.0f, 18.0f),
+                     bool selected = false, bool actOnPress = false);
+bool transportButton(const char* id, Icon icon, const ImVec2& size,
+                     const paint::OutlineButtonStyle& style,
+                     bool selected = false, bool actOnPress = false);
 
 // --- Icon fonts (embedded: Material Icons + Lucide) -------------------------
 // SND embeds two icon fonts. Material Icons (Apache-2.0) is merged into the
@@ -353,6 +362,9 @@ bool knob(const char* label, float* value, float minV, float maxV,
 
 // Animated on/off switch. Returns true when toggled.
 bool toggle(const char* label, bool* on);
+
+// Square checkbox with optional label. Returns true when toggled.
+bool checkbox(const char* label, bool* checked);
 
 // Round indicator LED with a glow when lit. Clickable when `clickable`;
 // returns true on click. onColor 0 = palette accent.

@@ -14,6 +14,10 @@
 #include "snd/ui_retained.h"
 #include "snd/ui_retained_matrix.h"
 
+namespace snd::ui {
+struct FileBrowserState;
+}
+
 namespace snd::ui::retained {
 
 enum class VisualKind {
@@ -30,6 +34,7 @@ enum class VisualKind {
     CycleButton,
     LedButton,
     Toggle,
+    Checkbox,
     Knob,
     Led,
     Meter,
@@ -148,6 +153,18 @@ private:
                     draw::Vec2 origin, draw::Surface& surface,
                     const draw::FrameContext& context,
                     std::vector<const Node*>* overlayQueue = nullptr) const;
+    void renderTooltip(const Tree& tree, const SemanticMap& semantics,
+                       const ImVec2& origin, ImDrawList* drawList,
+                       const draw::FrameContext& context) const;
+    void renderTooltip(const Node& root, const SemanticMap* semantics,
+                       const ImVec2& origin, ImDrawList* drawList,
+                       const draw::FrameContext& context) const;
+    void renderTooltip(const Tree& tree, const SemanticMap& semantics,
+                       draw::Vec2 origin, draw::Surface& surface,
+                       const draw::FrameContext& context) const;
+    void renderTooltip(const Node& root, const SemanticMap* semantics,
+                       draw::Vec2 origin, draw::Surface& surface,
+                       const draw::FrameContext& context) const;
     // Visible, open overlay subtree roots in tree order (recursing past
     // non-overlay children only; nested overlays surface while their parent
     // overlay renders).
@@ -160,6 +177,8 @@ private:
     // through the non-const setStyle/clearStyle API.
     mutable std::unordered_map<NodeId, VisualStyle> styles_;
     mutable unsigned styleGcTick_ = 0;
+    mutable std::string tooltipKey_;
+    mutable double tooltipStart_ = 0.0;
 };
 
 // Translate current ImGui input into retained events. `origin` is the
@@ -387,6 +406,8 @@ struct ModalDialogOptions {
 
 namespace widgets {
 
+Node& attachTooltip(Node& node, std::string text);
+
 Node::Ptr panel(NodeId id, Layout layout = {}, Insets padding = {});
 Node::Ptr row(NodeId id, float gap = 6.0f, Insets padding = {});
 Node::Ptr column(NodeId id, float gap = 6.0f, Insets padding = {});
@@ -400,6 +421,16 @@ Node::Ptr badge(NodeId id, std::string text, PaintRenderer* renderer = nullptr);
 Node::Ptr listItem(NodeId id, std::string text, bool selected = false,
                    std::function<void(Node&)> onActivate = {},
                    PaintRenderer* renderer = nullptr);
+Node::Ptr selectableList(NodeId id, std::string name,
+                         std::vector<std::string> items, int* selected,
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {180.0f, 120.0f},
+                         std::function<void(Node&, int)> onSelect = {});
+Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
+                      std::string* outPath,
+                      PaintRenderer* renderer = nullptr,
+                      Vec2 size = {260.0f, 180.0f},
+                      const char* extensions = nullptr);
 Node::Ptr menuItem(NodeId id, MenuItem item,
                    std::function<void(Node&, const MenuItem&, int)> onSelect = {},
                    PaintRenderer* renderer = nullptr, int index = -1,
@@ -553,6 +584,11 @@ Node::Ptr animatedButton(NodeId id, std::string name,
                          Vec2 size = {110.0f, 52.0f},
                          ImU32 top = 0, ImU32 bottom = 0,
                          bool animate = true);
+Node::Ptr gradientButton(NodeId id, std::string name,
+                         std::function<void(Node&)> onActivate = {},
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {110.0f, 52.0f},
+                         ImU32 top = 0, ImU32 bottom = 0);
 Node::Ptr iconButton(NodeId id, std::string name, std::string glyph,
                      std::function<void(Node&)> onActivate = {},
                      PaintRenderer* renderer = nullptr,
@@ -621,11 +657,19 @@ Node::Ptr ledButton(NodeId id, std::string name, std::string glyph,
 
 Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
                  PaintRenderer* renderer = nullptr);
+Node::Ptr checkbox(NodeId id, std::string name, ValueBinding binding,
+                   PaintRenderer* renderer = nullptr,
+                   Vec2 size = {0.0f, 22.0f});
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
                PaintRenderer* renderer = nullptr,
                KnobStyle style = KnobStyle::Ring, bool bipolar = false,
                float diameter = 56.0f,
                paint::KnobPainter painter = {});
+Node::Ptr knobDb(NodeId id, std::string name, ValueBinding binding,
+                 double minDb, double maxDb,
+                 PaintRenderer* renderer = nullptr,
+                 float diameter = 56.0f,
+                 paint::KnobPainter painter = {});
 // Knob with a live modulation ring: `mod` is polled each rendered frame for
 // the depth arc + modulated-position dot drawn over the body.
 Node::Ptr knob(NodeId id, std::string name, ValueBinding binding,
