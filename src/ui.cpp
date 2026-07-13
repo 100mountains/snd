@@ -910,6 +910,17 @@ void waveformView(const char* id, const float* samples, int count,
                         palette(), playhead);
 }
 
+void spectrumView(const char* id, const float* mags, int bins,
+                  const ImVec2& size)
+{
+    (void)id;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(240.0f, 80.0f);
+    ImGui::Dummy(sz);
+    paint::drawSpectrum(ImGui::GetWindowDrawList(), p, sz, mags, bins, palette());
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

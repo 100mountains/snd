@@ -401,6 +401,10 @@ void progressBar(const char* id, float progress, const ImVec2& size);
 void waveformView(const char* id, const float* samples, int count,
                   const ImVec2& size, float playhead = -1.0f);
 
+// Spectrum view (display only): `bins` magnitudes (0..1) as bars.
+void spectrumView(const char* id, const float* mags, int bins,
+                  const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

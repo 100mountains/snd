@@ -4460,6 +4460,42 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr spectrumView(NodeId id, std::string name, WaveformSource source,
+                       PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Canvas);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setSemantics(named(Role::Canvas, std::move(name)));
+    if (renderer) {
+        auto paint = [source](draw::Surface& s, Rect b) {
+            const float* buf = nullptr;
+            int n = 0;
+            if (source) {
+                auto pr = source();
+                buf = pr.first;
+                n = pr.second;
+            }
+            paint::drawSpectrum(s, topLeftDraw(b), {b.w, b.h}, buf, n, palette());
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext&) {
+            paint(s, b);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b);
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr waveformView(NodeId id, std::string name, WaveformSource source,
                        PaintRenderer* renderer, Vec2 size, ValueBinding playhead)
 {

@@ -1001,6 +1001,35 @@ void drawWaveform(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                  samples, count, pal, playhead, selStart, selEnd);
 }
 
+void drawSpectrum(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                  const float* mags, int bins, const Palette& pal)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, pal.frame, 3.0f);
+    if (mags && bins > 0) {
+        const float bw = size.x / (float)bins;
+        for (int i = 0; i < bins; ++i) {
+            const float m = std::clamp(mags[i], 0.0f, 1.0f);
+            if (m <= 0.0f)
+                continue;
+            const float x0 = topLeft.x + (float)i * bw;
+            const float x1 = x0 + std::max(1.0f, bw - 1.0f);
+            surface.fillRect({x0, br.y - m * size.y}, {x1, br.y}, pal.accent, 0.0f);
+        }
+    }
+    surface.strokeRect(topLeft, br, pal.frameBright, 3.0f);
+}
+
+void drawSpectrum(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  const float* mags, int bins, const Palette& pal)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawSpectrum(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size), mags,
+                 bins, pal);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)
