@@ -4460,6 +4460,39 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr timelineRuler(NodeId id, std::string name, double startBeat,
+                        double endBeat, double beatsPerBar,
+                        PaintRenderer* renderer, Vec2 size, ValueBinding playhead)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Canvas);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setSemantics(named(Role::Canvas, std::move(name)));
+    if (renderer) {
+        auto paint = [startBeat, endBeat, beatsPerBar, playhead](
+                         draw::Surface& s, Rect b, draw::FontRef font, float fpx) {
+            const float ph = playhead.get ? (float)playhead.get() : -1.0f;
+            paint::drawTimelineRuler(s, font, fpx, topLeftDraw(b), {b.w, b.h},
+                                     startBeat, endBeat, beatsPerBar, palette(), ph);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext& ctx) {
+            paint(s, b, ctx.font, ctx.fontSizePx);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b, draw::fontRef(ImGui::GetFont()), ImGui::GetFontSize());
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr spectrumView(NodeId id, std::string name, WaveformSource source,
                        PaintRenderer* renderer, Vec2 size)
 {

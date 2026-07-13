@@ -1030,6 +1030,58 @@ void drawSpectrum(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                  bins, pal);
 }
 
+void drawTimelineRuler(draw::Surface& surface, draw::FontRef font,
+                       float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                       double startBeat, double endBeat, double beatsPerBar,
+                       const Palette& pal, float playhead)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, pal.frame, 0.0f);
+    const double span = std::max(1e-6, endBeat - startBeat);
+    const double pxPerBeat = (double)size.x / span;
+    const double bpb = std::max(1.0, beatsPerBar);
+    const int firstBar = (int)std::floor(startBeat / bpb);
+    const int lastBar = (int)std::ceil(endBeat / bpb);
+    for (int bar = firstBar; bar <= lastBar; ++bar) {
+        const double beat0 = (double)bar * bpb;
+        const float x = topLeft.x + (float)((beat0 - startBeat) * pxPerBeat);
+        if (x >= topLeft.x - 1.0f && x <= br.x + 1.0f) {
+            surface.line({x, topLeft.y}, {x, br.y}, pal.frameBright, 1.0f);
+            if (fontSizePx > 0.0f) {
+                char lbl[16];
+                std::snprintf(lbl, sizeof lbl, "%d", bar + 1);
+                surface.text(font, fontSizePx, {x + 3.0f, topLeft.y + 1.0f},
+                             pal.textDim, lbl);
+            }
+        }
+        for (int bt = 1; bt < (int)bpb; ++bt) {
+            const float bx =
+                topLeft.x + (float)((beat0 + (double)bt - startBeat) * pxPerBeat);
+            if (bx < topLeft.x || bx > br.x)
+                continue;
+            surface.line({bx, br.y - size.y * 0.4f}, {bx, br.y},
+                         withAlpha(pal.frameBright, 0x60), 1.0f);
+        }
+    }
+    if (playhead >= 0.0f) {
+        const float x = topLeft.x + std::clamp(playhead, 0.0f, 1.0f) * size.x;
+        surface.line({x, topLeft.y}, {x, br.y}, pal.accent, 1.5f);
+    }
+    surface.strokeRect(topLeft, br, pal.frameBright, 0.0f);
+}
+
+void drawTimelineRuler(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                       const ImVec2& size, double startBeat, double endBeat,
+                       double beatsPerBar, const Palette& pal, float playhead)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTimelineRuler(surface, draw::fontRef(font), ImGui::GetFontSize(),
+                      draw::toDrawVec2(topLeft), draw::toDrawVec2(size), startBeat,
+                      endBeat, beatsPerBar, pal, playhead);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

@@ -921,6 +921,18 @@ void spectrumView(const char* id, const float* mags, int bins,
     paint::drawSpectrum(ImGui::GetWindowDrawList(), p, sz, mags, bins, palette());
 }
 
+void timelineRuler(const char* id, double startBeat, double endBeat,
+                   double beatsPerBar, const ImVec2& size, float playhead)
+{
+    (void)id;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(320.0f, 22.0f);
+    ImGui::Dummy(sz);
+    paint::drawTimelineRuler(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, sz,
+                             startBeat, endBeat, beatsPerBar, palette(), playhead);
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

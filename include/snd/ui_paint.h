@@ -400,6 +400,18 @@ void drawSpectrum(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
 void drawSpectrum(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                   const float* mags, int bins, const Palette& pal);
 
+// Timeline ruler: bar ticks + bar numbers and minor beat ticks across
+// [startBeat, endBeat] (beatsPerBar per bar). playhead is a 0..1 fraction of
+// the width (< 0 = none).
+void drawTimelineRuler(draw::Surface& surface, draw::FontRef font,
+                       float fontSizePx, draw::Vec2 topLeft, draw::Vec2 size,
+                       double startBeat, double endBeat, double beatsPerBar,
+                       const Palette& pal, float playhead = -1.0f);
+void drawTimelineRuler(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                       const ImVec2& size, double startBeat, double endBeat,
+                       double beatsPerBar, const Palette& pal,
+                       float playhead = -1.0f);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

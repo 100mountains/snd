@@ -561,6 +561,13 @@ Node::Ptr spectrumView(NodeId id, std::string name, WaveformSource source,
                        PaintRenderer* renderer = nullptr,
                        Vec2 size = {240.0f, 80.0f});
 
+// Timeline ruler (display only): bar/beat ticks over [startBeat, endBeat]; the
+// optional `playhead` binding supplies the 0..1 head position. Canvas semantics.
+Node::Ptr timelineRuler(NodeId id, std::string name, double startBeat,
+                        double endBeat, double beatsPerBar,
+                        PaintRenderer* renderer = nullptr,
+                        Vec2 size = {320.0f, 22.0f}, ValueBinding playhead = {});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,
