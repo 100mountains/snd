@@ -84,7 +84,7 @@ small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
 
-- Uncommitted after `5fc8967`: GraphSurface exposes distinct node/cable
+- Resolved in `5cf556b`: GraphSurface exposes distinct node/cable
   double-click callbacks; Bob3 uses the cable callback for its owner-defined
   route deletion rule.
 - Resolved in `5fc8967`: A2 now uses fixed-capacity MIDI/control block
