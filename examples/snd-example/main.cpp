@@ -2687,7 +2687,13 @@ media_done:;
             b.samples.push_back(-s);
         }
         std::string err;
-        ok18 = snd::audio::saveWav(tmp, b, &err);
+        snd::audio::StreamWriter sw;
+        ok18 = sw.openWav(tmp, b.channels, b.sampleRate, &err);
+        for (uint64_t frame = 0; frame < b.frames() && ok18; frame += 3072) {
+            const auto count = std::min<uint64_t>(3072, b.frames() - frame);
+            ok18 = sw.write(b.samples.data() + frame * b.channels, count, &err);
+        }
+        sw.close();
 
         snd::audio::StreamReader sr;
         ok18 = ok18 && sr.open(tmp, &err) && sr.channels() == 2 &&
@@ -2706,7 +2712,7 @@ media_done:;
         sr.close();
         remove(tmp.c_str());
         if (ok18)
-            printf("PASS (random seeks match the full decode)\n");
+            printf("PASS (chunked write and random reads match)\n");
         else
             printf("FAIL (%s)\n", err.c_str());
     }

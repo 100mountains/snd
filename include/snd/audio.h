@@ -80,6 +80,27 @@ private:
     std::unique_ptr<Impl> impl;
 };
 
+// Incremental float32 WAV writer. Calls perform file I/O and therefore belong
+// on a worker/message thread, never in an audio callback.
+class StreamWriter {
+public:
+    StreamWriter();
+    ~StreamWriter();
+    StreamWriter(const StreamWriter&) = delete;
+    StreamWriter& operator=(const StreamWriter&) = delete;
+
+    bool openWav(const std::string& path, uint32_t channels,
+                 uint32_t sampleRate, std::string* error = nullptr);
+    void close();
+    bool isOpen() const;
+    bool write(const float* interleaved, uint64_t frames,
+               std::string* error = nullptr);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl;
+};
+
 // Names of the available devices, for settings UIs. Order may change between
 // calls; select devices by NAME, not index.
 std::vector<std::string> playbackDevices();

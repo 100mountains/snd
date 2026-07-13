@@ -332,6 +332,72 @@ bool saveWav(const std::string& path, const Buffer& buf, std::string* error)
     return true;
 }
 
+struct StreamWriter::Impl {
+    ma_encoder encoder{};
+    bool open = false;
+    uint32_t channels = 0;
+};
+
+StreamWriter::StreamWriter() : impl(std::make_unique<Impl>()) {}
+
+StreamWriter::~StreamWriter()
+{
+    close();
+}
+
+bool StreamWriter::openWav(const std::string& path, uint32_t channels,
+                           uint32_t sampleRate, std::string* error)
+{
+    close();
+    if (path.empty() || channels == 0 || sampleRate == 0) {
+        if (error) *error = "invalid stream writer configuration";
+        return false;
+    }
+    const auto config = ma_encoder_config_init(
+        ma_encoding_format_wav, ma_format_f32, channels, sampleRate);
+    if (ma_encoder_init_file(path.c_str(), &config, &impl->encoder) != MA_SUCCESS) {
+        if (error) *error = "could not open for writing: " + path;
+        return false;
+    }
+    impl->channels = channels;
+    impl->open = true;
+    return true;
+}
+
+void StreamWriter::close()
+{
+    if (impl && impl->open)
+        ma_encoder_uninit(&impl->encoder);
+    if (impl) {
+        impl->open = false;
+        impl->channels = 0;
+    }
+}
+
+bool StreamWriter::isOpen() const
+{
+    return impl && impl->open;
+}
+
+bool StreamWriter::write(const float* interleaved, uint64_t frames,
+                         std::string* error)
+{
+    if (!isOpen() || (!interleaved && frames != 0)) {
+        if (error) *error = "stream writer is not open";
+        return false;
+    }
+    if (frames == 0)
+        return true;
+    ma_uint64 written = 0;
+    const auto result = ma_encoder_write_pcm_frames(
+        &impl->encoder, interleaved, frames, &written);
+    if (result != MA_SUCCESS || written != frames) {
+        if (error) *error = "short stream write";
+        return false;
+    }
+    return true;
+}
+
 bool saveFlac(const std::string& path, const Buffer& buf, std::string* error)
 {
     if (buf.channels == 0 || buf.sampleRate == 0 || buf.samples.empty()) {
