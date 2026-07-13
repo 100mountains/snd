@@ -532,6 +532,14 @@ Node::Ptr canvas(NodeId id, std::string name, Vec2 intrinsicSize,
                  VisualStyle::CanvasSurfaceDraw draw,
                  PaintRenderer* renderer = nullptr, bool focusable = false,
                  Role semanticRole = Role::Canvas, bool panelBorder = true);
+// Horizontal dual-handle range slider. lo/hi are ValueBindings sharing one
+// range (taken from lo.min/lo.max). Drag the nearest handle (opposite end
+// clamps it); Left/Right nudge the last-touched handle. Exposes Slider
+// semantics.
+Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
+                      ValueBinding hi, PaintRenderer* renderer = nullptr,
+                      Vec2 size = {140.0f, 20.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

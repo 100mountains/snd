@@ -4372,6 +4372,94 @@ Node::Ptr scrollView(NodeId id, float gap, Insets padding,
     return node;
 }
 
+Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
+                      ValueBinding hi, PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider);
+    node->setFocusable(true);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+
+    const double lo0 = lo.min;
+    const double span = (lo.max - lo.min) != 0.0 ? (lo.max - lo.min) : 1.0;
+
+    Semantics sem = named(Role::Slider, std::move(name));
+    sem.description = "Range slider";
+    node->setSemantics(sem);
+
+    if (renderer) {
+        auto paint = [lo, hi, lo0, span](draw::Surface& s, Rect b,
+                                         const paint::ControlState& st) {
+            const float nlo = (float)std::clamp((lo.get() - lo0) / span, 0.0, 1.0);
+            const float nhi = (float)std::clamp((hi.get() - lo0) / span, 0.0, 1.0);
+            paint::drawRangeSlider(s, topLeftDraw(b), {b.w, b.h}, nlo, nhi,
+                                   palette(), st, -1);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState& st,
+                                          const draw::FrameContext&) {
+            paint(s, b, st);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState& st) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b, st);
+        };
+        renderer->setStyle(sid, style);
+    }
+
+    struct Grab {
+        int handle = -1;
+    };
+    auto grab = std::make_shared<Grab>();
+    node->setOnEvent([lo, hi, lo0, span, grab](Node& n, const Event& e) {
+        const Rect b = n.bounds();
+        const float handleW = 8.0f; // matches paint::drawRangeSlider
+        const float usableL = b.x + handleW * 0.5f;
+        const float usableW = std::max(1.0f, b.w - handleW);
+        const auto valToX = [&](double v) {
+            return usableL + (float)std::clamp((v - lo0) / span, 0.0, 1.0) * usableW;
+        };
+        const auto xToVal = [&](float x) {
+            return lo0 + std::clamp((double)(x - usableL) / usableW, 0.0, 1.0) * span;
+        };
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Left) {
+            grab->handle = std::fabs(e.position.x - valToX(lo.get())) <=
+                                   std::fabs(e.position.x - valToX(hi.get()))
+                               ? 0
+                               : 1;
+            return true;
+        }
+        if (e.type == EventType::MouseMove && grab->handle >= 0) {
+            const double v = xToVal(e.position.x);
+            if (grab->handle == 0)
+                lo.set(std::min(v, hi.get()));
+            else
+                hi.set(std::max(v, lo.get()));
+            return true;
+        }
+        if (e.type == EventType::MouseUp) {
+            grab->handle = -1;
+            return false;
+        }
+        if (e.type == EventType::KeyDown &&
+            (e.key == Key::Left || e.key == Key::Right)) {
+            const double d = (e.key == Key::Left ? -1.0 : 1.0) * span / 100.0;
+            const int h = grab->handle >= 0 ? grab->handle : 1;
+            if (h == 0)
+                lo.set(std::clamp(lo.get() + d, lo0, hi.get()));
+            else
+                hi.set(std::clamp(hi.get() + d, lo.get(), lo0 + span));
+            return true;
+        }
+        return false;
+    });
+    return node;
+}
+
 Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
                    bool horizontal, bool invert, PaintRenderer* renderer,
                    float thickness)
