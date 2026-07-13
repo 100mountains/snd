@@ -1021,6 +1021,50 @@ bool automationLane(const char* id, std::vector<AutoPoint>& points,
     return changed;
 }
 
+bool colorPicker(const char* id, float* h, float* s, float* v,
+                 const ImVec2& size)
+{
+    if (!h || !s || !v)
+        return false;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(180.0f, 160.0f);
+    const ImGuiID gid = ImGui::GetID(id);
+    ImGui::InvisibleButton(id, sz);
+    const bool active = ImGui::IsItemActive();
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    int region = store->GetInt(gid, 0); // 0 none, 1 sv square, 2 hue bar
+    const float gap = 4.0f;
+    const float hueBarH = std::clamp(sz.y * 0.18f, 10.0f, 18.0f);
+    const float svH = std::max(1.0f, sz.y - hueBarH - gap);
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    if (ImGui::IsItemActivated()) {
+        region = (m.y - p.y <= svH) ? 1 : 2;
+        store->SetInt(gid, region);
+    }
+    bool changed = false;
+    if (active && region == 1) {
+        const float ns = std::clamp((m.x - p.x) / sz.x, 0.0f, 1.0f);
+        const float nv = std::clamp(1.0f - (m.y - p.y) / svH, 0.0f, 1.0f);
+        if (ns != *s || nv != *v) {
+            *s = ns;
+            *v = nv;
+            changed = true;
+        }
+    } else if (active && region == 2) {
+        const float nh = std::clamp((m.x - p.x) / sz.x, 0.0f, 1.0f);
+        if (nh != *h) {
+            *h = nh;
+            changed = true;
+        }
+    }
+    if (!active && region != 0)
+        store->SetInt(gid, 0);
+    paint::drawColorPicker(ImGui::GetWindowDrawList(), p, sz, *h, *s, *v,
+                           palette());
+    return changed;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

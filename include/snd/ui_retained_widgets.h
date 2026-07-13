@@ -577,6 +577,14 @@ Node::Ptr automationLane(NodeId id, std::string name, AutoPointSource source,
                          PaintRenderer* renderer = nullptr,
                          Vec2 size = {320.0f, 100.0f});
 
+// HSV colour picker. `hsv` returns a pointer to the caller-owned {h,s,v} floats
+// (0..1), mutated in place by the SV square + hue bar; onChange fires on edit.
+using HsvSource = std::function<float*()>;
+Node::Ptr colorPicker(NodeId id, std::string name, HsvSource hsv,
+                      std::function<void()> onChange = {},
+                      PaintRenderer* renderer = nullptr,
+                      Vec2 size = {180.0f, 160.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

@@ -4460,6 +4460,79 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr colorPicker(NodeId id, std::string name, HsvSource hsv,
+                      std::function<void()> onChange, PaintRenderer* renderer,
+                      Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider);
+    node->setFocusable(true);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    Semantics sem = named(Role::Slider, std::move(name));
+    sem.description = "Colour picker";
+    node->setSemantics(sem);
+
+    struct Grab {
+        int region = 0;
+    };
+    auto grab = std::make_shared<Grab>();
+    if (renderer) {
+        auto paint = [hsv](draw::Surface& s, Rect b) {
+            float* c = hsv ? hsv() : nullptr;
+            paint::drawColorPicker(s, topLeftDraw(b), {b.w, b.h}, c ? c[0] : 0.0f,
+                                   c ? c[1] : 0.0f, c ? c[2] : 0.0f, palette());
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext&) {
+            paint(s, b);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b);
+        };
+        renderer->setStyle(sid, style);
+    }
+    node->setOnEvent([hsv, onChange, grab](Node& n, const Event& e) {
+        float* c = hsv ? hsv() : nullptr;
+        if (!c)
+            return false;
+        const Rect b = n.bounds();
+        const float gap = 4.0f;
+        const float hueBarH = std::clamp(b.h * 0.18f, 10.0f, 18.0f);
+        const float svH = std::max(1.0f, b.h - hueBarH - gap);
+        const auto apply = [&](Vec2 q) {
+            if (grab->region == 1) {
+                c[1] = std::clamp((q.x - b.x) / b.w, 0.0f, 1.0f);
+                c[2] = std::clamp(1.0f - (q.y - b.y) / svH, 0.0f, 1.0f);
+            } else if (grab->region == 2) {
+                c[0] = std::clamp((q.x - b.x) / b.w, 0.0f, 1.0f);
+            }
+            if (onChange)
+                onChange();
+        };
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Left) {
+            grab->region = (e.position.y - b.y <= svH) ? 1 : 2;
+            apply(e.position);
+            return true;
+        }
+        if (e.type == EventType::MouseMove && grab->region != 0) {
+            apply(e.position);
+            return true;
+        }
+        if (e.type == EventType::MouseUp) {
+            grab->region = 0;
+            return false;
+        }
+        return false;
+    });
+    return node;
+}
+
 Node::Ptr automationLane(NodeId id, std::string name, AutoPointSource source,
                          std::function<void()> onChange, PaintRenderer* renderer,
                          Vec2 size)

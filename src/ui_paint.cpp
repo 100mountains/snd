@@ -1129,6 +1129,57 @@ void drawAutomationLane(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& siz
                        points, count, pal, activePoint, playhead);
 }
 
+static ImU32 hsvToU32(float h, float s, float v)
+{
+    float r = 0.0f, g = 0.0f, b = 0.0f;
+    ImGui::ColorConvertHSVtoRGB(h, s, v, r, g, b);
+    return IM_COL32((int)(r * 255.0f), (int)(g * 255.0f), (int)(b * 255.0f), 255);
+}
+
+void drawColorPicker(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float h, float s, float v, const Palette& pal)
+{
+    const float gap = 4.0f;
+    const float hueBarH = std::clamp(size.y * 0.18f, 10.0f, 18.0f);
+    const float svH = std::max(1.0f, size.y - hueBarH - gap);
+    const draw::Vec2 svBR{topLeft.x + size.x, topLeft.y + svH};
+    const ImU32 hueCol = hsvToU32(h, 1.0f, 1.0f);
+    const ImU32 white = IM_COL32(255, 255, 255, 255);
+    const ImU32 black = IM_COL32(0, 0, 0, 255);
+    surface.fillRectMultiColor(topLeft, svBR, white, hueCol, black, black);
+    surface.strokeRect(topLeft, svBR, pal.frameBright, 0.0f);
+    const float cx = topLeft.x + std::clamp(s, 0.0f, 1.0f) * size.x;
+    const float cy = topLeft.y + (1.0f - std::clamp(v, 0.0f, 1.0f)) * svH;
+    surface.strokeCircle({cx, cy}, 5.0f, IM_COL32(0, 0, 0, 180), 0, 1.0f);
+    surface.strokeCircle({cx, cy}, 4.0f, IM_COL32(255, 255, 255, 230), 0, 1.5f);
+    const draw::Vec2 hbTL{topLeft.x, svBR.y + gap};
+    const draw::Vec2 hbBR{topLeft.x + size.x, topLeft.y + size.y};
+    const int seg = 24;
+    for (int i = 0; i < seg; ++i) {
+        const float h0 = (float)i / (float)seg;
+        const float h1 = (float)(i + 1) / (float)seg;
+        const float x0 = hbTL.x + h0 * size.x;
+        const float x1 = hbTL.x + h1 * size.x;
+        surface.fillRectMultiColor({x0, hbTL.y}, {x1, hbBR.y}, hsvToU32(h0, 1, 1),
+                                   hsvToU32(h1, 1, 1), hsvToU32(h1, 1, 1),
+                                   hsvToU32(h0, 1, 1));
+    }
+    const float hx = hbTL.x + std::clamp(h, 0.0f, 1.0f) * size.x;
+    surface.line({hx, hbTL.y - 1.0f}, {hx, hbBR.y + 1.0f},
+                 IM_COL32(255, 255, 255, 230), 1.5f);
+    surface.strokeRect(hbTL, hbBR, pal.frameBright, 0.0f);
+}
+
+void drawColorPicker(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float h, float s, float v, const Palette& pal)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawColorPicker(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size), h,
+                    s, v, pal);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

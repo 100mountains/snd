@@ -423,6 +423,13 @@ void drawAutomationLane(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& siz
                         const AutoPoint* points, int count, const Palette& pal,
                         int activePoint = -1, float playhead = -1.0f);
 
+// HSV colour picker: a saturation/value square (in the current hue) above a hue
+// bar, with cursors on each. h/s/v are 0..1; laid out within `size`.
+void drawColorPicker(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float h, float s, float v, const Palette& pal);
+void drawColorPicker(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float h, float s, float v, const Palette& pal);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

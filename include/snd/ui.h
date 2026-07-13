@@ -424,6 +424,11 @@ struct AutoPoint {
 bool automationLane(const char* id, std::vector<AutoPoint>& points,
                     const ImVec2& size);
 
+// HSV colour picker: SV square + hue bar. h/s/v are 0..1; drag the square for
+// saturation/value, the bar for hue. Returns true on any change.
+bool colorPicker(const char* id, float* h, float* s, float* v,
+                 const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 
