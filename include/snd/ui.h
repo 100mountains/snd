@@ -385,6 +385,13 @@ void meter(const char* id, MeterState& st, float level, const ImVec2& size,
 // Vertical audio fader, normalized 0..1. Returns true while dragging.
 bool fader(const char* id, float* value, const ImVec2& size);
 
+// Horizontal dual-handle range slider over [minV, maxV] (min/max split points,
+// filter bands, randomise ranges). Drag the nearest handle; the opposite end
+// clamps it. Keyboard focus + Left/Right nudge the last-touched handle
+// (Shift = fine). Returns true on any frame *lo or *hi changes.
+bool rangeSlider(const char* id, float* lo, float* hi, float minV, float maxV,
+                 const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

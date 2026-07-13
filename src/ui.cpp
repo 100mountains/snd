@@ -813,6 +813,80 @@ bool outlineButton(const char* label, const ImVec2& size,
     return pressed;
 }
 
+bool rangeSlider(const char* id, float* lo, float* hi, float minV, float maxV,
+                 const ImVec2& size)
+{
+    if (!lo || !hi)
+        return false;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(140.0f, 20.0f);
+    const ImGuiID gid = ImGui::GetID(id);
+    ImGui::InvisibleButton(id, sz);
+    const bool hovered = ImGui::IsItemHovered();
+    const bool active = ImGui::IsItemActive();
+    const bool focused = itemFocusVisible();
+
+    const float range = maxV - minV;
+    const float span = std::fabs(range) < 1e-9f ? 1.0f : range;
+    const float handleW = 8.0f;
+    const float usableL = p.x + handleW * 0.5f;
+    const float usableW = std::max(1.0f, sz.x - handleW);
+    const auto valToX = [&](float v) {
+        return usableL + std::clamp((v - minV) / span, 0.0f, 1.0f) * usableW;
+    };
+    const auto xToVal = [&](float x) {
+        return minV + std::clamp((x - usableL) / usableW, 0.0f, 1.0f) * range;
+    };
+
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    int grabbed = store->GetInt(gid, -1);
+    if (ImGui::IsItemActivated()) {
+        const float mx = ImGui::GetIO().MousePos.x;
+        grabbed = std::fabs(mx - valToX(*lo)) <= std::fabs(mx - valToX(*hi)) ? 0 : 1;
+        store->SetInt(gid, grabbed);
+    }
+
+    bool changed = false;
+    if (active && grabbed >= 0) {
+        float v = xToVal(ImGui::GetIO().MousePos.x);
+        if (grabbed == 0) {
+            v = std::min(v, *hi);
+            if (v != *lo) { *lo = v; changed = true; }
+        } else {
+            v = std::max(v, *lo);
+            if (v != *hi) { *hi = v; changed = true; }
+        }
+    }
+    if (focused) {
+        const float step = span / 100.0f * (ImGui::GetIO().KeyShift ? 0.25f : 1.0f);
+        const int kh = grabbed >= 0 ? grabbed : 1;
+        float delta = 0.0f;
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, true))
+            delta -= step;
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, true))
+            delta += step;
+        if (delta != 0.0f) {
+            if (kh == 0)
+                *lo = std::clamp(*lo + delta, minV, *hi);
+            else
+                *hi = std::clamp(*hi + delta, *lo, maxV);
+            store->SetInt(gid, kh);
+            changed = true;
+        }
+    }
+
+    paint::ControlState state;
+    state.hovered = hovered;
+    state.active = active;
+    state.focused = focused;
+    const float nlo = std::clamp((*lo - minV) / span, 0.0f, 1.0f);
+    const float nhi = std::clamp((*hi - minV) / span, 0.0f, 1.0f);
+    paint::drawRangeSlider(ImGui::GetWindowDrawList(), p, sz, nlo, nhi, palette(),
+                           state, active ? grabbed : -1);
+    return changed;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

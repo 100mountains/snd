@@ -363,6 +363,16 @@ void drawFader(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
 void drawFader(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                float value, const Palette& pal, const ControlState& state);
 
+// Horizontal dual-handle range slider. lo/hi are normalized 0..1 (drawn
+// swapped if hi < lo); the span between them fills with the accent. activeHandle
+// highlights a grabbed end: 0 = low, 1 = high, -1 = none.
+void drawRangeSlider(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float lo, float hi, const Palette& pal,
+                     const ControlState& state, int activeHandle = -1);
+void drawRangeSlider(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float lo, float hi, const Palette& pal,
+                     const ControlState& state, int activeHandle = -1);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

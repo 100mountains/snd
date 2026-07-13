@@ -864,6 +864,55 @@ void drawFader(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
               value, pal, state);
 }
 
+void drawRangeSlider(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float lo, float hi, const Palette& pal,
+                     const ControlState& state, int activeHandle)
+{
+    lo = std::clamp(lo, 0.0f, 1.0f);
+    hi = std::clamp(hi, 0.0f, 1.0f);
+    if (hi < lo)
+        std::swap(lo, hi);
+    const ImU32 accent = state.disabled ? mix(pal.accent, pal.frameBright, 0.65f)
+                                        : pal.accent;
+    const float cy = topLeft.y + size.y * 0.5f;
+    const float trackR = 2.0f;
+    const float handleW = 8.0f;
+    const float usableL = topLeft.x + handleW * 0.5f;
+    const float usableW = std::max(1.0f, size.x - handleW);
+    const float loX = usableL + lo * usableW;
+    const float hiX = usableL + hi * usableW;
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+
+    surface.fillRect({topLeft.x, cy - trackR}, {br.x, cy + trackR}, pal.frame, trackR);
+    surface.strokeRect({topLeft.x, cy - trackR}, {br.x, cy + trackR}, pal.frameBright,
+                       trackR);
+    surface.fillRect({loX, cy - trackR}, {hiX, cy + trackR}, accent, trackR);
+
+    const auto handle = [&](float x, bool grabbed) {
+        const bool hot = grabbed || (!state.disabled && (state.hovered || state.active));
+        surface.fillRect({x - handleW * 0.5f, topLeft.y}, {x + handleW * 0.5f, br.y},
+                         hot ? pal.frameBright : pal.frame, 3.0f);
+        surface.strokeRect({x - handleW * 0.5f, topLeft.y}, {x + handleW * 0.5f, br.y},
+                           grabbed ? accent : pal.frameBright, 3.0f);
+    };
+    handle(loX, activeHandle == 0);
+    handle(hiX, activeHandle == 1);
+
+    if (state.focused && !state.disabled)
+        drawFocusRing(surface, topLeft, br, pal, 4.0f, 2.0f);
+}
+
+void drawRangeSlider(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float lo, float hi, const Palette& pal,
+                     const ControlState& state, int activeHandle)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawRangeSlider(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size), lo,
+                    hi, pal, state, activeHandle);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)
