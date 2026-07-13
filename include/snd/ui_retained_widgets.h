@@ -617,6 +617,15 @@ Node::Ptr table(NodeId id, std::string name, TableSource model,
 Node::Ptr dragGhostOverlay(NodeId id, DragPayload& payload,
                            PaintRenderer* renderer = nullptr);
 
+// Searchable command palette: a textField bound to `query` over a scrollable
+// list of the substring-matching `items`; picking one fires onPick(item.id).
+// Rebuilt each frame, so the filter follows `query`.
+Node::Ptr commandPalette(NodeId id, std::vector<CommandItem> items,
+                         std::string* query,
+                         std::function<void(const std::string&)> onPick,
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {320.0f, 240.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

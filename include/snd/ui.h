@@ -488,6 +488,17 @@ bool dropMatches(const DragPayload& p, const char* acceptKind);
 // the mouse releases. Call once per frame, AFTER any dropMatches checks.
 void dragGhost(DragPayload& p);
 
+// A command for commandPalette: a display label + an id returned on pick.
+struct CommandItem {
+    std::string label;
+    std::string id;
+};
+// Searchable command list: a query box over a substring-filtered list with
+// up/down + Enter. Returns the picked index into `items` (or -1). `query` is
+// caller-owned.
+int commandPalette(const char* id, const CommandItem* items, int count,
+                   std::string& query, const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

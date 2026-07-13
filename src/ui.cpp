@@ -1186,6 +1186,60 @@ void dragGhost(DragPayload& p)
         p.active = false;
 }
 
+int commandPalette(const char* id, const CommandItem* items, int count,
+                   std::string& query, const ImVec2& size)
+{
+    ImGui::PushID(id);
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(320.0f, 240.0f);
+    char buf[256];
+    std::strncpy(buf, query.c_str(), sizeof buf);
+    buf[sizeof buf - 1] = '\0';
+    ImGui::SetNextItemWidth(sz.x);
+    if (ImGui::InputText("##q", buf, sizeof buf))
+        query = buf;
+    std::string ql = query;
+    for (char& ch : ql)
+        ch = (char)std::tolower((unsigned char)ch);
+    std::vector<int> matches;
+    for (int i = 0; i < count; ++i) {
+        std::string l = items[i].label;
+        for (char& ch : l)
+            ch = (char)std::tolower((unsigned char)ch);
+        if (ql.empty() || l.find(ql) != std::string::npos)
+            matches.push_back(i);
+    }
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    const ImGuiID selKey = ImGui::GetID("##sel");
+    int sel = store->GetInt(selKey, 0);
+    if (sel >= (int)matches.size())
+        sel = (int)matches.size() - 1;
+    if (sel < 0)
+        sel = 0;
+    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+        sel = std::min(sel + 1, (int)matches.size() - 1);
+    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+        sel = std::max(sel - 1, 0);
+    int picked = -1;
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter) && sel >= 0 &&
+        sel < (int)matches.size())
+        picked = matches[(size_t)sel];
+    ImGui::BeginChild(
+        "##list",
+        ImVec2(sz.x, std::max(40.0f, sz.y - ImGui::GetFrameHeightWithSpacing())),
+        true);
+    for (int mi = 0; mi < (int)matches.size(); ++mi) {
+        const int i = matches[(size_t)mi];
+        if (ImGui::Selectable(items[i].label.c_str(), mi == sel))
+            picked = i;
+    }
+    ImGui::EndChild();
+    if (sel >= 0)
+        store->SetInt(selKey, sel);
+    ImGui::PopID();
+    return picked;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

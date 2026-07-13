@@ -4460,6 +4460,43 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr commandPalette(NodeId id, std::vector<CommandItem> items,
+                         std::string* query,
+                         std::function<void(const std::string&)> onPick,
+                         PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    auto col = column(std::move(id), 4.0f);
+    col->setSize(Length::fixed(size.x), Length::fixed(size.y));
+    col->addChild(
+        textField(sid + ".q", query, renderer, {size.x, 24.0f}, "Search..."));
+    auto sv = scrollView(sid + ".list", 2.0f, {}, renderer);
+    sv->setSize(Length::fixed(size.x),
+                Length::fixed(std::max(20.0f, size.y - 30.0f)));
+    std::string ql = query ? *query : std::string();
+    for (char& ch : ql)
+        ch = (char)std::tolower((unsigned char)ch);
+    int idx = 0;
+    for (const auto& it : items) {
+        std::string l = it.label;
+        for (char& ch : l)
+            ch = (char)std::tolower((unsigned char)ch);
+        if (!ql.empty() && l.find(ql) == std::string::npos)
+            continue;
+        const std::string pid = it.id;
+        auto btn = outlineButton(
+            sid + ".i" + std::to_string(idx++), it.label,
+            [onPick, pid](Node&) {
+                if (onPick)
+                    onPick(pid);
+            },
+            renderer, {size.x - 16.0f, 22.0f});
+        sv->addChild(std::move(btn));
+    }
+    col->addChild(std::move(sv));
+    return col;
+}
+
 Node::Ptr dragGhostOverlay(NodeId id, DragPayload& payload,
                            PaintRenderer* renderer)
 {
