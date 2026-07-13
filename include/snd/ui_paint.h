@@ -449,6 +449,16 @@ void drawPopover(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                  const Palette& pal, float beakCenterX = -1.0f,
                  bool beakOnTop = false);
 
+// One property/inspector row: an optional alt-stripe bg, a left label, and a
+// faint divider at labelWidth (< 0 = none). The value editor sits to the right.
+void drawPropertyRow(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                     draw::Vec2 topLeft, draw::Vec2 size, const char* label,
+                     const Palette& pal, bool alt = false,
+                     float labelWidth = -1.0f);
+void drawPropertyRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                     const ImVec2& size, const char* label, const Palette& pal,
+                     bool alt = false, float labelWidth = -1.0f);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

@@ -1102,6 +1102,18 @@ void popover(const char* id, const ImVec2& topLeft, const ImVec2& size,
                        beakCenterX, beakOnTop);
 }
 
+void propertyRow(const char* label, const ImVec2& size, float labelWidth,
+                 bool alt)
+{
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(220.0f, 24.0f);
+    paint::drawPropertyRow(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, sz,
+                           label, palette(), alt, labelWidth);
+    ImGui::Dummy(ImVec2(labelWidth, sz.y));
+    ImGui::SameLine(0.0f, 4.0f);
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

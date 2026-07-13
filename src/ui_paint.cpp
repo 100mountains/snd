@@ -1239,6 +1239,37 @@ void drawPopover(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                 beakCenterX, beakOnTop);
 }
 
+void drawPropertyRow(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                     draw::Vec2 topLeft, draw::Vec2 size, const char* label,
+                     const Palette& pal, bool alt, float labelWidth)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    if (alt)
+        surface.fillRect(topLeft, br, withAlpha(pal.frameBright, 0x20), 0.0f);
+    if (labelWidth > 0.0f)
+        surface.line({topLeft.x + labelWidth, topLeft.y + 2.0f},
+                     {topLeft.x + labelWidth, br.y - 2.0f},
+                     withAlpha(pal.frameBright, 0x40), 1.0f);
+    if (label && label[0] && fontSizePx > 0.0f) {
+        const draw::Vec2 ts = surface.measureText(font, fontSizePx, label);
+        surface.text(font, fontSizePx,
+                     {topLeft.x + 6.0f, topLeft.y + (size.y - ts.y) * 0.5f},
+                     pal.textDim, label);
+    }
+}
+
+void drawPropertyRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+                     const ImVec2& size, const char* label, const Palette& pal,
+                     bool alt, float labelWidth)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawPropertyRow(surface, draw::fontRef(font), ImGui::GetFontSize(),
+                    draw::toDrawVec2(topLeft), draw::toDrawVec2(size), label, pal,
+                    alt, labelWidth);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

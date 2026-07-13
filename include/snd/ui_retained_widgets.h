@@ -597,6 +597,13 @@ Node::Ptr toastOverlay(NodeId id, ToastStack& stack,
 Node::Ptr popover(NodeId id, Layout inner = {}, Insets padding = {},
                   PaintRenderer* renderer = nullptr);
 
+// Property/inspector row: a horizontal row of [fixed-width label | value node],
+// with an optional alt-stripe background. Stack these under sectionHeader-style
+// labels for a full inspector.
+Node::Ptr propertyRow(NodeId id, std::string name, Node::Ptr value,
+                      PaintRenderer* renderer = nullptr, float labelWidth = 110.0f,
+                      float height = 24.0f, bool alt = false);
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

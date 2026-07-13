@@ -451,6 +451,12 @@ void toasts(ToastStack& stack, const ImVec2& anchorBottomRight, double now);
 void popover(const char* id, const ImVec2& topLeft, const ImVec2& size,
              float beakCenterX = -1.0f, bool beakOnTop = false);
 
+// Property/inspector row: draws the label + optional alt stripe, then advances
+// the cursor to the value column (SameLine) so the caller's next widget is the
+// value editor. Group rows under sectionHeader() for a full inspector.
+void propertyRow(const char* label, const ImVec2& size, float labelWidth = 110.0f,
+                 bool alt = false);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

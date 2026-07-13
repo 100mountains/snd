@@ -4460,6 +4460,29 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr propertyRow(NodeId id, std::string name, Node::Ptr value,
+                      PaintRenderer* renderer, float labelWidth, float height,
+                      bool alt)
+{
+    NodeId sid = id;
+    auto r = row(std::move(id), 6.0f);
+    r->setSize(Length::fill(), Length::fixed(height));
+    auto lbl = label(sid + ".lbl", std::move(name), renderer);
+    lbl->setSize(Length::fixed(labelWidth), Length::fill());
+    r->addChild(std::move(lbl));
+    if (value) {
+        value->setSize(Length::fill(), Length::fill());
+        r->addChild(std::move(value));
+    }
+    if (renderer && alt) {
+        VisualStyle style;
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        renderer->setStyle(sid, style);
+    }
+    return r;
+}
+
 Node::Ptr popover(NodeId id, Layout inner, Insets padding,
                   PaintRenderer* renderer)
 {
