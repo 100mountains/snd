@@ -333,6 +333,8 @@ struct GraphSurfaceCallbacks {
     // Double-click on a module (NodeBody/NodeTitle/NodePart), usually to open
     // an editor or inspector for the graph item.
     std::function<void(const GraphHit&)> onNodeDoubleClicked;
+    // Double-click a cable or cable endpoint, usually to remove that route.
+    std::function<void(const GraphHit&)> onCableDoubleClicked;
     // Double-click on empty canvas. When unset, the surface centres/fits all
     // modules itself.
     std::function<void(Vec2 graphPosition)> onBackgroundDoubleClick;

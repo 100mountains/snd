@@ -84,7 +84,10 @@ small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
 
-- Uncommitted at `3d4b411`: resolved A2 with fixed-capacity MIDI/control block
+- Uncommitted after `5fc8967`: GraphSurface exposes distinct node/cable
+  double-click callbacks; Bob3 uses the cable callback for its owner-defined
+  route deletion rule.
+- Resolved in `5fc8967`: A2 now uses fixed-capacity MIDI/control block
   buffers, POD control target IDs, typed graph edges, allocation-free graph
   event fan-in, and MIDI/control routing in the graph's prepared topological
   schedule; covered by the graph selftest and Bob3 headless contract test.

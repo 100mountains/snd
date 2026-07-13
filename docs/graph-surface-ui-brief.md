@@ -169,6 +169,9 @@ the graph painter for those choices.
   validated port-to-port drop.
 - Click on a module child part performs that part's action or value interaction
   without falling through to module drag.
+- Node and cable double-clicks are separate optional callbacks. The consumer
+  decides whether they open an editor, delete a route, or do nothing; the graph
+  primitive only supplies the stable hit.
 - Drag empty surface creates a selection rectangle unless a pan modifier/mode is
   active.
 - Pan/zoom are stored in `GraphViewport`; event handlers must not duplicate
@@ -312,12 +315,15 @@ struct GraphSurfaceState {
 struct GraphSurfaceCallbacks {
     std::function<void(const GraphHit&)> onSelect;
     std::function<void(const GraphHit&)> onActivate;
-    std::function<void(const GraphHit&, Vec2 graphPosition)> onContextMenu;
+    std::function<void(const GraphHit&, Vec2 graphPosition, Vec2 surfacePosition)> onContextMenu;
     std::function<void(const GraphHit&, Vec2 graphDelta)> onDrag;
     std::function<bool(const GraphHit& fromPort, const GraphHit& toPort)> canConnect;
     std::function<void(const GraphHit& fromPort, const GraphHit& toPort)> onConnect;
     std::function<void(const GraphHit& fromPort, Vec2 graphPosition)> onCablePreview;
     std::function<void(const GraphViewport&)> onViewportChanged;
+    std::function<void(const GraphHit&)> onNodeDoubleClicked;
+    std::function<void(const GraphHit&)> onCableDoubleClicked;
+    std::function<void(Vec2 graphPosition)> onBackgroundDoubleClick;
 };
 ```
 

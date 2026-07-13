@@ -6337,6 +6337,13 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     state.marqueeActive = false;
                     return true;
                 }
+                if (state.active.kind == GraphHitKind::Cable ||
+                    state.active.kind == GraphHitKind::CableEndpoint) {
+                    if (callbacks.onCableDoubleClicked)
+                        callbacks.onCableDoubleClicked(state.active);
+                    state.active = {};
+                    return true;
+                }
                 if (state.active.kind == GraphHitKind::Surface ||
                     state.active.kind == GraphHitKind::None) {
                     const Vec2 g = screenToGraph(state.viewport, local);
