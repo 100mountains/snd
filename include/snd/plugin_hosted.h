@@ -89,6 +89,11 @@ public:
     void idle() override;
     double nativeParameterValue(uint32_t paramId) const override;
 
+    // Push graph-side normalized values into the hosted instance immediately.
+    // Main-thread callers use this before opening an editor or saving state;
+    // process() calls the same path before audio processing.
+    void flushClientParameters();
+
 private:
     struct BridgedParam {
         Parameter* param = nullptr;

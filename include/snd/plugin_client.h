@@ -30,6 +30,7 @@ struct ParamSpec {
     std::string name;
     double defaultValue = 0.0; // normalized 0..1
     bool automatable = true;
+    bool discrete = false;
 };
 
 struct PluginSpec {

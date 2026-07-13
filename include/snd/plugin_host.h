@@ -45,6 +45,7 @@ public:
     virtual double value() const = 0;        // normalized 0..1, cached
     virtual void setValue(double v) = 0;     // thread-safe, queued
     virtual bool automatable() const = 0;
+    virtual bool discrete() const { return false; }
 };
 
 class Instance {

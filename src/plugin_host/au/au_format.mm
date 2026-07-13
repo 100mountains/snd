@@ -79,12 +79,15 @@ public:
         else
             name_ = info.name;
         automatable_ = (info.flags & kAudioUnitParameterFlag_NonRealTime) == 0;
+        discrete_ = info.unit == kAudioUnitParameterUnit_Boolean ||
+                    info.unit == kAudioUnitParameterUnit_Indexed;
         refreshCache();
     }
 
     const std::string& id() const override { return idString_; }
     const std::string& name() const override { return name_; }
     bool automatable() const override { return automatable_; }
+    bool discrete() const override { return discrete_; }
 
     double value() const override { return cached_.load(std::memory_order_relaxed); }
 
@@ -111,6 +114,7 @@ private:
     double min_ = 0, max_ = 1;
     std::string idString_, name_;
     bool automatable_ = true;
+    bool discrete_ = false;
     std::atomic<double> cached_{0};
 };
 

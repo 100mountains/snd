@@ -73,6 +73,7 @@ HostedProcessor::HostedProcessor(std::unique_ptr<Instance> instance,
             ps.name = p->name();
             ps.defaultValue = p->value(); // current value at load = the default the graph starts from
             ps.automatable = p->automatable();
+            ps.discrete = p->discrete();
             spec_.params.push_back(std::move(ps));
             params_.push_back({p, hostedParamClientId(p->id()), p->value()});
         }
@@ -108,16 +109,7 @@ void HostedProcessor::process(const float* const* in, float* const* out,
         return;
     }
 
-    // graph-side edits -> plugin: push only real changes (setValue is queued
-    // + thread-safe by the host contract, so this is fine on the audio
-    // thread; unchanged params cost one atomic read each)
-    for (BridgedParam& bp : params_) {
-        const double v = param(bp.clientId);
-        if (v != bp.lastSent) {
-            bp.lastSent = v;
-            bp.param->setValue(v);
-        }
-    }
+    flushClientParameters();
 
     const client::Transport& t = transport();
     if (t.tempoBpm != lastBpm_ || t.timeSigNumerator != lastTsNum_ ||
@@ -196,6 +188,17 @@ double HostedProcessor::nativeParameterValue(uint32_t paramId) const
         if (bp.clientId == paramId)
             return bp.param->value();
     return 0.0;
+}
+
+void HostedProcessor::flushClientParameters()
+{
+    for (BridgedParam& bp : params_) {
+        const double value = param(bp.clientId);
+        if (value == bp.lastSent)
+            continue;
+        bp.lastSent = value;
+        bp.param->setValue(value);
+    }
 }
 
 std::unique_ptr<HostedProcessor> makeHostedProcessor(HostManager& manager,

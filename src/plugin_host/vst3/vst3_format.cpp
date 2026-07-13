@@ -96,13 +96,15 @@ bool splitIdentifier(const std::string& identifier, std::string& path, std::stri
 
 class VST3Parameter final : public Parameter {
 public:
-    VST3Parameter(std::string id, std::string name, bool canAutomate, double initial)
+    VST3Parameter(std::string id, std::string name, bool canAutomate,
+                  bool isDiscrete, double initial)
         : paramIdString(std::move(id)), paramName(std::move(name)),
-          canAuto(canAutomate), cached(initial) {}
+          canAuto(canAutomate), discrete_(isDiscrete), cached(initial) {}
 
     const std::string& id() const override { return paramIdString; }
     const std::string& name() const override { return paramName; }
     bool automatable() const override { return canAuto; }
+    bool discrete() const override { return discrete_; }
 
     double value() const override { return cached.load(std::memory_order_relaxed); }
 
@@ -125,6 +127,7 @@ private:
     std::string paramIdString;
     std::string paramName;
     bool canAuto = true;
+    bool discrete_ = false;
     std::atomic<double> cached;
 };
 
@@ -751,11 +754,12 @@ private:
                 continue;
 
             auto idStr = std::to_string(info.id);
-            auto title = VST3::StringConvert::convert(info.title);
+            auto title = Steinberg::Vst::StringConvert::convert(info.title);
             bool canAutomate = (info.flags & Vst::ParameterInfo::kCanAutomate) != 0;
             double initial = controller_->getParamNormalized(info.id);
 
-            auto param = std::make_unique<VST3Parameter>(idStr, title, canAutomate, initial);
+            auto param = std::make_unique<VST3Parameter>(
+                idStr, title, canAutomate, info.stepCount > 0, initial);
             Vst::ParamID pid = info.id;
             auto* self = this;
             param->onSet = [self, pid](double v) {
