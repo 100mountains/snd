@@ -468,6 +468,13 @@ void drawTable(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                const ImVec2& size, const TableModel& model, const Palette& pal,
                int selectedRow = -1, float scrollY = 0.0f);
 
+// The floating drag ghost: a small accent chip with the payload label, offset
+// from the cursor.
+void drawDragGhost(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                   draw::Vec2 cursorPos, const char* label, const Palette& pal);
+void drawDragGhost(ImDrawList* dl, ImFont* font, const ImVec2& cursorPos,
+                   const char* label, const Palette& pal);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

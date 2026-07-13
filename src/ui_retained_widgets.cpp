@@ -4460,6 +4460,41 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr dragGhostOverlay(NodeId id, DragPayload& payload,
+                           PaintRenderer* renderer)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::None);
+    node->setSize(Length::fill(), Length::fill());
+    DragPayload* pp = &payload;
+    if (renderer) {
+        auto paint = [pp](draw::Surface& s, draw::FontRef font, float fpx,
+                          draw::Vec2 ptr) {
+            if (pp->active)
+                paint::drawDragGhost(s, font, fpx, ptr, pp->label.c_str(),
+                                     palette());
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext& ctx) {
+            if (ctx.pointerValid)
+                paint(s, ctx.font, ctx.fontSizePx, ctx.pointer);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            const ImVec2 m = ImGui::GetIO().MousePos;
+            paint(s, draw::fontRef(ImGui::GetFont()), ImGui::GetFontSize(),
+                  draw::toDrawVec2(m));
+        };
+        renderer->setStyle(sid, style);
+    }
+    node->setOverlay(true);
+    return node;
+}
+
 Node::Ptr table(NodeId id, std::string name, TableSource model,
                 std::function<void(int)> onSelect, PaintRenderer* renderer,
                 Vec2 size)

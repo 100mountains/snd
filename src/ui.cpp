@@ -1160,6 +1160,32 @@ int table(const char* id, const TableModel& model, const ImVec2& size,
     return sel;
 }
 
+void beginDrag(DragPayload& p, std::string kind, std::string label,
+               std::string id)
+{
+    p.kind = std::move(kind);
+    p.label = std::move(label);
+    p.id = std::move(id);
+    p.active = true;
+}
+
+void endDrag(DragPayload& p) { p.active = false; }
+
+bool dropMatches(const DragPayload& p, const char* acceptKind)
+{
+    return p.active && acceptKind && p.kind == acceptKind;
+}
+
+void dragGhost(DragPayload& p)
+{
+    if (!p.active)
+        return;
+    paint::drawDragGhost(ImGui::GetForegroundDrawList(), ImGui::GetFont(),
+                         ImGui::GetIO().MousePos, p.label.c_str(), palette());
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        p.active = false;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

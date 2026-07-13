@@ -1339,6 +1339,34 @@ void drawTable(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
               selectedRow, scrollY);
 }
 
+void drawDragGhost(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+                   draw::Vec2 cursorPos, const char* label, const Palette& pal)
+{
+    if (!label || !label[0])
+        return;
+    const draw::Vec2 ts = fontSizePx > 0.0f
+                              ? surface.measureText(font, fontSizePx, label)
+                              : draw::Vec2{40.0f, 12.0f};
+    const float padX = 8.0f, padY = 4.0f;
+    const draw::Vec2 tl{cursorPos.x + 12.0f, cursorPos.y + 6.0f};
+    const draw::Vec2 br{tl.x + ts.x + padX * 2.0f, tl.y + ts.y + padY * 2.0f};
+    surface.fillRect(tl, br, withAlpha(pal.accent, 0xD8), 3.0f);
+    surface.strokeRect(tl, br, withAlpha(pal.text, 0x80), 3.0f);
+    if (fontSizePx > 0.0f)
+        surface.text(font, fontSizePx, {tl.x + padX, tl.y + padY},
+                     IM_COL32(0, 0, 0, 255), label);
+}
+
+void drawDragGhost(ImDrawList* dl, ImFont* font, const ImVec2& cursorPos,
+                   const char* label, const Palette& pal)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawDragGhost(surface, draw::fontRef(font), ImGui::GetFontSize(),
+                  draw::toDrawVec2(cursorPos), label, pal);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

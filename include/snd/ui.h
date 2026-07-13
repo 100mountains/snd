@@ -471,6 +471,23 @@ struct TableModel {
 int table(const char* id, const TableModel& model, const ImVec2& size,
           int selectedRow);
 
+// Drag-and-drop payload (caller-owned). DnD is a mode-specific system: a drag
+// source calls beginDrag(); a drop target checks dropMatches() then endDrag();
+// dragGhost() / dragGhostOverlay draw the floating chip.
+struct DragPayload {
+    std::string kind;
+    std::string label;
+    std::string id;
+    bool active = false;
+};
+void beginDrag(DragPayload& p, std::string kind, std::string label,
+               std::string id);
+void endDrag(DragPayload& p);
+bool dropMatches(const DragPayload& p, const char* acceptKind);
+// Draw the ghost at the mouse (foreground) while active, and end the drag when
+// the mouse releases. Call once per frame, AFTER any dropMatches checks.
+void dragGhost(DragPayload& p);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

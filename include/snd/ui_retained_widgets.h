@@ -611,6 +611,12 @@ Node::Ptr table(NodeId id, std::string name, TableSource model,
                 std::function<void(int)> onSelect = {},
                 PaintRenderer* renderer = nullptr, Vec2 size = {320.0f, 200.0f});
 
+// Retained drag-ghost overlay: a fill/overlay node drawing the ghost at the
+// pointer while `payload` (caller-owned) is active. Source/target wiring uses
+// snd::ui::beginDrag / dropMatches / endDrag in the caller's onEvent handlers.
+Node::Ptr dragGhostOverlay(NodeId id, DragPayload& payload,
+                           PaintRenderer* renderer = nullptr);
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,
