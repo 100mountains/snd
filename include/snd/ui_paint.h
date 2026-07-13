@@ -382,6 +382,18 @@ void drawProgressBar(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      float progress, const Palette& pal,
                      bool indeterminate = false, double timeSeconds = 0.0);
 
+// Waveform view: a min/max peak envelope of `samples` (count entries in -1..1)
+// across the width, over a centre line. playhead / selStart / selEnd are 0..1
+// fractions of the width; pass < 0 to omit each.
+void drawWaveform(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                  const float* samples, int count, const Palette& pal,
+                  float playhead = -1.0f, float selStart = -1.0f,
+                  float selEnd = -1.0f);
+void drawWaveform(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  const float* samples, int count, const Palette& pal,
+                  float playhead = -1.0f, float selStart = -1.0f,
+                  float selEnd = -1.0f);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

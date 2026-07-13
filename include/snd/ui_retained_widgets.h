@@ -546,6 +546,15 @@ Node::Ptr progressBar(NodeId id, std::string name, ValueBinding progress,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {160.0f, 10.0f});
 
+// Per-frame sample provider for waveformView: returns {buffer, count} in -1..1;
+// the caller owns the buffer, returns {nullptr, 0} when empty.
+using WaveformSource = std::function<std::pair<const float*, int>()>;
+// Waveform view (display only). `source` is polled each paint; the optional
+// `playhead` binding supplies the 0..1 head position (unset = none).
+Node::Ptr waveformView(NodeId id, std::string name, WaveformSource source,
+                       PaintRenderer* renderer = nullptr,
+                       Vec2 size = {240.0f, 60.0f}, ValueBinding playhead = {});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

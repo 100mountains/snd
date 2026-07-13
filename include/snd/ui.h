@@ -396,6 +396,11 @@ bool rangeSlider(const char* id, float* lo, float* hi, float minV, float maxV,
 // indeterminate animated sweep.
 void progressBar(const char* id, float progress, const ImVec2& size);
 
+// Waveform view (display only): min/max envelope of `samples` (-1..1) with an
+// optional playhead (0..1, < 0 = none).
+void waveformView(const char* id, const float* samples, int count,
+                  const ImVec2& size, float playhead = -1.0f);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

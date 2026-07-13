@@ -898,6 +898,18 @@ void progressBar(const char* id, float progress, const ImVec2& size)
                            progress < 0.0f, ImGui::GetTime());
 }
 
+void waveformView(const char* id, const float* samples, int count,
+                  const ImVec2& size, float playhead)
+{
+    (void)id;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(240.0f, 60.0f);
+    ImGui::Dummy(sz);
+    paint::drawWaveform(ImGui::GetWindowDrawList(), p, sz, samples, count,
+                        palette(), playhead);
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

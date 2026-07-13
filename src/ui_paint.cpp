@@ -949,6 +949,58 @@ void drawProgressBar(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                     progress, pal, indeterminate, timeSeconds);
 }
 
+void drawWaveform(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                  const float* samples, int count, const Palette& pal,
+                  float playhead, float selStart, float selEnd)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    const float midY = topLeft.y + size.y * 0.5f;
+    surface.fillRect(topLeft, br, pal.frame, 3.0f);
+    if (selStart >= 0.0f && selEnd > selStart) {
+        const float x0 = topLeft.x + std::clamp(selStart, 0.0f, 1.0f) * size.x;
+        const float x1 = topLeft.x + std::clamp(selEnd, 0.0f, 1.0f) * size.x;
+        surface.fillRect({x0, topLeft.y}, {x1, br.y}, withAlpha(pal.accent, 0x2A));
+    }
+    surface.line({topLeft.x, midY}, {br.x, midY}, withAlpha(pal.frameBright, 0x80),
+                 1.0f);
+    if (samples && count > 0 && size.x >= 1.0f) {
+        const int cols = (int)size.x;
+        for (int c = 0; c < cols; ++c) {
+            const int s0 = (int)((float)c / (float)cols * (float)count);
+            int s1 = (int)((float)(c + 1) / (float)cols * (float)count);
+            if (s1 <= s0)
+                s1 = s0 + 1;
+            float mn = 1.0f, mx = -1.0f;
+            for (int i = s0; i < s1 && i < count; ++i) {
+                mn = std::min(mn, samples[i]);
+                mx = std::max(mx, samples[i]);
+            }
+            if (mx < mn)
+                continue;
+            const float x = topLeft.x + (float)c + 0.5f;
+            const float yTop = midY - std::clamp(mx, -1.0f, 1.0f) * size.y * 0.5f;
+            const float yBot = midY - std::clamp(mn, -1.0f, 1.0f) * size.y * 0.5f;
+            surface.line({x, yTop}, {x, yBot + 0.5f}, pal.accent, 1.0f);
+        }
+    }
+    if (playhead >= 0.0f) {
+        const float x = topLeft.x + std::clamp(playhead, 0.0f, 1.0f) * size.x;
+        surface.line({x, topLeft.y}, {x, br.y}, pal.text, 1.0f);
+    }
+    surface.strokeRect(topLeft, br, pal.frameBright, 3.0f);
+}
+
+void drawWaveform(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                  const float* samples, int count, const Palette& pal,
+                  float playhead, float selStart, float selEnd)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawWaveform(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size),
+                 samples, count, pal, playhead, selStart, selEnd);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)
