@@ -568,6 +568,15 @@ Node::Ptr timelineRuler(NodeId id, std::string name, double startBeat,
                         PaintRenderer* renderer = nullptr,
                         Vec2 size = {320.0f, 22.0f}, ValueBinding playhead = {});
 
+// Automation / curve lane. `source` returns the caller-owned point vector,
+// mutated in place (drag to move, double-click to add, double/right-click a
+// point to remove); onChange fires after each edit. Slider semantics.
+using AutoPointSource = std::function<std::vector<AutoPoint>&()>;
+Node::Ptr automationLane(NodeId id, std::string name, AutoPointSource source,
+                         std::function<void()> onChange = {},
+                         PaintRenderer* renderer = nullptr,
+                         Vec2 size = {320.0f, 100.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

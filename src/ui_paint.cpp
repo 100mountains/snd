@@ -1082,6 +1082,53 @@ void drawTimelineRuler(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                       endBeat, beatsPerBar, pal, playhead);
 }
 
+void drawAutomationLane(draw::Surface& surface, draw::Vec2 topLeft,
+                        draw::Vec2 size, const AutoPoint* points, int count,
+                        const Palette& pal, int activePoint, float playhead)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, pal.frame, 3.0f);
+    const float midY = topLeft.y + size.y * 0.5f;
+    surface.line({topLeft.x, midY}, {br.x, midY}, withAlpha(pal.frameBright, 0x50),
+                 1.0f);
+    const auto toXY = [&](const AutoPoint& pt) {
+        return draw::Vec2{topLeft.x + std::clamp(pt.time, 0.0f, 1.0f) * size.x,
+                          br.y - std::clamp(pt.value, 0.0f, 1.0f) * size.y};
+    };
+    if (points && count > 0) {
+        draw::Vec2 prev = toXY(points[0]);
+        surface.line({topLeft.x, prev.y}, prev, pal.accent, 1.5f);
+        for (int i = 1; i < count; ++i) {
+            const draw::Vec2 cur = toXY(points[i]);
+            surface.line(prev, cur, pal.accent, 1.5f);
+            prev = cur;
+        }
+        surface.line(prev, {br.x, prev.y}, pal.accent, 1.5f);
+        for (int i = 0; i < count; ++i) {
+            const draw::Vec2 c = toXY(points[i]);
+            const float rad = (i == activePoint) ? 4.5f : 3.0f;
+            surface.fillCircle(c, rad, pal.accent);
+            surface.strokeCircle(c, rad, pal.frameBright, 0, 1.0f);
+        }
+    }
+    if (playhead >= 0.0f) {
+        const float x = topLeft.x + std::clamp(playhead, 0.0f, 1.0f) * size.x;
+        surface.line({x, topLeft.y}, {x, br.y}, withAlpha(pal.text, 0xB0), 1.0f);
+    }
+    surface.strokeRect(topLeft, br, pal.frameBright, 3.0f);
+}
+
+void drawAutomationLane(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                        const AutoPoint* points, int count, const Palette& pal,
+                        int activePoint, float playhead)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawAutomationLane(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size),
+                       points, count, pal, activePoint, playhead);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

@@ -4460,6 +4460,118 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr automationLane(NodeId id, std::string name, AutoPointSource source,
+                         std::function<void()> onChange, PaintRenderer* renderer,
+                         Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Slider);
+    node->setFocusable(true);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    Semantics sem = named(Role::Slider, std::move(name));
+    sem.description = "Automation lane";
+    node->setSemantics(sem);
+
+    struct Grab {
+        int idx = -1;
+    };
+    auto grab = std::make_shared<Grab>();
+    if (renderer) {
+        auto paint = [source, grab](draw::Surface& s, Rect b) {
+            auto& pts = source();
+            paint::drawAutomationLane(s, topLeftDraw(b), {b.w, b.h}, pts.data(),
+                                      (int)pts.size(), palette(), grab->idx);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext&) {
+            paint(s, b);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b);
+        };
+        renderer->setStyle(sid, style);
+    }
+    node->setOnEvent([source, onChange, grab](Node& n, const Event& e) {
+        const Rect b = n.bounds();
+        auto& pts = source();
+        const auto toX = [&](float t) { return b.x + std::clamp(t, 0.0f, 1.0f) * b.w; };
+        const auto toY = [&](float v) {
+            return b.y + b.h - std::clamp(v, 0.0f, 1.0f) * b.h;
+        };
+        const auto fromXY = [&](Vec2 q) {
+            return AutoPoint{std::clamp((q.x - b.x) / b.w, 0.0f, 1.0f),
+                             std::clamp(1.0f - (q.y - b.y) / b.h, 0.0f, 1.0f)};
+        };
+        const auto nearest = [&](Vec2 q) {
+            int idx = -1;
+            float best = 10.0f;
+            for (size_t i = 0; i < pts.size(); ++i) {
+                const float dx = toX(pts[i].time) - q.x;
+                const float dy = toY(pts[i].value) - q.y;
+                const float d = std::sqrt(dx * dx + dy * dy);
+                if (d < best) {
+                    best = d;
+                    idx = (int)i;
+                }
+            }
+            return idx;
+        };
+        const auto fire = [&] {
+            if (onChange)
+                onChange();
+        };
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Right) {
+            const int hit = nearest(e.position);
+            if (hit >= 0) {
+                pts.erase(pts.begin() + hit);
+                grab->idx = -1;
+                fire();
+                return true;
+            }
+            return false;
+        }
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Left) {
+            const int hit = nearest(e.position);
+            if (hit >= 0) {
+                grab->idx = hit;
+                return true;
+            }
+            pts.push_back(fromXY(e.position));
+            std::sort(pts.begin(), pts.end(),
+                      [](const AutoPoint& a, const AutoPoint& c) {
+                          return a.time < c.time;
+                      });
+            grab->idx = -1;
+            fire();
+            return true;
+        }
+        if (e.type == EventType::MouseMove && grab->idx >= 0 &&
+            grab->idx < (int)pts.size()) {
+            AutoPoint np = fromXY(e.position);
+            const float lo = grab->idx > 0 ? pts[(size_t)grab->idx - 1].time : 0.0f;
+            const float hi = grab->idx + 1 < (int)pts.size()
+                                 ? pts[(size_t)grab->idx + 1].time
+                                 : 1.0f;
+            np.time = std::clamp(np.time, lo, hi);
+            pts[(size_t)grab->idx] = np;
+            fire();
+            return true;
+        }
+        if (e.type == EventType::MouseUp) {
+            grab->idx = -1;
+            return false;
+        }
+        return false;
+    });
+    return node;
+}
+
 Node::Ptr timelineRuler(NodeId id, std::string name, double startBeat,
                         double endBeat, double beatsPerBar,
                         PaintRenderer* renderer, Vec2 size, ValueBinding playhead)

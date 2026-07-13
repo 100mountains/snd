@@ -412,6 +412,17 @@ void drawTimelineRuler(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                        double beatsPerBar, const Palette& pal,
                        float playhead = -1.0f);
 
+// Automation lane: the curve through `points` (time-sorted, 0..1) with a dot at
+// each and a hold to each edge. activePoint highlights a grabbed point;
+// playhead is a 0..1 fraction (< 0 = none).
+void drawAutomationLane(draw::Surface& surface, draw::Vec2 topLeft,
+                        draw::Vec2 size, const AutoPoint* points, int count,
+                        const Palette& pal, int activePoint = -1,
+                        float playhead = -1.0f);
+void drawAutomationLane(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                        const AutoPoint* points, int count, const Palette& pal,
+                        int activePoint = -1, float playhead = -1.0f);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

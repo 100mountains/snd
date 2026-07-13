@@ -411,6 +411,19 @@ void timelineRuler(const char* id, double startBeat, double endBeat,
                    double beatsPerBar, const ImVec2& size,
                    float playhead = -1.0f);
 
+// A breakpoint in an automation lane: time and value both normalized 0..1.
+struct AutoPoint {
+    float time = 0.0f;
+    float value = 0.0f;
+};
+
+// Automation / curve lane over `points` (kept time-sorted). Drag a point to
+// move it (its time clamps between its neighbours), double-click empty space to
+// add one, double-click or right-click a point to remove it. Returns true on
+// any change.
+bool automationLane(const char* id, std::vector<AutoPoint>& points,
+                    const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

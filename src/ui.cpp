@@ -933,6 +933,94 @@ void timelineRuler(const char* id, double startBeat, double endBeat,
                              startBeat, endBeat, beatsPerBar, palette(), playhead);
 }
 
+bool automationLane(const char* id, std::vector<AutoPoint>& points,
+                    const ImVec2& size)
+{
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(320.0f, 100.0f);
+    const ImGuiID gid = ImGui::GetID(id);
+    ImGui::InvisibleButton(id, sz,
+                           ImGuiButtonFlags_MouseButtonLeft |
+                               ImGuiButtonFlags_MouseButtonRight);
+    const bool active = ImGui::IsItemActive();
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    int grabbed = store->GetInt(gid, -1);
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    const auto toX = [&](float t) { return p.x + std::clamp(t, 0.0f, 1.0f) * sz.x; };
+    const auto toY = [&](float v) {
+        return p.y + sz.y - std::clamp(v, 0.0f, 1.0f) * sz.y;
+    };
+    const auto fromXY = [&](ImVec2 q) {
+        return AutoPoint{std::clamp((q.x - p.x) / sz.x, 0.0f, 1.0f),
+                         std::clamp(1.0f - (q.y - p.y) / sz.y, 0.0f, 1.0f)};
+    };
+    const auto nearest = [&](ImVec2 q) {
+        int idx = -1;
+        float best = 10.0f;
+        for (size_t i = 0; i < points.size(); ++i) {
+            const float dx = toX(points[i].time) - q.x;
+            const float dy = toY(points[i].value) - q.y;
+            const float d = std::sqrt(dx * dx + dy * dy);
+            if (d < best) {
+                best = d;
+                idx = (int)i;
+            }
+        }
+        return idx;
+    };
+    const auto resort = [&] {
+        std::sort(points.begin(), points.end(),
+                  [](const AutoPoint& a, const AutoPoint& b) {
+                      return a.time < b.time;
+                  });
+    };
+
+    bool changed = false;
+    if (ImGui::IsItemActivated()) {
+        const int n = nearest(m);
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            if (n >= 0)
+                points.erase(points.begin() + n);
+            else {
+                points.push_back(fromXY(m));
+                resort();
+            }
+            changed = true;
+            grabbed = -1;
+        } else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && n >= 0) {
+            points.erase(points.begin() + n);
+            changed = true;
+            grabbed = -1;
+        } else {
+            grabbed = n;
+        }
+        store->SetInt(gid, grabbed);
+    }
+    if (active && grabbed >= 0 && grabbed < (int)points.size()) {
+        AutoPoint np = fromXY(m);
+        const float lo = grabbed > 0 ? points[(size_t)grabbed - 1].time : 0.0f;
+        const float hi = grabbed + 1 < (int)points.size()
+                             ? points[(size_t)grabbed + 1].time
+                             : 1.0f;
+        np.time = std::clamp(np.time, lo, hi);
+        if (np.time != points[(size_t)grabbed].time ||
+            np.value != points[(size_t)grabbed].value) {
+            points[(size_t)grabbed] = np;
+            changed = true;
+        }
+    }
+    if (!active && grabbed >= 0) {
+        store->SetInt(gid, -1);
+        grabbed = -1;
+    }
+
+    paint::drawAutomationLane(ImGui::GetWindowDrawList(), p, sz, points.data(),
+                              (int)points.size(), palette(),
+                              active ? grabbed : -1);
+    return changed;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])
