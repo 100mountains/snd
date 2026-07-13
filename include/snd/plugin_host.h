@@ -53,6 +53,11 @@ public:
 
     virtual const Description& description() const = 0;
 
+    // Main audio bus widths used by the in-process graph. Hosted instances
+    // default to stereo; native multi-channel processors override these.
+    virtual uint32_t inputChannels() const { return 2; }
+    virtual uint32_t outputChannels() const { return 2; }
+
     // Main thread. Deinterleaved float32 processing at the given rate/block.
     virtual bool prepare(double sampleRate, uint32_t maxBlockFrames) = 0;
     virtual void unprepare() = 0;

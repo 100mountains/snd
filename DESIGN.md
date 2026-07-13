@@ -212,7 +212,10 @@ Shape (from the audits in `docs/research/`):
   edges in one topological schedule. Audio edges alone participate in latency
   compensation. MIDI and control use fixed-capacity block buffers; control
   parameter targets are stable numeric IDs, so event routing performs no heap
-  allocation in `processEvents()`.
+  allocation in `processEvents()`. Instances report their main bus widths;
+  audio edges carry explicit source/destination channel ranges so multi-lane
+  mixers and discrete aux outputs remain separate without product-specific
+  graph logic. The stereo `connect()` overload remains the default.
 - **Editor GUIs**: hosted in floating native windows per OS
   (NSView / HWND / X11), with an `IComponentHandler` for parameter edits and
   `IPlugFrame` for resize. The AU side uses the Cocoa/generic view tiers.

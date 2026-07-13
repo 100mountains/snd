@@ -84,6 +84,11 @@ small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
 
+- Uncommitted against `d09c76b`: the prepared graph now routes explicit audio
+  channel ranges across instance-reported bus widths without callback
+  allocation; Bob3's headless contract covers a stereo source routed into
+  channels 3/4 of a four-channel processor.
+
 - Resolved in `5cf556b`: GraphSurface exposes distinct node/cable
   double-click callbacks; Bob3 uses the cable callback for its owner-defined
   route deletion rule.

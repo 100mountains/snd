@@ -20,6 +20,12 @@ enum class GraphEdgeType {
     Control,
 };
 
+struct GraphAudioRoute {
+    uint32_t sourceChannel = 0;
+    uint32_t destinationChannel = 0;
+    uint32_t channels = 2;
+};
+
 class Graph {
 public:
     Graph();
@@ -38,6 +44,8 @@ public:
 
     bool connect(int from, int to, GraphEdgeType type = GraphEdgeType::Audio);
     bool disconnect(int from, int to, GraphEdgeType type = GraphEdgeType::Audio);
+    bool connectAudio(int from, int to, GraphAudioRoute route);
+    bool disconnectAudio(int from, int to, GraphAudioRoute route);
 
     // Prepares every node, orders the graph, and computes the compensation
     // delays. False on a cycle or a node that failed to prepare.
