@@ -326,6 +326,7 @@ struct GraphSurfaceCallbacks {
     std::function<void(const GraphHit&, Vec2 graphPosition, Vec2 surfacePosition)>
         onContextMenu;
     std::function<void(const GraphHit&, Vec2 graphDelta)> onDrag;
+    std::function<void(const GraphHit&)> onDragFinished;
     std::function<bool(const GraphHit& fromPort, const GraphHit& toPort)> canConnect;
     std::function<void(const GraphHit& fromPort, const GraphHit& toPort)> onConnect;
     std::function<void(const GraphHit& fromPort, Vec2 graphPosition)> onCablePreview;

@@ -393,6 +393,15 @@ plugin parameters, app state, undo, and audio-thread handoff. Knobs,
 faders, drag numbers, XY pads, pattern grids, keyboards, menus, and envelope
 editors support retained pointer editing through the ImGui input bridge or the
 pure retained GL window.
+
+Set `ValueBinding::beginEdit` and `endEdit` when the owner needs one transaction
+per continuous gesture. Knobs call them on pointer down/up; toggles and cycle
+buttons bracket their atomic change. The callbacks mark transaction boundaries
+only and do not move undo ownership into SND.
+
+`GraphSurfaceCallbacks::onDragFinished` marks the end of a module drag so an
+owner can coalesce layout movement into one command; `onDrag` remains the live
+delta stream.
 Meters and LEDs can also use `ValueBinding` so a stable retained tree can
 display changing audio/UI state without recreating nodes. `xyPad` takes
 separate X/Y bindings, while `patternGrid` edits a caller-owned row-major bool

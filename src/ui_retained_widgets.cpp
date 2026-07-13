@@ -880,12 +880,18 @@ void installKnobPointerBehavior(Node& node)
         if (event.type == EventType::MouseDown) {
             if (event.button != MouseButton::Left)
                 return false;
+            if (const ValueBinding* binding = n.valueBinding();
+                binding && binding->beginEdit)
+                binding->beginEdit();
             return true;
         }
 
         if (event.type == EventType::MouseUp) {
             if (event.button != MouseButton::Left)
                 return false;
+            if (const ValueBinding* binding = n.valueBinding();
+                binding && binding->endEdit)
+                binding->endEdit();
             return true;
         }
 
@@ -6396,8 +6402,12 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 }
                 const bool wasPanning = state.panning;
                 const bool wasMarquee = state.marqueeActive;
+                const GraphHit released = state.active;
                 state.panning = false;
                 state.marqueeActive = false;
+                if (!wasPanning && !wasMarquee && released.valid() &&
+                    callbacks.onDragFinished)
+                    callbacks.onDragFinished(released);
                 if (!wasPanning && !wasMarquee && state.active.valid() &&
                     callbacks.onActivate)
                     callbacks.onActivate(state.active);
@@ -7245,8 +7255,12 @@ Node::Ptr cycleButton(NodeId id, std::string name, std::vector<std::string> labe
         const ValueBinding* b = n.valueBinding();
         if (!b || !b->get || !b->set || count <= 0)
             return;
+        if (b->beginEdit)
+            b->beginEdit();
         const int cur = std::clamp((int)std::lround(b->get()), 0, count - 1);
         setBindingValue(n, (double)((cur + 1) % count));
+        if (b->endEdit)
+            b->endEdit();
     });
 
     if (renderer) {
@@ -7283,9 +7297,13 @@ Node::Ptr ledButton(NodeId id, std::string name, std::string glyph,
         const ValueBinding* b = n.valueBinding();
         if (!b || !b->get || !b->set)
             return;
+        if (b->beginEdit)
+            b->beginEdit();
         const bool next = b->get() < (b->min + b->max) * 0.5;
         b->set(next ? b->max : b->min);
         setCheckedState(n, next);
+        if (b->endEdit)
+            b->endEdit();
     });
     if (renderer) {
         VisualStyle style;
@@ -7323,9 +7341,13 @@ Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
         const ValueBinding* b = n.valueBinding();
         if (!b || !b->get || !b->set)
             return;
+        if (b->beginEdit)
+            b->beginEdit();
         const bool next = b->get() < (b->min + b->max) * 0.5;
         b->set(next ? b->max : b->min);
         setCheckedState(n, next);
+        if (b->endEdit)
+            b->endEdit();
     });
     if (renderer) {
         VisualStyle style;
@@ -7369,9 +7391,16 @@ Node::Ptr checkbox(NodeId id, std::string name, ValueBinding binding,
         const ValueBinding* b = n.valueBinding();
         if (!b || !b->get || !b->set)
             return;
+        if (b->beginEdit)
+            b->beginEdit();
         const bool next = b->get() < (b->min + b->max) * 0.5;
-        if (!setBindingValue(n, next ? b->max : b->min))
+        if (!setBindingValue(n, next ? b->max : b->min)) {
+            if (b->endEdit)
+                b->endEdit();
             return;
+        }
+        if (b->endEdit)
+            b->endEdit();
         Semantics& sem = n.semantics();
         if (next)
             sem.states |= SemanticState::Checked;

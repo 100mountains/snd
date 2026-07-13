@@ -293,6 +293,8 @@ struct ValueBinding {
     std::function<double()> get;
     std::function<void(double)> set;
     std::function<std::string(double)> format;
+    std::function<void()> beginEdit;
+    std::function<void()> endEdit;
     double min = 0.0;
     double max = 1.0;
     double step = 0.01;
