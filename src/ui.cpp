@@ -1114,6 +1114,52 @@ void propertyRow(const char* label, const ImVec2& size, float labelWidth,
     ImGui::SameLine(0.0f, 4.0f);
 }
 
+int table(const char* id, const TableModel& model, const ImVec2& size,
+          int selectedRow)
+{
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(320.0f, 200.0f);
+    ImGui::InvisibleButton(id, sz);
+    const ImGuiID syKey = ImGui::GetID((std::string(id) + "##sy").c_str());
+    ImGuiStorage* store = ImGui::GetStateStorage();
+    float scrollY = store->GetFloat(syKey, 0.0f);
+    const float rowH = 20.0f;
+    const float bodyTop = p.y + rowH;
+    const float viewH = std::max(0.0f, sz.y - rowH);
+    const float maxScroll = std::max(0.0f, (float)model.rows * rowH - viewH);
+    int sel = selectedRow;
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+        scrollY = std::clamp(scrollY - ImGui::GetIO().MouseWheel * rowH * 2.0f,
+                             0.0f, maxScroll);
+    if (ImGui::IsItemClicked()) {
+        const float my = ImGui::GetIO().MousePos.y;
+        if (my >= bodyTop) {
+            const int r = (int)((my - bodyTop + scrollY) / rowH);
+            if (r >= 0 && r < model.rows)
+                sel = r;
+        }
+    }
+    if (ImGui::IsItemFocused()) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            sel = std::min(sel + 1, model.rows - 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow) && sel > 0)
+            sel = sel - 1;
+    }
+    if (sel >= 0 && model.rows > 0) {
+        const float selTop = (float)sel * rowH, selBot = selTop + rowH;
+        if (selTop < scrollY)
+            scrollY = selTop;
+        else if (selBot > scrollY + viewH)
+            scrollY = selBot - viewH;
+        scrollY = std::clamp(scrollY, 0.0f, maxScroll);
+    }
+    store->SetFloat(syKey, scrollY);
+    paint::drawTable(ImGui::GetWindowDrawList(), ImGui::GetFont(), p, sz, model,
+                     palette(), sel, scrollY);
+    return sel;
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

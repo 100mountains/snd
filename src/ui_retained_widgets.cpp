@@ -4460,6 +4460,83 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr table(NodeId id, std::string name, TableSource model,
+                std::function<void(int)> onSelect, PaintRenderer* renderer,
+                Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Group);
+    node->setFocusable(true);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setSemantics(named(Role::Group, std::move(name)));
+    struct State {
+        int sel = -1;
+        float scrollY = 0.0f;
+    };
+    auto st = std::make_shared<State>();
+    if (renderer) {
+        auto paint = [model, st](draw::Surface& s, Rect b, draw::FontRef font,
+                                 float fpx) {
+            paint::drawTable(s, font, fpx, topLeftDraw(b), {b.w, b.h}, model(),
+                             palette(), st->sel, st->scrollY);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext& ctx) {
+            paint(s, b, ctx.font, ctx.fontSizePx);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b, draw::fontRef(ImGui::GetFont()), ImGui::GetFontSize());
+        };
+        renderer->setStyle(sid, style);
+    }
+    node->setOnEvent([model, onSelect, st](Node& n, const Event& e) {
+        const Rect b = n.bounds();
+        const TableModel& m = model();
+        const float rowH = 20.0f;
+        const float bodyTop = b.y + rowH;
+        const float viewH = std::max(0.0f, b.h - rowH);
+        const float maxScroll = std::max(0.0f, (float)m.rows * rowH - viewH);
+        if (e.type == EventType::MouseDown && e.button == MouseButton::Left) {
+            if (e.position.y >= bodyTop) {
+                const int r = (int)((e.position.y - bodyTop + st->scrollY) / rowH);
+                if (r >= 0 && r < m.rows) {
+                    st->sel = r;
+                    if (onSelect)
+                        onSelect(r);
+                }
+            }
+            return true;
+        }
+        if (e.type == EventType::MouseWheel) {
+            st->scrollY =
+                std::clamp(st->scrollY - e.delta.y * rowH * 2.0f, 0.0f, maxScroll);
+            return true;
+        }
+        if (e.type == EventType::KeyDown &&
+            (e.key == Key::Down || e.key == Key::Up)) {
+            st->sel = std::clamp(st->sel + (e.key == Key::Down ? 1 : -1), 0,
+                                 std::max(0, m.rows - 1));
+            const float selTop = (float)st->sel * rowH, selBot = selTop + rowH;
+            if (selTop < st->scrollY)
+                st->scrollY = selTop;
+            else if (selBot > st->scrollY + viewH)
+                st->scrollY = selBot - viewH;
+            st->scrollY = std::clamp(st->scrollY, 0.0f, maxScroll);
+            if (onSelect)
+                onSelect(st->sel);
+            return true;
+        }
+        return false;
+    });
+    return node;
+}
+
 Node::Ptr propertyRow(NodeId id, std::string name, Node::Ptr value,
                       PaintRenderer* renderer, float labelWidth, float height,
                       bool alt)

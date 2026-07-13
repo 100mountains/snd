@@ -1270,6 +1270,75 @@ void drawPropertyRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                     alt, labelWidth);
 }
 
+void drawTable(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+               draw::Vec2 topLeft, draw::Vec2 size, const TableModel& model,
+               const Palette& pal, int selectedRow, float scrollY)
+{
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    const float rowH = 20.0f;
+    const int nCols = (int)model.headers.size();
+    const auto colW = [&](int c) {
+        return c < (int)model.colWidths.size() ? model.colWidths[(size_t)c] : 80.0f;
+    };
+    surface.fillRect(topLeft, br, pal.frame, 0.0f);
+    surface.fillRect(topLeft, {br.x, topLeft.y + rowH},
+                     withAlpha(pal.frameBright, 0x60), 0.0f);
+    {
+        float cx = topLeft.x;
+        for (int c = 0; c < nCols; ++c) {
+            if (fontSizePx > 0.0f)
+                surface.text(font, fontSizePx, {cx + 5.0f, topLeft.y + 4.0f},
+                             pal.text, model.headers[(size_t)c].c_str());
+            cx += colW(c);
+        }
+    }
+    const float bodyTop = topLeft.y + rowH;
+    surface.pushClip({topLeft.x, bodyTop}, br, true);
+    for (int r = 0; r < model.rows; ++r) {
+        const float ry = bodyTop + (float)r * rowH - scrollY;
+        if (ry + rowH < bodyTop || ry > br.y)
+            continue;
+        if (r == selectedRow)
+            surface.fillRect({topLeft.x, ry}, {br.x, ry + rowH},
+                             withAlpha(pal.accent, 0x55), 0.0f);
+        else if (r & 1)
+            surface.fillRect({topLeft.x, ry}, {br.x, ry + rowH},
+                             withAlpha(pal.frameBright, 0x18), 0.0f);
+        float cx = topLeft.x;
+        for (int c = 0; c < nCols; ++c) {
+            if (fontSizePx > 0.0f && model.cell) {
+                const std::string t = model.cell(r, c);
+                if (!t.empty())
+                    surface.text(font, fontSizePx, {cx + 5.0f, ry + 3.0f},
+                                 pal.text, t.c_str());
+            }
+            cx += colW(c);
+        }
+    }
+    surface.popClip();
+    {
+        float cx = topLeft.x;
+        for (int c = 0; c + 1 < nCols; ++c) {
+            cx += colW(c);
+            surface.line({cx, topLeft.y}, {cx, br.y},
+                         withAlpha(pal.frameBright, 0x40), 1.0f);
+        }
+    }
+    surface.strokeRect(topLeft, br, pal.frameBright, 0.0f);
+}
+
+void drawTable(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+               const ImVec2& size, const TableModel& model, const Palette& pal,
+               int selectedRow, float scrollY)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawTable(surface, draw::fontRef(font), ImGui::GetFontSize(),
+              draw::toDrawVec2(topLeft), draw::toDrawVec2(size), model, pal,
+              selectedRow, scrollY);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

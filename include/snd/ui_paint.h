@@ -459,6 +459,15 @@ void drawPropertyRow(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                      const ImVec2& size, const char* label, const Palette& pal,
                      bool alt = false, float labelWidth = -1.0f);
 
+// Columnar table: sticky header + 20px rows (offset by scrollY, clipped),
+// selection highlight + alt stripes. selectedRow < 0 = none.
+void drawTable(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+               draw::Vec2 topLeft, draw::Vec2 size, const TableModel& model,
+               const Palette& pal, int selectedRow = -1, float scrollY = 0.0f);
+void drawTable(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+               const ImVec2& size, const TableModel& model, const Palette& pal,
+               int selectedRow = -1, float scrollY = 0.0f);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

@@ -457,6 +457,20 @@ void popover(const char* id, const ImVec2& topLeft, const ImVec2& size,
 void propertyRow(const char* label, const ImVec2& size, float labelWidth = 110.0f,
                  bool alt = false);
 
+// A columnar table model (caller-owned): column headers + widths (px), a
+// cell(row, col) text provider, and the row count.
+struct TableModel {
+    std::vector<std::string> headers;
+    std::vector<float> colWidths;
+    std::function<std::string(int row, int col)> cell;
+    int rows = 0;
+};
+// Columnar table: sticky header, 20px rows, selection highlight + alt stripes,
+// wheel scroll, up/down keyboard nav. Returns the (possibly changed) selected
+// row index.
+int table(const char* id, const TableModel& model, const ImVec2& size,
+          int selectedRow);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

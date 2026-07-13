@@ -604,6 +604,13 @@ Node::Ptr propertyRow(NodeId id, std::string name, Node::Ptr value,
                       PaintRenderer* renderer = nullptr, float labelWidth = 110.0f,
                       float height = 24.0f, bool alt = false);
 
+// Columnar table: `model` is polled each frame; onSelect fires on row change.
+// Sticky header, wheel scroll, up/down keyboard nav, click to select.
+using TableSource = std::function<const TableModel&()>;
+Node::Ptr table(NodeId id, std::string name, TableSource model,
+                std::function<void(int)> onSelect = {},
+                PaintRenderer* renderer = nullptr, Vec2 size = {320.0f, 200.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,
