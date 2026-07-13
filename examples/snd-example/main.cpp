@@ -3176,6 +3176,62 @@ int main(int argc, char** argv)
         ImGui::SameLine();
         snd::ui::meter("mv", msV, sig, ImVec2(10, 120));
         snd::ui::meter("mh", msH, sig, ImVec2(220, 8));
+
+        snd::ui::sectionHeader("new primitives");
+        static float rsLo = 0.2f, rsHi = 0.7f;
+        snd::ui::rangeSlider("rs", &rsLo, &rsHi, 0.0f, 1.0f, ImVec2(220, 20));
+        static float prog = 0.0f;
+        prog = std::fmod(prog + 0.004f, 1.0f);
+        snd::ui::progressBar("pg", prog, ImVec2(220, 10));
+        static float ph = 0.6f, ps = 0.8f, pv = 0.9f;
+        snd::ui::colorPicker("cp", &ph, &ps, &pv, ImVec2(150, 120));
+        ImGui::SameLine();
+        static std::vector<float> wave;
+        if (wave.empty()) {
+            wave.resize(512);
+            for (size_t i = 0; i < wave.size(); ++i)
+                wave[i] = std::sin((float)i * 0.06f) * 0.8f;
+        }
+        snd::ui::waveformView("wv", wave.data(), (int)wave.size(),
+                              ImVec2(210, 55),
+                              std::fmod((float)ImGui::GetTime() * 0.1f, 1.0f));
+        static std::vector<float> spec;
+        if (spec.empty()) {
+            spec.resize(48);
+            for (size_t i = 0; i < spec.size(); ++i)
+                spec[i] = 0.2f + 0.6f * std::fabs(std::sin((float)i * 0.3f));
+        }
+        snd::ui::spectrumView("sp", spec.data(), (int)spec.size(), ImVec2(220, 55));
+        snd::ui::timelineRuler("tl", 0.0, 16.0, 4.0, ImVec2(320, 20),
+                               std::fmod((float)ImGui::GetTime() * 0.05f, 1.0f));
+        static std::vector<snd::ui::AutoPoint> autp;
+        if (autp.empty())
+            autp = {{0.0f, 0.5f}, {0.4f, 0.8f}, {0.8f, 0.2f}};
+        snd::ui::automationLane("al", autp, ImVec2(320, 70));
+        static snd::ui::TableModel tm;
+        if (tm.headers.empty()) {
+            tm.headers = {"Name", "Val"};
+            tm.colWidths = {120.0f, 80.0f};
+            tm.rows = 20;
+            tm.cell = [](int r, int c) {
+                return c == 0 ? ("Row " + std::to_string(r)) : std::to_string(r * 3);
+            };
+        }
+        static int tsel = 0;
+        tsel = snd::ui::table("tbl", tm, ImVec2(210, 110), tsel);
+        ImGui::SameLine();
+        static snd::ui::CommandItem cmds[] = {
+            {"Open", "open"}, {"Save", "save"}, {"Close", "close"}, {"Quit", "quit"}};
+        static std::string cq;
+        snd::ui::commandPalette("cmd", cmds, 4, cq, ImVec2(210, 110));
+        static snd::ui::ToastStack toastStack;
+        if (snd::ui::outlineButton("toast me", ImVec2(80, 22)))
+            snd::ui::pushToast(toastStack, "Preset saved", ImGui::GetTime());
+        snd::ui::toasts(toastStack,
+                        ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 12.0f,
+                               ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 12.0f),
+                        ImGui::GetTime());
+
         ImGui::End();
 
         window.endFrame();

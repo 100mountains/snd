@@ -1095,6 +1095,47 @@ Shift drags 10× slower.
   output path. Directory content is enumerated when the subtree is built, so
   rebuild after changing `state.dir` or when the filesystem changes.
 
+### Added primitives
+
+Each control/display below also has a retained `widgets::X` and a shared
+`paint::drawX`, per the primitive parity contract.
+
+Continuous controls
+- `rangeSlider(id, lo, hi, min, max, size)` — dual-handle min/max slider.
+
+Meters
+- `progressBar(id, progress, size)` — fill bar; a negative progress animates an
+  indeterminate sweep.
+
+Musical / audio (canvas-backed displays)
+- `waveformView(id, samples, count, size, playhead)` — min/max peak envelope.
+- `spectrumView(id, mags, bins, size)` — magnitude bars.
+- `timelineRuler(id, startBeat, endBeat, beatsPerBar, size, playhead)` — bar/beat ruler.
+- `automationLane(id, points, size)` — draggable breakpoint curve (drag to move,
+  click to add, double/right-click to remove).
+
+Controls
+- `colorPicker(id, h, s, v, size)` — HSV square + hue bar.
+
+Inspector
+- `propertyRow(label, size, labelWidth, alt)` — a label + value-column row; group
+  rows under `sectionHeader`. Retained: `widgets::propertyRow(id, name, valueNode)`.
+
+Lists
+- `table(id, model, size, selectedRow)` — columnar table (sticky header, selection,
+  scroll, up/down). `selectableList` covers single-column lists; `fileBrowser`
+  lists directories.
+
+Overlays / mode-specific systems (not strict immediate+retained widgets; still
+share a `paint::drawX` where there's a visual)
+- Toasts — `pushToast` / `toasts` (immediate) + `widgets::toastOverlay` (retained),
+  both via `paint::drawToast`.
+- `popover(id, topLeft, size, beak…)` + retained `widgets::popover` — floating panel.
+- Drag-and-drop — `DragPayload` + `beginDrag`/`dropMatches`/`endDrag` + `dragGhost`
+  (retained `widgets::dragGhostOverlay`), `paint::drawDragGhost`.
+- `commandPalette(id, items, count, query, size)` + retained
+  `widgets::commandPalette` — searchable command list.
+
 ## Idioms
 
 - **State is yours.** Keep widget values in your app's state (members, or
