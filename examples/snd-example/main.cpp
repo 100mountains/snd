@@ -1246,6 +1246,28 @@ static bool selftestRetainedUi()
     const auto* hit = tree.hitTest({10.0f, frontNode ? frontNode->bounds().y + 1.0f : 65.0f});
     ok = ok && hit && hit->id() == "overlay.front";
 
+    auto overlayPriorityRoot = r::Node::make("overlay-priority.root");
+    r::Layout overlayPriorityLayout;
+    overlayPriorityLayout.kind = r::LayoutKind::Stack;
+    overlayPriorityRoot->setLayout(overlayPriorityLayout);
+    auto earlyBranch = r::Node::make("overlay-priority.early");
+    earlyBranch->setLayout(overlayPriorityLayout);
+    earlyBranch->setSize(r::Length::fill(), r::Length::fill());
+    auto popup = r::Node::make("overlay-priority.popup", r::Role::Menu);
+    popup->setSize(r::Length::fill(), r::Length::fill());
+    popup->setOverlay(true);
+    earlyBranch->addChild(std::move(popup));
+    auto laterContent = r::Node::make("overlay-priority.content", r::Role::Button);
+    laterContent->setSize(r::Length::fill(), r::Length::fill());
+    overlayPriorityRoot->addChild(std::move(earlyBranch));
+    overlayPriorityRoot->addChild(std::move(laterContent));
+    r::Tree overlayPriorityTree(std::move(overlayPriorityRoot));
+    overlayPriorityTree.layout({100.0f, 40.0f});
+    const auto* overlayHit = overlayPriorityTree.hitTest({50.0f, 20.0f});
+    const bool overlayPriorityOk =
+        overlayHit && overlayHit->id() == "overlay-priority.popup";
+    ok = ok && overlayPriorityOk;
+
     auto semantics = tree.semanticSnapshot();
     auto findSem = [&](const char* id) -> const r::SemanticNode* {
         auto it = std::find_if(semantics.begin(), semantics.end(),
@@ -2149,13 +2171,13 @@ static bool selftestRetainedUi()
                "wheel=%d ctx=%d outline=%d menu=%d dropdown=%d context=%d "
                "graphSel=%d graphAct=%d graphCtx=%d graphView=%d "
                "graphPreview=%d graphConnect=%d graphChecks=%d recording=%d "
-               "semantics=%zu)\n",
+               "overlay=%d semantics=%zu)\n",
                activated, gain, customEvents, rightClickEvents,
                doubleClickEvents, wheelEvents, contextEvents, outlineActivated,
                menuActivated, dropdownActivated, contextOpens,
                graphSelects, graphActivates, graphContexts, graphViewportChanges,
                graphPreviews, graphConnects, graphConnectionChecks, recordingOk,
-               semantics.size());
+               overlayPriorityOk, semantics.size());
     return ok;
 }
 

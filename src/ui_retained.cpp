@@ -4,6 +4,7 @@
 #include <cmath>
 #include <set>
 #include <utility>
+#include <vector>
 
 namespace snd::ui::retained {
 
@@ -799,6 +800,54 @@ bool Node::perform(Action action, double value)
     return true;
 }
 
+namespace {
+
+void collectOverlayRoots(const Node& node, std::vector<const Node*>& out)
+{
+    if (!node.visible())
+        return;
+
+    for (const auto& child : node.children()) {
+        if (!child->visible())
+            continue;
+        if (child->overlay())
+            out.push_back(child.get());
+        else
+            collectOverlayRoots(*child, out);
+    }
+}
+
+const Node* hitTestMainSubtree(const Node& node, Vec2 point)
+{
+    if (!node.visible())
+        return nullptr;
+
+    const bool scrollGated = node.scroll() && !node.bounds().contains(point);
+    for (auto it = node.children().rbegin(); it != node.children().rend(); ++it) {
+        if ((*it)->overlay() || scrollGated)
+            continue;
+        if (const Node* hit = hitTestMainSubtree(**it, point))
+            return hit;
+    }
+    return node.bounds().contains(point) ? &node : nullptr;
+}
+
+const Node* hitTestInPaintOrder(const Node& root, Vec2 point)
+{
+    std::vector<const Node*> overlays;
+    collectOverlayRoots(root, overlays);
+    for (std::size_t index = 0; index < overlays.size(); ++index)
+        collectOverlayRoots(*overlays[index], overlays);
+
+    for (auto it = overlays.rbegin(); it != overlays.rend(); ++it)
+        if (const Node* hit = hitTestMainSubtree(**it, point))
+            return hit;
+
+    return hitTestMainSubtree(root, point);
+}
+
+} // namespace
+
 Node* Node::hitTest(Vec2 point)
 {
     return const_cast<Node*>(static_cast<const Node*>(this)->hitTest(point));
@@ -806,25 +855,7 @@ Node* Node::hitTest(Vec2 point)
 
 const Node* Node::hitTest(Vec2 point) const
 {
-    if (!visible_)
-        return nullptr;
-
-    // A scroll container clips its content: non-overlay children scrolled out
-    // of the view must not grab hits outside the view rect. Test them only
-    // when the point is inside this node (overlays stay reachable below).
-    const bool scrollGated = scroll_ && !bounds_.contains(point);
-
-    // Children are consulted regardless of this node's own rect: overlay
-    // subtrees (popups, flyout submenus) are translated outside their
-    // parent's bounds by design and must stay hittable.
-    for (auto it = children_.rbegin(); it != children_.rend(); ++it) {
-        if (scrollGated && !(*it)->overlay())
-            continue;
-        if (const Node* hit = (*it)->hitTest(point))
-            return hit;
-    }
-
-    return bounds_.contains(point) ? this : nullptr;
+    return hitTestInPaintOrder(*this, point);
 }
 
 void Node::markDirty()
