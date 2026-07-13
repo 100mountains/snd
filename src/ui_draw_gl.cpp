@@ -377,10 +377,12 @@ std::vector<Vec2> OpenGLSurface::roundedRectPath(Vec2 mn, Vec2 mx,
         return pts;
     }
 
-    auto addArc = [&](Vec2 center, float a0, float a1, bool enabled) {
+    // A disabled corner is square: emit the true rectangle corner, not a point
+    // on the inset arc circle (which would sit r away from the corner and slant
+    // the adjoining edges).
+    auto addArc = [&](Vec2 center, float a0, float a1, bool enabled, Vec2 sharp) {
         if (!enabled) {
-            pts.push_back({center.x + std::cos(a1) * r,
-                           center.y + std::sin(a1) * r});
+            pts.push_back(sharp);
             return;
         }
         const int seg = std::max(3, (int)std::ceil(r * 0.45f));
@@ -393,13 +395,13 @@ std::vector<Vec2> OpenGLSurface::roundedRectPath(Vec2 mn, Vec2 mx,
     };
 
     addArc({mx.x - r, mn.y + r}, -kPi * 0.5f, 0.0f,
-           (corners & kRoundCornerTopRight) != 0);
+           (corners & kRoundCornerTopRight) != 0, {mx.x, mn.y});
     addArc({mx.x - r, mx.y - r}, 0.0f, kPi * 0.5f,
-           (corners & kRoundCornerBottomRight) != 0);
+           (corners & kRoundCornerBottomRight) != 0, {mx.x, mx.y});
     addArc({mn.x + r, mx.y - r}, kPi * 0.5f, kPi,
-           (corners & kRoundCornerBottomLeft) != 0);
+           (corners & kRoundCornerBottomLeft) != 0, {mn.x, mx.y});
     addArc({mn.x + r, mn.y + r}, kPi, kPi * 1.5f,
-           (corners & kRoundCornerTopLeft) != 0);
+           (corners & kRoundCornerTopLeft) != 0, {mn.x, mn.y});
     return pts;
 }
 
