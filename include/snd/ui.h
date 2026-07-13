@@ -392,6 +392,10 @@ bool fader(const char* id, float* value, const ImVec2& size);
 bool rangeSlider(const char* id, float* lo, float* hi, float minV, float maxV,
                  const ImVec2& size);
 
+// Progress bar (display only), progress 0..1. Pass a negative progress for an
+// indeterminate animated sweep.
+void progressBar(const char* id, float progress, const ImVec2& size);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

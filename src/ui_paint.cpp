@@ -913,6 +913,42 @@ void drawRangeSlider(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                     hi, pal, state, activeHandle);
 }
 
+void drawProgressBar(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float progress, const Palette& pal, bool indeterminate,
+                     double timeSeconds)
+{
+    const float r = std::min(size.y * 0.5f, 4.0f);
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, pal.frame, r);
+    surface.strokeRect(topLeft, br, pal.frameBright, r);
+    if (indeterminate) {
+        const float w = std::max(8.0f, size.x * 0.3f);
+        const float travel = size.x + w;
+        const float x =
+            (float)std::fmod(timeSeconds * (double)travel * 0.6, (double)travel) - w;
+        const float x0 = std::clamp(topLeft.x + x, topLeft.x, br.x);
+        const float x1 = std::clamp(topLeft.x + x + w, topLeft.x, br.x);
+        if (x1 > x0 + 0.5f)
+            surface.fillRect({x0, topLeft.y}, {x1, br.y}, pal.accent, r);
+    } else {
+        progress = std::clamp(progress, 0.0f, 1.0f);
+        if (progress > 0.0f)
+            surface.fillRect(topLeft, {topLeft.x + size.x * progress, br.y},
+                             pal.accent, r);
+    }
+}
+
+void drawProgressBar(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float progress, const Palette& pal, bool indeterminate,
+                     double timeSeconds)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawProgressBar(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size),
+                    progress, pal, indeterminate, timeSeconds);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

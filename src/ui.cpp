@@ -887,6 +887,17 @@ bool rangeSlider(const char* id, float* lo, float* hi, float minV, float maxV,
     return changed;
 }
 
+void progressBar(const char* id, float progress, const ImVec2& size)
+{
+    (void)id;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 sz =
+        (size.x > 0.0f && size.y > 0.0f) ? size : ImVec2(160.0f, 10.0f);
+    ImGui::Dummy(sz);
+    paint::drawProgressBar(ImGui::GetWindowDrawList(), p, sz, progress, palette(),
+                           progress < 0.0f, ImGui::GetTime());
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

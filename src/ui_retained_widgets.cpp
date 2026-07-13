@@ -4460,6 +4460,37 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr progressBar(NodeId id, std::string name, ValueBinding progress,
+                      PaintRenderer* renderer, Vec2 size)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::Meter);
+    node->setIntrinsicSize(size);
+    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setSemantics(named(Role::Meter, std::move(name)));
+    if (renderer) {
+        auto paint = [progress](draw::Surface& s, Rect b, double t) {
+            const float p = (float)progress.get();
+            paint::drawProgressBar(s, topLeftDraw(b), {b.w, b.h}, p, palette(),
+                                   p < 0.0f, t);
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext& ctx) {
+            paint(s, b, ctx.timeSeconds);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b, ImGui::GetTime());
+        };
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr splitter(NodeId id, std::string name, ValueBinding binding,
                    bool horizontal, bool invert, PaintRenderer* renderer,
                    float thickness)

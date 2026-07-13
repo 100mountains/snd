@@ -373,6 +373,15 @@ void drawRangeSlider(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      float lo, float hi, const Palette& pal,
                      const ControlState& state, int activeHandle = -1);
 
+// Progress bar: an accent fill (0..1 of the width) over a track. indeterminate
+// ignores progress and sweeps a chip driven by timeSeconds.
+void drawProgressBar(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                     float progress, const Palette& pal,
+                     bool indeterminate = false, double timeSeconds = 0.0);
+void drawProgressBar(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                     float progress, const Palette& pal,
+                     bool indeterminate = false, double timeSeconds = 0.0);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

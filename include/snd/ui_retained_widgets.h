@@ -540,6 +540,12 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
                       ValueBinding hi, PaintRenderer* renderer = nullptr,
                       Vec2 size = {140.0f, 20.0f});
 
+// Progress bar (display only). progress.get() in 0..1; a negative value renders
+// an indeterminate animated sweep. Exposes Meter semantics.
+Node::Ptr progressBar(NodeId id, std::string name, ValueBinding progress,
+                      PaintRenderer* renderer = nullptr,
+                      Vec2 size = {160.0f, 10.0f});
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,
