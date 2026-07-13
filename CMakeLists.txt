@@ -362,3 +362,11 @@ target_compile_definitions(snd-example PRIVATE
     SND_TEST_DEMOSYNTH_PATH="${CMAKE_BINARY_DIR}/DemoSynth.vst3"
     SND_TEST_DEMOSYNTH_AU_BIN="${CMAKE_BINARY_DIR}/DemoSynth.component/Contents/MacOS/DemoSynth"
 )
+
+# Headless widget-gallery renderer: draws each SND widget through the real
+# OpenGLSurface into an offscreen FBO and dumps RGBA (encoded to PNG by
+# tools/widget-shots/encode.py) for the website gallery. Reaches into the
+# private src/ GL backend headers, so add src/ to its include path.
+add_executable(snd-widget-shots tools/widget-shots/main.cpp)
+target_link_libraries(snd-widget-shots PRIVATE snd)
+target_include_directories(snd-widget-shots PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

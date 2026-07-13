@@ -224,13 +224,13 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Knobs</h2><span class="tag">paint::drawKnob · KnobStyle</span></div>
       <p class="desc">Five hardware-oriented styles. <b>Ring</b> / <b>Seq</b> — the sequencer ring (Seq has flat, square-capped ends and no thumb dot). <b>Synth</b> — flat dished disc + track ring + value arc + pointer tick. <b>Davies</b> — moulded cap with a full tick ring. <b>NxD</b> — the scalloped case that rotates with the value, with a tick ring and bold pointer. <b class="try">Drag any knob up / down.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="ring"    width="72" height="72"></canvas><div class="cellcap">Ring</div></div>
-        <div class="unit"><canvas class="cv live" data-w="seq"     width="72" height="72"></canvas><div class="cellcap">Seq · square ends</div></div>
-        <div class="unit"><canvas class="cv live" data-w="synth"   width="72" height="72"></canvas><div class="cellcap">Synth</div></div>
-        <div class="unit"><canvas class="cv live" data-w="davies"  width="72" height="72"></canvas><div class="cellcap">Davies</div></div>
-        <div class="unit"><canvas class="cv live" data-w="nxd"     width="72" height="72"></canvas><div class="cellcap">NxD · scalloped</div></div>
-        <div class="unit"><canvas class="cv live" data-w="ringbi"  width="72" height="72"></canvas><div class="cellcap">Ring · bipolar</div></div>
-        <div class="unit"><canvas class="cv"      data-w="ringdis" width="72" height="72"></canvas><div class="cellcap">disabled</div></div>
+        <div class="unit"><img class="cv" src="widgets/ring.png" width="72" height="72" alt="ring" loading="lazy"><div class="cellcap">Ring</div></div>
+        <div class="unit"><img class="cv" src="widgets/seq.png" width="72" height="72" alt="seq" loading="lazy"><div class="cellcap">Seq · square ends</div></div>
+        <div class="unit"><img class="cv" src="widgets/synth.png" width="72" height="72" alt="synth" loading="lazy"><div class="cellcap">Synth</div></div>
+        <div class="unit"><img class="cv" src="widgets/davies.png" width="72" height="72" alt="davies" loading="lazy"><div class="cellcap">Davies</div></div>
+        <div class="unit"><img class="cv" src="widgets/nxd.png" width="72" height="72" alt="nxd" loading="lazy"><div class="cellcap">NxD · scalloped</div></div>
+        <div class="unit"><img class="cv" src="widgets/ringbi.png" width="72" height="72" alt="ringbi" loading="lazy"><div class="cellcap">Ring · bipolar</div></div>
+        <div class="unit"><img class="cv" src="widgets/ringdis.png" width="72" height="72" alt="ringdis" loading="lazy"><div class="cellcap">disabled</div></div>
       </div>
     </section>
 
@@ -238,9 +238,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Knob modulation ring</h2><span class="tag">paint::drawKnobModRing · KnobMod</span></div>
       <p class="desc">A second thin arc shows modulation depth from the value; the dot is the live modulated position. SND draws the overlay after any body — built-in styles <b>or custom painters</b> — then the focus ring, so modulated knobs keep one shared look. <b class="try">Drag the knobs — the LFO keeps riding the new value.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="modknob"  width="72" height="72"></canvas><div class="cellcap">Ring · depth +0.30</div></div>
-        <div class="unit"><canvas class="cv live" data-w="modknob2" width="72" height="72"></canvas><div class="cellcap">Davies · depth −0.25</div></div>
-        <div class="unit"><canvas class="cv live" data-w="modknob3" width="72" height="72"></canvas><div class="cellcap">custom painter + mod</div></div>
+        <div class="unit"><img class="cv" src="widgets/modknob.png" width="72" height="72" alt="modknob" loading="lazy"><div class="cellcap">Ring · depth +0.30</div></div>
+        <div class="unit"><img class="cv" src="widgets/modknob2.png" width="72" height="72" alt="modknob2" loading="lazy"><div class="cellcap">Davies · depth −0.25</div></div>
+        <div class="unit"><img class="cv" src="widgets/modknob3.png" width="72" height="72" alt="modknob3" loading="lazy"><div class="cellcap">custom painter + mod</div></div>
       </div>
     </section>
 
@@ -248,8 +248,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Randomise window</h2><span class="tag">paint::drawKnobWindow · drawComboWindow · KnobWindow</span></div>
       <p class="desc">Randomise fences: every control carries an independent <code style="color:var(--dim)">{lo, hi, locked}</code> window — an arc with <b>two separately grabbable end dots</b> over knobs, an index bracket under combos, and a padlock when locked out of RND. Draw + hit-test live in SND; the overlay mode and drag state stay with the caller. <b class="try">Drag an end dot (up / down on the knob, along the bracket on the combo) — click without dragging to lock.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="ghostk" width="86" height="86"></canvas><div class="cellcap">knob window · Seq ring</div></div>
-        <div class="unit"><canvas class="cv live" data-w="ghostc" width="150" height="46"></canvas><div class="cellcap">combo bracket</div></div>
+        <div class="unit"><img class="cv" src="widgets/ghostk.png" width="86" height="86" alt="ghostk" loading="lazy"><div class="cellcap">knob window · Seq ring</div></div>
+        <div class="unit"><img class="cv" src="widgets/ghostc.png" width="150" height="46" alt="ghostc" loading="lazy"><div class="cellcap">combo bracket</div></div>
       </div>
     </section>
 
@@ -257,10 +257,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Fader</h2><span class="tag">paint::drawFader</span></div>
       <p class="desc">Channel fader — centre rail, accent fill below the cap, cap brightens while grabbed. <b class="try">Drag a cap up / down — hold ⇧&nbsp;Shift for 10× fine.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="fader0" width="30" height="120"></canvas></div>
-        <div class="unit"><canvas class="cv live" data-w="fader1" width="30" height="120"></canvas></div>
-        <div class="unit"><canvas class="cv live" data-w="fader2" width="30" height="120"></canvas></div>
-        <div class="unit"><canvas class="cv live" data-w="fader3" width="30" height="120"></canvas></div>
+        <div class="unit"><img class="cv" src="widgets/fader0.png" width="30" height="120" alt="fader0" loading="lazy"></div>
+        <div class="unit"><img class="cv" src="widgets/fader1.png" width="30" height="120" alt="fader1" loading="lazy"></div>
+        <div class="unit"><img class="cv" src="widgets/fader2.png" width="30" height="120" alt="fader2" loading="lazy"></div>
+        <div class="unit"><img class="cv" src="widgets/fader3.png" width="30" height="120" alt="fader3" loading="lazy"></div>
       </div>
     </section>
 
@@ -268,9 +268,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Toggle</h2><span class="tag">paint::drawToggle</span></div>
       <p class="desc">Sliding switch; the track lerps to the accent as the nub travels. <b class="try">Click to flip.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="toggle"    width="46" height="24"></canvas></div>
-        <div class="unit"><canvas class="cv live" data-w="toggleon"  width="46" height="24"></canvas></div>
-        <div class="unit"><canvas class="cv live" data-w="toggleoff" width="46" height="24"></canvas></div>
+        <div class="unit"><img class="cv" src="widgets/toggle.png" width="46" height="24" alt="toggle" loading="lazy"></div>
+        <div class="unit"><img class="cv" src="widgets/toggleon.png" width="46" height="24" alt="toggleon" loading="lazy"></div>
+        <div class="unit"><img class="cv" src="widgets/toggleoff.png" width="46" height="24" alt="toggleoff" loading="lazy"></div>
       </div>
     </section>
 
@@ -317,9 +317,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Segmented</h2><span class="tag">snd::ui::segmented · paint::drawSegmented</span></div>
       <p class="desc">A pill group of mutually exclusive options — mono/stereo, filter slope, A/B. One selection; Left/Right arrows move it when focused; equal-width segments sized to the widest label. <b class="try">Click a segment.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="seg"    width="216" height="26"></canvas><div class="cellcap">3 options</div></div>
-        <div class="unit"><canvas class="cv live" data-w="segab"  width="110" height="26"></canvas><div class="cellcap">A / B</div></div>
-        <div class="unit"><canvas class="cv"      data-w="segdis" width="216" height="26"></canvas><div class="cellcap">disabled</div></div>
+        <div class="unit"><img class="cv" src="widgets/seg.png" width="216" height="26" alt="seg" loading="lazy"><div class="cellcap">3 options</div></div>
+        <div class="unit"><img class="cv" src="widgets/segab.png" width="110" height="26" alt="segab" loading="lazy"><div class="cellcap">A / B</div></div>
+        <div class="unit"><img class="cv" src="widgets/segdis.png" width="216" height="26" alt="segdis" loading="lazy"><div class="cellcap">disabled</div></div>
       </div>
     </section>
 
@@ -327,8 +327,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Cycle button</h2><span class="tag">snd::ui::cycleButton · paint::drawCycleButton</span></div>
       <p class="desc">A multi-state value button: click cycles the enum in place, right-click steps back — one control, no dropdown. Pips mark the position in the cycle, and the button is sized to the widest option so nothing jumps. <b class="try">Click / right-click.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="cyc"  width="110" height="26"></canvas><div class="cellcap">filter slope</div></div>
-        <div class="unit"><canvas class="cv live" data-w="cyc2" width="74"  height="26"></canvas><div class="cellcap">rate multiplier</div></div>
+        <div class="unit"><img class="cv" src="widgets/cyc.png" width="110" height="26" alt="cyc" loading="lazy"><div class="cellcap">filter slope</div></div>
+        <div class="unit"><img class="cv" src="widgets/cyc2.png" width="74" height="26" alt="cyc2" loading="lazy"><div class="cellcap">rate multiplier</div></div>
       </div>
     </section>
 
@@ -339,10 +339,10 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="rack">
         <div class="statecol"><button class="genbtn">GENERATE</button><div class="cellcap">animatedButton</div></div>
         <div class="statecol"><button class="custombtn"><span>RENDER</span></button><div class="cellcap">custom ButtonPainter</div></div>
-        <div class="unit"><canvas class="cv live" data-w="custom" width="72" height="72"></canvas><div class="cellcap">custom KnobPainter</div></div>
-        <div class="unit"><canvas class="cv live" data-w="gradknob" width="72" height="72"></canvas><div class="cellcap">gradient-arc painter</div></div>
-        <div class="unit"><canvas class="cv live" data-w="velgrid" width="240" height="96"></canvas><div class="cellcap">PatternCellPainter · velocity</div></div>
-        <div class="unit"><canvas class="cv live" data-w="puck" width="96" height="96"></canvas><div class="cellcap">XYPadPainter · puck map</div></div>
+        <div class="unit"><img class="cv" src="widgets/custom.png" width="72" height="72" alt="custom" loading="lazy"><div class="cellcap">custom KnobPainter</div></div>
+        <div class="unit"><img class="cv" src="widgets/gradknob.png" width="72" height="72" alt="gradknob" loading="lazy"><div class="cellcap">gradient-arc painter</div></div>
+        <div class="unit"><img class="cv" src="widgets/velgrid.png" width="240" height="96" alt="velgrid" loading="lazy"><div class="cellcap">PatternCellPainter · velocity</div></div>
+        <div class="unit"><img class="cv" src="widgets/puck.png" width="96" height="96" alt="puck" loading="lazy"><div class="cellcap">XYPadPainter · puck map</div></div>
       </div>
     </section>
 
@@ -362,9 +362,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>LED button</h2><span class="tag">snd::ui::ledButton · paint::drawLedButton</span></div>
       <p class="desc">The tactile key with an integrated status ring — record-arm, input monitor, transport latches. Latched buttons hold the inset face with the ring lit in the accent; <b>arm</b> pulses while pending. <b class="try">Click to latch / release.</b></p>
       <div class="rack">
-        <div class="statecol"><canvas class="cv live" data-w="ledrec" width="46" height="40"></canvas><div class="cellcap">record · latched</div></div>
-        <div class="statecol"><canvas class="cv live" data-w="ledarm" width="46" height="40"></canvas><div class="cellcap">arm · blinking</div></div>
-        <div class="statecol"><canvas class="cv live" data-w="ledmon" width="46" height="40"></canvas><div class="cellcap">monitor · off</div></div>
+        <div class="statecol"><img class="cv" src="widgets/ledrec.png" width="46" height="40" alt="ledrec" loading="lazy"><div class="cellcap">record · latched</div></div>
+        <div class="statecol"><img class="cv" src="widgets/ledarm.png" width="46" height="40" alt="ledarm" loading="lazy"><div class="cellcap">arm · blinking</div></div>
+        <div class="statecol"><img class="cv" src="widgets/ledmon.png" width="46" height="40" alt="ledmon" loading="lazy"><div class="cellcap">monitor · off</div></div>
       </div>
     </section>
 
@@ -372,9 +372,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>LED</h2><span class="tag">paint::drawLed</span></div>
       <p class="desc">Status lamp with a soft bloom when lit. <b class="try">Click to toggle.</b></p>
       <div class="rack">
-        <div class="unit"><canvas class="cv live" data-w="ledblink" width="34" height="34"></canvas><div class="cellcap">signal</div></div>
-        <div class="unit"><canvas class="cv live" data-w="ledon"    width="34" height="34"></canvas><div class="cellcap">on</div></div>
-        <div class="unit"><canvas class="cv live" data-w="ledoff"   width="34" height="34"></canvas><div class="cellcap">off</div></div>
+        <div class="unit"><img class="cv" src="widgets/ledblink.png" width="34" height="34" alt="ledblink" loading="lazy"><div class="cellcap">signal</div></div>
+        <div class="unit"><img class="cv" src="widgets/ledon.png" width="34" height="34" alt="ledon" loading="lazy"><div class="cellcap">on</div></div>
+        <div class="unit"><img class="cv" src="widgets/ledoff.png" width="34" height="34" alt="ledoff" loading="lazy"><div class="cellcap">off</div></div>
       </div>
     </section>
 
@@ -382,9 +382,9 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Meter</h2><span class="tag">paint::drawMeter</span></div>
       <p class="desc">Peak meter with the classic green / amber / red hardware zones and a peak-hold line. Vertical and horizontal — <b>this is the one that runs on its own</b>, on simulated program material.</p>
       <div class="rack">
-        <div class="unit"><canvas class="cv" data-w="meterL" width="12" height="120"></canvas><div class="cellcap">L</div></div>
-        <div class="unit"><canvas class="cv" data-w="meterR" width="12" height="120"></canvas><div class="cellcap">R</div></div>
-        <div class="unit" style="align-self:center"><canvas class="cv" data-w="meterH" width="220" height="14"></canvas><div class="cellcap">bus · horizontal</div></div>
+        <div class="unit"><img class="cv" src="widgets/meterL.png" width="12" height="120" alt="meterL" loading="lazy"><div class="cellcap">L</div></div>
+        <div class="unit"><img class="cv" src="widgets/meterR.png" width="12" height="120" alt="meterR" loading="lazy"><div class="cellcap">R</div></div>
+        <div class="unit" style="align-self:center"><img class="cv" src="widgets/meterH.png" width="220" height="14" alt="meterH" loading="lazy"><div class="cellcap">bus · horizontal</div></div>
       </div>
     </section>
 
@@ -395,7 +395,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
         <span class="badge">aGooey</span>
         <span class="badge">VST3</span>
         <span class="badge">MIDI</span>
-        <div style="flex:1;min-width:180px"><canvas class="cv" data-w="header" width="260" height="20"></canvas></div>
+        <div style="flex:1;min-width:180px"><img class="cv" src="widgets/header.png" width="260" height="20" alt="header" loading="lazy"></div>
       </div>
     </section>
 
@@ -427,33 +427,33 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     <section id="grid">
       <div class="sechead"><h2>Pattern grid</h2><span class="tag">paint::drawPatternGrid</span></div>
       <p class="desc">Step sequencer grid — lit cells in the accent, a checkered off-state on the beat. <b class="try">Click cells to toggle steps.</b></p>
-      <div class="rack"><canvas class="cv live" data-w="grid" width="360" height="120"></canvas></div>
+      <div class="rack"><img class="cv" src="widgets/grid.png" width="360" height="120" alt="grid" loading="lazy"></div>
     </section>
 
     <section id="xy">
       <div class="sechead"><h2>XY pad</h2><span class="tag">paint::drawXYPad</span></div>
       <p class="desc">Two-axis control with a cross-hair and a lit handle. <b class="try">Drag anywhere in the pad.</b></p>
-      <div class="rack"><canvas class="cv live" data-w="xy" width="150" height="150"></canvas></div>
+      <div class="rack"><img class="cv" src="widgets/xy.png" width="150" height="150" alt="xy" loading="lazy"></div>
     </section>
 
 
     <section id="envelope">
       <div class="sechead"><h2>Envelope / Canvas</h2><span class="tag">paint::drawEnvelope · retained Canvas</span></div>
       <p class="desc">Breakpoint curves use the shared envelope painter. In retained mode this is the shape of a Canvas-backed editor: the node owns layout, focus, hit and semantic space while custom drawing owns the pixels. <b class="try">Drag a point.</b></p>
-      <div class="rack"><canvas class="cv live" data-w="env" width="360" height="150"></canvas></div>
+      <div class="rack"><img class="cv" src="widgets/env.png" width="360" height="150" alt="env" loading="lazy"></div>
     </section>
 
     <section id="keys">
       <div class="sechead"><h2>Keyboard</h2><span class="tag">paint::drawKeyboard</span></div>
       <p class="desc">Playable range — white and black keys light in the accent. <b class="try">Click / drag across the keys to play.</b></p>
-      <div class="rack"><canvas class="cv live" data-w="keys" width="420" height="80"></canvas></div>
+      <div class="rack"><img class="cv" src="widgets/keys.png" width="420" height="80" alt="keys" loading="lazy"></div>
     </section>
 
     <section id="matrix">
       <div class="sechead"><h2>Sequencer matrix</h2><span class="tag">MatrixGridGeometry · SequencerMatrix · GhostFence</span></div>
       <p class="desc">Retained audio-editor primitives for sequencers and table editors: shared matrix geometry, continuous bars, gate cells, route cells, band spans, playhead, selections, drag preview, help labels, and pass-through ghost fences. <b class="try">Drag rows in the matrix.</b></p>
       <div class="rack" style="flex-direction:column;align-items:stretch">
-        <canvas class="cv live" data-w="matrix" width="520" height="152"></canvas>
+        <img class="cv" src="widgets/matrix.png" width="520" height="152" alt="matrix" loading="lazy">
         <div class="matrixnotes">
           <div class="feature"><b>Measured geometry</b><p>One object returns row, gutter, cell, and playhead rects for paint, hit-test, and semantics.</p></div>
           <div class="feature"><b>Row policies</b><p>Continuous bars interpolate across skipped columns; gate and route rows drag-paint.</p></div>
@@ -539,8 +539,8 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="sechead"><h2>Graph surface</h2><span class="tag">widgets::graphSurface · drawGraphGrid · drawCable · drawModuleBox</span></div>
       <p class="desc">Retained graph surfaces own pan/zoom, grid/backdrop, selection, cables, module chrome, ports, hit regions, anchored context menus, keyboard traversal, and virtual semantic children. The caller owns graph data and mutations.</p>
       <div class="rack graphwrap">
-        <div class="unit"><canvas class="cv live" data-w="graphNeo" width="360" height="190"></canvas><div class="cellcap">Neo skin · grid backdrop · cable preview</div></div>
-        <div class="unit"><canvas class="cv live" data-w="graphAurora" width="360" height="190"></canvas><div class="cellcap">Aurora backdrop · selected module · ports</div></div>
+        <div class="unit"><img class="cv" src="widgets/graphNeo.png" width="360" height="190" alt="graphNeo" loading="lazy"><div class="cellcap">Neo skin · grid backdrop · cable preview</div></div>
+        <div class="unit"><img class="cv" src="widgets/graphAurora.png" width="360" height="190" alt="graphAurora" loading="lazy"><div class="cellcap">Aurora backdrop · selected module · ports</div></div>
       </div>
     </section>
 
@@ -583,15 +583,15 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
       <div class="rack" style="flex-direction:column;align-items:stretch;gap:14px">
         <div class="cellcap" style="text-align:left;margin:0">SND vector icon buttons · <code>snd::ui::Icon</code></div>
         <div class="vectorgrid">
-          <div class="unit"><canvas class="cv" data-w="viPlay" width="38" height="38"></canvas><div class="cellcap">Icon::Play</div></div>
-          <div class="unit"><canvas class="cv" data-w="viStop" width="38" height="38"></canvas><div class="cellcap">Icon::Stop</div></div>
-          <div class="unit"><canvas class="cv" data-w="viRecord" width="38" height="38"></canvas><div class="cellcap">Icon::Record</div></div>
-          <div class="unit"><canvas class="cv" data-w="viStart" width="38" height="38"></canvas><div class="cellcap">Icon::SkipToStart</div></div>
-          <div class="unit"><canvas class="cv" data-w="viEnd" width="38" height="38"></canvas><div class="cellcap">Icon::SkipToEnd</div></div>
-          <div class="unit"><canvas class="cv" data-w="viLoop" width="38" height="38"></canvas><div class="cellcap">Icon::Loop</div></div>
-          <div class="unit"><canvas class="cv" data-w="viWaveform" width="38" height="38"></canvas><div class="cellcap">Icon::Waveform</div></div>
-          <div class="unit"><canvas class="cv" data-w="viSpectrum" width="38" height="38"></canvas><div class="cellcap">Icon::Spectrum</div></div>
-          <div class="unit"><canvas class="cv" data-w="viFollow" width="38" height="38"></canvas><div class="cellcap">Icon::Follow</div></div>
+          <div class="unit"><img class="cv" src="widgets/viPlay.png" width="38" height="38" alt="viPlay" loading="lazy"><div class="cellcap">Icon::Play</div></div>
+          <div class="unit"><img class="cv" src="widgets/viStop.png" width="38" height="38" alt="viStop" loading="lazy"><div class="cellcap">Icon::Stop</div></div>
+          <div class="unit"><img class="cv" src="widgets/viRecord.png" width="38" height="38" alt="viRecord" loading="lazy"><div class="cellcap">Icon::Record</div></div>
+          <div class="unit"><img class="cv" src="widgets/viStart.png" width="38" height="38" alt="viStart" loading="lazy"><div class="cellcap">Icon::SkipToStart</div></div>
+          <div class="unit"><img class="cv" src="widgets/viEnd.png" width="38" height="38" alt="viEnd" loading="lazy"><div class="cellcap">Icon::SkipToEnd</div></div>
+          <div class="unit"><img class="cv" src="widgets/viLoop.png" width="38" height="38" alt="viLoop" loading="lazy"><div class="cellcap">Icon::Loop</div></div>
+          <div class="unit"><img class="cv" src="widgets/viWaveform.png" width="38" height="38" alt="viWaveform" loading="lazy"><div class="cellcap">Icon::Waveform</div></div>
+          <div class="unit"><img class="cv" src="widgets/viSpectrum.png" width="38" height="38" alt="viSpectrum" loading="lazy"><div class="cellcap">Icon::Spectrum</div></div>
+          <div class="unit"><img class="cv" src="widgets/viFollow.png" width="38" height="38" alt="viFollow" loading="lazy"><div class="cellcap">Icon::Follow</div></div>
         </div>
         <div class="iconbar">
           <input id="iconSearch" type="search" placeholder="Search icons, e.g. play, volume, settings, U+e037" aria-label="Search icons">
@@ -1234,7 +1234,7 @@ canvas.live:hover{outline-color:color-mix(in srgb,var(--accent),transparent 55%)
     tw.forEach(function(k){var s=S[k];if(Math.abs(s.anim-s.v)>0.001){s.anim+=(s.v-s.anim)*0.25;drawOne(byK[k]);}else if(s.anim!==s.v){s.anim=s.v;drawOne(byK[k]);}});
     requestAnimationFrame(loop);
   }
-  if(!reduce) requestAnimationFrame(loop);
+  if(!reduce && cvs.length) requestAnimationFrame(loop);
 
   // accent switch -> re-theme + repaint every canvas
   var root=document.documentElement;
