@@ -1180,6 +1180,36 @@ void drawColorPicker(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                     s, v, pal);
 }
 
+void drawToast(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+               draw::Vec2 topLeft, draw::Vec2 size, const char* text,
+               const Palette& pal, float alpha)
+{
+    const uint32_t a = (uint32_t)(std::clamp(alpha, 0.0f, 1.0f) * 255.0f);
+    if (a == 0)
+        return;
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, withAlpha(pal.frameBright, (a * 235) / 255),
+                     4.0f);
+    surface.strokeRect(topLeft, br, withAlpha(pal.accent, a), 4.0f);
+    if (text && text[0] && fontSizePx > 0.0f) {
+        const draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
+        surface.text(font, fontSizePx,
+                     {topLeft.x + 10.0f, topLeft.y + (size.y - ts.y) * 0.5f},
+                     withAlpha(pal.text, a), text);
+    }
+}
+
+void drawToast(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+               const ImVec2& size, const char* text, const Palette& pal,
+               float alpha)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawToast(surface, draw::fontRef(font), ImGui::GetFontSize(),
+              draw::toDrawVec2(topLeft), draw::toDrawVec2(size), text, pal, alpha);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

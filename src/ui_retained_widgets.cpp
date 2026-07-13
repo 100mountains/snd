@@ -4460,6 +4460,52 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr toastOverlay(NodeId id, ToastStack& stack, PaintRenderer* renderer)
+{
+    NodeId sid = id;
+    auto node = Node::make(std::move(id), Role::None);
+    node->setSize(Length::fill(), Length::fill());
+    ToastStack* sp = &stack;
+    if (renderer) {
+        auto paint = [sp](draw::Surface& s, Rect b, draw::FontRef font, float fpx,
+                          double now) {
+            sp->items.erase(std::remove_if(sp->items.begin(), sp->items.end(),
+                                           [now](const ToastStack::Item& it) {
+                                               return now >= it.expiry;
+                                           }),
+                            sp->items.end());
+            const float w = 240.0f, hgt = 30.0f, gap = 6.0f;
+            float y = b.y + b.h - 12.0f - hgt;
+            for (auto it = sp->items.rbegin(); it != sp->items.rend(); ++it) {
+                const double life = it->expiry - now;
+                const float fadeIn =
+                    (float)std::clamp((now - it->bornAt) / 0.25, 0.0, 1.0);
+                const float fadeOut = (float)std::clamp(life / 0.4, 0.0, 1.0);
+                const float alpha = std::min(fadeIn, fadeOut);
+                paint::drawToast(s, font, fpx, {b.x + b.w - 12.0f - w, y},
+                                 {w, hgt}, it->text.c_str(), palette(), alpha);
+                y -= (hgt + gap);
+            }
+        };
+        VisualStyle style;
+        style.kind = VisualKind::Canvas;
+        style.canvasSurfaceDraw = [paint](draw::Surface& s, const Node&, Rect b,
+                                          const paint::ControlState&,
+                                          const draw::FrameContext& ctx) {
+            paint(s, b, ctx.font, ctx.fontSizePx, ctx.timeSeconds);
+        };
+        style.canvasDraw = [paint](ImDrawList& dl, const Node&, Rect b,
+                                   const paint::ControlState&) {
+            draw::ImGuiSurface s(&dl);
+            paint(s, b, draw::fontRef(ImGui::GetFont()), ImGui::GetFontSize(),
+                  ImGui::GetTime());
+        };
+        renderer->setStyle(sid, style);
+    }
+    node->setOverlay(true);
+    return node;
+}
+
 Node::Ptr colorPicker(NodeId id, std::string name, HsvSource hsv,
                       std::function<void()> onChange, PaintRenderer* renderer,
                       Vec2 size)

@@ -585,6 +585,12 @@ Node::Ptr colorPicker(NodeId id, std::string name, HsvSource hsv,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {180.0f, 160.0f});
 
+// Retained toast overlay: a fill node that draws + prunes `stack` (caller-owned,
+// must outlive the tree) at its bottom-right each frame. Place it last / as an
+// overlay so toasts sit on top.
+Node::Ptr toastOverlay(NodeId id, ToastStack& stack,
+                       PaintRenderer* renderer = nullptr);
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

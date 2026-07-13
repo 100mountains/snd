@@ -429,6 +429,23 @@ bool automationLane(const char* id, std::vector<AutoPoint>& points,
 bool colorPicker(const char* id, float* h, float* s, float* v,
                  const ImVec2& size);
 
+// Transient notification stack (caller-owned). Toast display is a mode-specific
+// system: pushToast() queues a message; the immediate toasts() driver or the
+// retained toastOverlay() draws + prunes them, both via paint::drawToast.
+struct ToastStack {
+    struct Item {
+        std::string text;
+        double bornAt = 0.0;
+        double expiry = 0.0;
+    };
+    std::vector<Item> items;
+};
+void pushToast(ToastStack& stack, std::string text, double now,
+               double seconds = 2.5);
+// Draw + prune the stack, stacked upward from anchorBottomRight, fading in/out,
+// on the ImGui foreground list. Pass ImGui::GetTime() for `now`.
+void toasts(ToastStack& stack, const ImVec2& anchorBottomRight, double now);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

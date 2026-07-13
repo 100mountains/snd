@@ -430,6 +430,15 @@ void drawColorPicker(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size
 void drawColorPicker(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
                      float h, float s, float v, const Palette& pal);
 
+// One toast panel: a filled rounded rect + accent border + left-aligned text,
+// all multiplied by `alpha` (0..1) for fade in/out.
+void drawToast(draw::Surface& surface, draw::FontRef font, float fontSizePx,
+               draw::Vec2 topLeft, draw::Vec2 size, const char* text,
+               const Palette& pal, float alpha);
+void drawToast(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
+               const ImVec2& size, const char* text, const Palette& pal,
+               float alpha);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,

@@ -1065,6 +1065,35 @@ bool colorPicker(const char* id, float* h, float* s, float* v,
     return changed;
 }
 
+void pushToast(ToastStack& stack, std::string text, double now, double seconds)
+{
+    stack.items.push_back({std::move(text), now, now + seconds});
+}
+
+void toasts(ToastStack& stack, const ImVec2& anchorBottomRight, double now)
+{
+    stack.items.erase(
+        std::remove_if(stack.items.begin(), stack.items.end(),
+                       [now](const ToastStack::Item& it) {
+                           return now >= it.expiry;
+                       }),
+        stack.items.end());
+    if (stack.items.empty())
+        return;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    const float w = 240.0f, hgt = 30.0f, gap = 6.0f;
+    float y = anchorBottomRight.y - hgt;
+    for (auto it = stack.items.rbegin(); it != stack.items.rend(); ++it) {
+        const double life = it->expiry - now;
+        const float fadeIn = (float)std::clamp((now - it->bornAt) / 0.25, 0.0, 1.0);
+        const float fadeOut = (float)std::clamp(life / 0.4, 0.0, 1.0);
+        const float alpha = std::min(fadeIn, fadeOut);
+        paint::drawToast(dl, ImGui::GetFont(), ImVec2(anchorBottomRight.x - w, y),
+                         ImVec2(w, hgt), it->text.c_str(), palette(), alpha);
+        y -= (hgt + gap);
+    }
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])
