@@ -1094,6 +1094,14 @@ void toasts(ToastStack& stack, const ImVec2& anchorBottomRight, double now)
     }
 }
 
+void popover(const char* id, const ImVec2& topLeft, const ImVec2& size,
+             float beakCenterX, bool beakOnTop)
+{
+    (void)id;
+    paint::drawPopover(ImGui::GetForegroundDrawList(), topLeft, size, palette(),
+                       beakCenterX, beakOnTop);
+}
+
 void tooltip(const char* text, float maxWidth)
 {
     if (!text || !text[0])

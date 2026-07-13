@@ -446,6 +446,11 @@ void pushToast(ToastStack& stack, std::string text, double now,
 // on the ImGui foreground list. Pass ImGui::GetTime() for `now`.
 void toasts(ToastStack& stack, const ImVec2& anchorBottomRight, double now);
 
+// Draw a popover frame (rounded panel + optional beak) on the foreground list
+// at topLeft; the caller draws content inside. Mode-specific display helper.
+void popover(const char* id, const ImVec2& topLeft, const ImVec2& size,
+             float beakCenterX = -1.0f, bool beakOnTop = false);
+
 // Small rounded tag ("VST3", "48k"...). fill 0 = translucent accent.
 void badge(const char* text, ImU32 fill = 0);
 

@@ -591,6 +591,12 @@ Node::Ptr colorPicker(NodeId id, std::string name, HsvSource hsv,
 Node::Ptr toastOverlay(NodeId id, ToastStack& stack,
                        PaintRenderer* renderer = nullptr);
 
+// Retained popover: a bordered floating panel container (add content children,
+// position it as an overlay near its anchor). The paint beak lives in
+// paint::drawPopover for custom frames.
+Node::Ptr popover(NodeId id, Layout inner = {}, Insets padding = {},
+                  PaintRenderer* renderer = nullptr);
+
 // A draggable divider between panes. Dragging (or Left/Right/Up/Down while
 // focused) writes the bound value — the adjacent pane's width (horizontal
 // splitter bar, dragged along X) or height — clamped to [binding.min,

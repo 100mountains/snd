@@ -4460,6 +4460,21 @@ Node::Ptr rangeSlider(NodeId id, std::string name, ValueBinding lo,
     return node;
 }
 
+Node::Ptr popover(NodeId id, Layout inner, Insets padding,
+                  PaintRenderer* renderer)
+{
+    NodeId sid = id;
+    auto node = panel(std::move(id), inner, padding);
+    if (renderer) {
+        VisualStyle style;
+        style.kind = VisualKind::Panel;
+        style.panelFill = true;
+        style.panelBorder = true;
+        renderer->setStyle(sid, style);
+    }
+    return node;
+}
+
 Node::Ptr toastOverlay(NodeId id, ToastStack& stack, PaintRenderer* renderer)
 {
     NodeId sid = id;

@@ -1210,6 +1210,35 @@ void drawToast(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
               draw::toDrawVec2(topLeft), draw::toDrawVec2(size), text, pal, alpha);
 }
 
+void drawPopover(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                 const Palette& pal, float beakCenterX, bool beakOnTop)
+{
+    const float r = 5.0f;
+    const draw::Vec2 br{topLeft.x + size.x, topLeft.y + size.y};
+    surface.fillRect(topLeft, br, pal.frame, r);
+    surface.strokeRect(topLeft, br, pal.frameBright, r);
+    if (beakCenterX >= 0.0f) {
+        const float bx = topLeft.x + std::clamp(beakCenterX, 0.0f, size.x);
+        const float bs = 6.0f;
+        const float edgeY = beakOnTop ? topLeft.y : br.y;
+        const float tipY = beakOnTop ? topLeft.y - bs : br.y + bs;
+        surface.fillTriangle({bx - bs, edgeY}, {bx + bs, edgeY}, {bx, tipY},
+                             pal.frame);
+        surface.line({bx - bs, edgeY}, {bx, tipY}, pal.frameBright, 1.0f);
+        surface.line({bx + bs, edgeY}, {bx, tipY}, pal.frameBright, 1.0f);
+    }
+}
+
+void drawPopover(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                 const Palette& pal, float beakCenterX, bool beakOnTop)
+{
+    if (!dl)
+        return;
+    draw::ImGuiSurface surface(dl);
+    drawPopover(surface, draw::toDrawVec2(topLeft), draw::toDrawVec2(size), pal,
+                beakCenterX, beakOnTop);
+}
+
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
                const char* text, float fontSize, ImU32 fill,
                const Palette& pal)

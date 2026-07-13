@@ -439,6 +439,16 @@ void drawToast(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
                const ImVec2& size, const char* text, const Palette& pal,
                float alpha);
 
+// Popover frame: a rounded panel + border with an optional beak (triangle) at
+// x-offset beakCenterX from topLeft.x, on the top edge (beakOnTop) or bottom.
+// beakCenterX < 0 = no beak. The caller draws content inside.
+void drawPopover(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
+                 const Palette& pal, float beakCenterX = -1.0f,
+                 bool beakOnTop = false);
+void drawPopover(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
+                 const Palette& pal, float beakCenterX = -1.0f,
+                 bool beakOnTop = false);
+
 void drawBadge(ImDrawList* dl, ImFont* font, const ImVec2& topLeft, const char* text,
                float fontSize, ImU32 fill, const Palette& pal);
 void drawBadge(draw::Surface& surface, draw::FontRef font, draw::Vec2 topLeft,
