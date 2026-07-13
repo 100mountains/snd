@@ -3086,153 +3086,557 @@ int main(int argc, char** argv)
     device.start();
 
     snd::ui::Window window;
-    if (!window.create(800, 600, "SND")) {
+    if (!window.create(1180, 800, "SND \xc2\xb7 aGooey UI toolkit")) {
         fprintf(stderr, "Failed to create window\n");
         return 1;
     }
+    window.setClearColor(IM_COL32(16, 17, 22, 255));
 
     while (!window.shouldClose()) {
         if (!window.beginFrame())
             break;
 
-        ImGui::Begin("SND");
-        ImGui::Text("snd::audio device: %s", device.name().c_str());
-        ImGui::Text("This example consumes only snd:: APIs.");
-        snd::ui::gradientPanel(ImVec2(260, 40),
-                               IM_COL32(90, 60, 160, 255), IM_COL32(60, 120, 200, 255),
-                               IM_COL32(30, 30, 60, 255), IM_COL32(60, 30, 90, 255));
-        if (snd::ui::gradientButton("gradient button", ImVec2(260, 32),
-                                    IM_COL32(70, 70, 90, 255), IM_COL32(35, 35, 50, 255)))
-            printf("clicked\n");
-        ImGui::End();
+        // ---------------------------------------------------------------------
+        // Showcase shell: a left grouped nav + a scrolling content pane, mirroring
+        // the form of site/index.html. Every section shows the real widget SND
+        // draws (immediate widgets where they exist; paint-layer helpers for the
+        // graph/render-surface/randomise-window overlays).
+        // ---------------------------------------------------------------------
+        enum Sec {
+            SEC_Knobs, SEC_ModRing, SEC_Ghost, SEC_Fader, SEC_Toggle, SEC_Buttons,
+            SEC_Transport, SEC_Segmented, SEC_Cycle, SEC_Custom, SEC_Tactile,
+            SEC_LedBtn, SEC_Led, SEC_Meter, SEC_Badge, SEC_List, SEC_ValueRow,
+            SEC_Grid, SEC_Matrix, SEC_Xy, SEC_Env, SEC_Keys, SEC_Surface, SEC_Menus,
+            SEC_Dialogs, SEC_Graph, SEC_Fields, SEC_Scroll, SEC_Icons,
+        };
+        int navTarget = -1;
 
-        // the audio widget set, all in one place
-        static float drive = 0.5f, mix = 0.3f, gainDb = -6.0f, fad = 0.8f;
-        static bool live = true, power = true;
-        static snd::ui::MeterState msV, msH;
-        ImGui::Begin("SND Widgets");
-        snd::ui::sectionHeader("knobs");
-        snd::ui::knob("drive", &drive);
-        ImGui::SameLine();
-        snd::ui::knob("mix", &mix);
-        ImGui::SameLine();
-        snd::ui::knobDb("gain", &gainDb, -60.0f, 12.0f);
-        snd::ui::sectionHeader("styled knobs (davies / seq-ring)");
-        static float kcut = 0.6f, ktune = 0.0f, kstr = 0.75f, kpan = -0.3f;
-        snd::ui::knob("CUTOFF", &kcut, 0.0f, 1.0f, snd::ui::KnobStyle::Davies);
-        ImGui::SameLine();
-        snd::ui::knob("TUNE", &ktune, -1.0f, 1.0f, snd::ui::KnobStyle::Davies, 0.0f,
-                      "%+.2f", true);
-        ImGui::SameLine();
-        snd::ui::knob("STRENGTH", &kstr, 0.0f, 1.0f, snd::ui::KnobStyle::Ring);
-        ImGui::SameLine();
-        snd::ui::knob("PAN", &kpan, -1.0f, 1.0f, snd::ui::KnobStyle::Ring, 0.0f, "%+.2f",
-                      true);
-        snd::ui::sectionHeader("icons (material + lucide, tactile buttons)");
-        snd::ui::iconButton("g_set", ICON_MD_SETTINGS);
-        ImGui::SameLine();
-        snd::ui::iconButton("g_play", ICON_MD_PLAY_ARROW);
-        ImGui::SameLine();
-        snd::ui::iconButton("g_fold", ICON_MD_FOLDER);
-        ImGui::SameLine();
-        static bool gpow = true; // toggled = held inset look
-        if (snd::ui::iconButton("g_pow", ICON_MD_POWER_SETTINGS_NEW, ImVec2(0, 0), nullptr, gpow))
-            gpow = !gpow;
-        ImGui::SameLine();
-        snd::ui::iconButton("g_acc", ICON_MD_GRAPHIC_EQ, ImVec2(0, 0), nullptr, false,
-                            IM_COL32(0x2e, 0x6d, 0xb4, 255)); // themed face
-        ImGui::SameLine();
-        snd::ui::iconButton("g_lc", ICON_LC_SETTINGS, ImVec2(0, 0), snd::ui::iconFontLucide());
-        ImGui::SameLine();
-        ImGui::TextUnformatted(ICON_MD_INFO " inline");
-        snd::ui::sectionHeader("switches");
-        snd::ui::toggle("live", &live);
-        ImGui::SameLine();
-        if (snd::ui::led("pwr", power, 6.0f, true))
-            power = !power;
-        ImGui::SameLine();
-        snd::ui::badge("VST3");
-        ImGui::SameLine();
-        snd::ui::badge("48k");
-        snd::ui::sectionHeader("audio widgets");
-        static bool cells[4 * 16] = {};
-        static int step = 0;
-        step = (step + 1) % (16 * 8);
-        snd::ui::patternGrid("grid", cells, 4, 16, ImVec2(320, 72), step / 8);
-        static std::vector<snd::ui::EnvPoint> env;
-        snd::ui::envelopeEditor("env", env, ImVec2(200, 80));
-        ImGui::SameLine();
-        static float px = 0.5f, py = 0.5f;
-        snd::ui::xyPad("xy", &px, &py, ImVec2(80, 80));
-        static snd::ui::KeyboardState kbst;
-        snd::ui::keyboard("kb", kbst, ImVec2(320, 60), 48, 2,
-                          [](uint8_t, uint8_t) {}, [](uint8_t) {});
-        static float dn = 0.3f;
-        snd::ui::dragNumber("drag me", &dn, 0.01f, 0.0f, 1.0f);
-        snd::ui::sectionHeader("levels");
-        float sig = power ? fad * (0.55f + 0.45f * (float)std::sin(ImGui::GetTime() * 3.0))
-                          : 0.0f;
-        snd::ui::fader("fad", &fad, ImVec2(26, 120));
-        ImGui::SameLine();
-        snd::ui::meter("mv", msV, sig, ImVec2(10, 120));
-        snd::ui::meter("mh", msH, sig, ImVec2(220, 8));
+        const snd::ui::Palette& pal = snd::ui::palette();
+        ImU32 dim = pal.textDim;
+        ImFont* font = ImGui::GetFont();
+        const double t = ImGui::GetTime();
 
-        snd::ui::sectionHeader("new primitives");
-        static float rsLo = 0.2f, rsHi = 0.7f;
-        snd::ui::rangeSlider("rs", &rsLo, &rsHi, 0.0f, 1.0f, ImVec2(220, 20));
-        static float prog = 0.0f;
-        prog = std::fmod(prog + 0.004f, 1.0f);
-        snd::ui::progressBar("pg", prog, ImVec2(220, 10));
-        static float ph = 0.6f, ps = 0.8f, pv = 0.9f;
-        snd::ui::colorPicker("cp", &ph, &ps, &pv, ImVec2(150, 120));
-        ImGui::SameLine();
-        static std::vector<float> wave;
-        if (wave.empty()) {
-            wave.resize(512);
-            for (size_t i = 0; i < wave.size(); ++i)
-                wave[i] = std::sin((float)i * 0.06f) * 0.8f;
-        }
-        snd::ui::waveformView("wv", wave.data(), (int)wave.size(),
-                              ImVec2(210, 55),
-                              std::fmod((float)ImGui::GetTime() * 0.1f, 1.0f));
-        static std::vector<float> spec;
-        if (spec.empty()) {
-            spec.resize(48);
-            for (size_t i = 0; i < spec.size(); ++i)
-                spec[i] = 0.2f + 0.6f * std::fabs(std::sin((float)i * 0.3f));
-        }
-        snd::ui::spectrumView("sp", spec.data(), (int)spec.size(), ImVec2(220, 55));
-        snd::ui::timelineRuler("tl", 0.0, 16.0, 4.0, ImVec2(320, 20),
-                               std::fmod((float)ImGui::GetTime() * 0.05f, 1.0f));
-        static std::vector<snd::ui::AutoPoint> autp;
-        if (autp.empty())
-            autp = {{0.0f, 0.5f}, {0.4f, 0.8f}, {0.8f, 0.2f}};
-        snd::ui::automationLane("al", autp, ImVec2(320, 70));
-        static snd::ui::TableModel tm;
-        if (tm.headers.empty()) {
-            tm.headers = {"Name", "Val"};
-            tm.colWidths = {120.0f, 80.0f};
-            tm.rows = 20;
-            tm.cell = [](int r, int c) {
-                return c == 0 ? ("Row " + std::to_string(r)) : std::to_string(r * 3);
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowSize(vp->WorkSize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        ImGui::Begin("root", nullptr,
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                         ImGuiWindowFlags_NoBringToFrontOnFocus |
+                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::PopStyleVar();
+
+        // ---- nav sidebar ----
+        ImGui::BeginChild("nav", ImVec2(196.0f, 0.0f), true);
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, pal.accent);
+            ImGui::TextUnformatted("SND");
+            ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_Text, dim);
+            ImGui::TextUnformatted("UI toolkit");
+            ImGui::PopStyleColor();
+            ImGui::Separator();
+
+            auto navGroup = [&](const char* g) {
+                ImGui::Dummy(ImVec2(0.0f, 4.0f));
+                ImGui::PushStyleColor(ImGuiCol_Text, dim);
+                ImGui::TextUnformatted(g);
+                ImGui::PopStyleColor();
             };
+            auto navLink = [&](int id, const char* label) {
+                if (ImGui::Selectable(label))
+                    navTarget = id;
+            };
+            navGroup("Controls");
+            navLink(SEC_Knobs, "Knobs");
+            navLink(SEC_ModRing, "Knob mod ring");
+            navLink(SEC_Ghost, "Randomise window");
+            navLink(SEC_Fader, "Fader");
+            navLink(SEC_Toggle, "Toggle");
+            navLink(SEC_Buttons, "Buttons");
+            navLink(SEC_Transport, "Transport");
+            navLink(SEC_Segmented, "Segmented");
+            navLink(SEC_Cycle, "Cycle button");
+            navLink(SEC_Custom, "Animated / custom");
+            navLink(SEC_Tactile, "Tactile key");
+            navLink(SEC_LedBtn, "LED button");
+            navGroup("Indicators");
+            navLink(SEC_Led, "LED");
+            navLink(SEC_Meter, "Meter");
+            navLink(SEC_Badge, "Badge / header");
+            navLink(SEC_List, "List item");
+            navLink(SEC_ValueRow, "Value row");
+            navGroup("Instruments");
+            navLink(SEC_Grid, "Pattern grid");
+            navLink(SEC_Matrix, "Sequencer matrix");
+            navLink(SEC_Xy, "XY pad");
+            navLink(SEC_Env, "Envelope");
+            navLink(SEC_Keys, "Keyboard");
+            navGroup("aGooey");
+            navLink(SEC_Surface, "Render surface");
+            navLink(SEC_Menus, "Menus");
+            navLink(SEC_Dialogs, "Modal dialogs");
+            navLink(SEC_Graph, "Graph surface");
+            navLink(SEC_Fields, "Text field");
+            navLink(SEC_Scroll, "Scroll / splitter");
+            navGroup("Assets");
+            navLink(SEC_Icons, "Icon catalogue");
         }
-        static int tsel = 0;
-        tsel = snd::ui::table("tbl", tm, ImVec2(210, 110), tsel);
+        ImGui::EndChild();
         ImGui::SameLine();
-        static snd::ui::CommandItem cmds[] = {
-            {"Open", "open"}, {"Save", "save"}, {"Close", "close"}, {"Quit", "quit"}};
-        static std::string cq;
-        snd::ui::commandPalette("cmd", cmds, 4, cq, ImVec2(210, 110));
-        static snd::ui::ToastStack toastStack;
-        if (snd::ui::outlineButton("toast me", ImVec2(80, 22)))
-            snd::ui::pushToast(toastStack, "Preset saved", ImGui::GetTime());
-        snd::ui::toasts(toastStack,
-                        ImVec2(ImGui::GetWindowPos().x + ImGui::GetWindowWidth() - 12.0f,
-                               ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 12.0f),
-                        ImGui::GetTime());
 
-        ImGui::End();
+        // ---- content ----
+        ImGui::BeginChild("content", ImVec2(0.0f, 0.0f), false);
+        ImGui::Indent(20.0f);
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        auto section = [&](int id, const char* title, const char* tag) {
+            ImGui::Dummy(ImVec2(0.0f, 18.0f));
+            if (navTarget == id)
+                ImGui::SetScrollHereY(0.0f);
+            snd::ui::sectionHeader(title);
+            ImGui::PushStyleColor(ImGuiCol_Text, dim);
+            ImGui::TextUnformatted(tag);
+            ImGui::PopStyleColor();
+            ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        };
+
+        // hero
+        ImGui::PushStyleColor(ImGuiCol_Text, dim);
+        ImGui::TextUnformatted("SND \xc2\xb7 COMPONENT LIBRARY");
+        ImGui::PopStyleColor();
+        ImGui::SetWindowFontScale(1.7f);
+        ImGui::TextUnformatted("The aGooey UI toolkit");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 680.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, dim);
+        ImGui::TextUnformatted(
+            "Every graphic SND draws \xe2\x80\x94 knobs, faders, meters, LEDs, tactile keys, "
+            "menus, modal dialogs, graph nodes, a keyboard, an XY pad, a step grid \xe2\x80\x94 "
+            "from the same shared paint vocabulary behind snd::ui::retained, Dear ImGui, "
+            "and the renderer-neutral draw::Surface path. Drag the knobs & faders "
+            "(hold Shift for fine adjust).");
+        ImGui::PopStyleColor();
+        ImGui::PopTextWrapPos();
+        ImGui::PushStyleColor(ImGuiCol_Text, dim);
+        ImGui::Text("snd::audio device: %s \xc2\xb7 this example consumes only snd:: APIs",
+                    device.name().c_str());
+        ImGui::PopStyleColor();
+
+        // ---- Controls ----
+        section(SEC_Knobs, "Knobs", "paint::drawKnob \xc2\xb7 KnobStyle");
+        {
+            static float kr = 0.4f, ks = 0.6f, ksy = 0.5f, kd = 0.7f, kn = 0.35f, kb = -0.2f;
+            snd::ui::knob("Ring", &kr, 0.0f, 1.0f, snd::ui::KnobStyle::Ring);
+            ImGui::SameLine();
+            snd::ui::knob("Seq", &ks, 0.0f, 1.0f, snd::ui::KnobStyle::Seq);
+            ImGui::SameLine();
+            snd::ui::knob("Synth", &ksy, 0.0f, 1.0f, snd::ui::KnobStyle::Synth);
+            ImGui::SameLine();
+            snd::ui::knob("Davies", &kd, 0.0f, 1.0f, snd::ui::KnobStyle::Davies);
+            ImGui::SameLine();
+            snd::ui::knob("NxD", &kn, 0.0f, 1.0f, snd::ui::KnobStyle::Nxd);
+            ImGui::SameLine();
+            snd::ui::knob("Bipolar", &kb, -1.0f, 1.0f, snd::ui::KnobStyle::Ring, 0.0f,
+                          "%+.2f", true);
+        }
+
+        section(SEC_ModRing, "Knob modulation ring", "paint::drawKnobModRing");
+        {
+            static float km = 0.5f;
+            snd::ui::KnobMod mod;
+            mod.depth = 0.28f;
+            mod.value = 0.5f + 0.28f * (float)std::sin(t * 1.5);
+            snd::ui::knob("DEPTH", &km, 0.0f, 1.0f, snd::ui::KnobStyle::Synth, mod);
+        }
+
+        section(SEC_Ghost, "Randomise window", "paint::drawKnobWindow (ghost fence)");
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            snd::ui::paint::ControlState st;
+            const float sz = 64.0f;
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            snd::ui::paint::drawKnob(dl, p, sz, 0.55f, snd::ui::KnobStyle::Davies, pal, st);
+            snd::ui::paint::KnobWindow win;
+            win.lo = 0.30f;
+            win.hi = 0.80f;
+            snd::ui::paint::drawKnobWindow(dl, p, sz, win, pal);
+            ImGui::Dummy(ImVec2(sz + 18.0f, sz + 20.0f));
+            ImGui::SameLine();
+            ImVec2 p2 = ImGui::GetCursorScreenPos();
+            snd::ui::paint::drawKnob(dl, p2, sz, 0.40f, snd::ui::KnobStyle::Davies, pal, st);
+            snd::ui::paint::KnobWindow win2;
+            win2.lo = 0.15f;
+            win2.hi = 0.55f;
+            win2.locked = true;
+            snd::ui::paint::drawKnobWindow(dl, p2, sz, win2, pal);
+            ImGui::Dummy(ImVec2(sz + 18.0f, sz + 20.0f));
+        }
+
+        section(SEC_Fader, "Fader", "paint::drawFader");
+        {
+            static float fv = 0.7f, fv2 = 0.45f;
+            snd::ui::fader("f1", &fv, ImVec2(26.0f, 120.0f));
+            ImGui::SameLine();
+            snd::ui::fader("f2", &fv2, ImVec2(26.0f, 120.0f));
+        }
+
+        section(SEC_Toggle, "Toggle", "paint::drawToggle \xc2\xb7 drawCheckbox");
+        {
+            static bool tg1 = true, tg2 = false, cb1 = true;
+            snd::ui::toggle("Live", &tg1);
+            ImGui::SameLine();
+            snd::ui::toggle("Mono", &tg2);
+            ImGui::SameLine();
+            snd::ui::checkbox("Loop", &cb1);
+        }
+
+        section(SEC_Buttons, "Buttons", "gradient \xc2\xb7 animated \xc2\xb7 outline");
+        {
+            snd::ui::gradientButton("Gradient", ImVec2(120.0f, 30.0f),
+                                    IM_COL32(70, 70, 90, 255), IM_COL32(35, 35, 50, 255));
+            ImGui::SameLine();
+            snd::ui::animatedButton("Generate", ImVec2(120.0f, 30.0f));
+            ImGui::SameLine();
+            snd::ui::outlineButton("Outline", ImVec2(120.0f, 30.0f));
+        }
+
+        section(SEC_Transport, "Transport buttons", "paint::drawTransportButton");
+        {
+            static bool playing = false, looping = false, armed = false;
+            using I = snd::ui::Icon;
+            ImVec2 tb(38.0f, 22.0f);
+            snd::ui::transportButton("t_start", I::SkipToStart, tb);
+            ImGui::SameLine();
+            if (snd::ui::transportButton("t_play", I::Play, tb, playing, true))
+                playing = !playing;
+            ImGui::SameLine();
+            if (snd::ui::transportButton("t_stop", I::Stop, tb, false, true))
+                playing = false;
+            ImGui::SameLine();
+            if (snd::ui::transportButton("t_rec", I::Record, tb, armed, true))
+                armed = !armed;
+            ImGui::SameLine();
+            snd::ui::transportButton("t_end", I::SkipToEnd, tb);
+            ImGui::SameLine();
+            if (snd::ui::transportButton("t_loop", I::Loop, tb, looping, true))
+                looping = !looping;
+        }
+
+        section(SEC_Segmented, "Segmented", "paint::drawSegmented \xc2\xb7 drawTabBar");
+        {
+            static int seg = 1, tab = 0;
+            const char* segs[] = {"Mono", "Stereo", "M/S"};
+            snd::ui::segmented("seg", segs, 3, &seg);
+            ImGui::SameLine();
+            const char* tabs[] = {"Edit", "Mix", "FX"};
+            snd::ui::tabBar("tabs", tabs, 3, &tab);
+        }
+
+        section(SEC_Cycle, "Cycle button", "paint::drawCycleButton");
+        {
+            static int cyc = 0;
+            const char* rates[] = {"1/4", "1/8", "1/16", "1/32"};
+            snd::ui::cycleButton("cyc", rates, 4, &cyc);
+        }
+
+        section(SEC_Custom, "Animated & custom paint", "paint::drawButtonWithPainter");
+        {
+            snd::ui::animatedButton("Randomise", ImVec2(130.0f, 30.0f),
+                                    IM_COL32(120, 60, 160, 255), IM_COL32(60, 30, 90, 255));
+            ImGui::SameLine();
+            snd::ui::button("Custom", ImVec2(130.0f, 30.0f),
+                            [](const snd::ui::paint::ButtonPaintArgs& a) {
+                                ImVec2 mx(a.topLeft.x + a.size.x, a.topLeft.y + a.size.y);
+                                snd::ui::paint::drawGradientRect(a.drawList, a.topLeft, mx,
+                                                                 IM_COL32(240, 190, 90, 255),
+                                                                 IM_COL32(180, 110, 40, 255),
+                                                                 6.0f);
+                                if (a.font)
+                                    a.drawList->AddText(a.font, ImGui::GetFontSize(),
+                                                        ImVec2(a.topLeft.x + 16.0f,
+                                                               a.topLeft.y + 7.0f),
+                                                        IM_COL32(30, 25, 10, 255), a.text);
+                            });
+        }
+
+        section(SEC_Tactile, "Tactile key", "paint::drawTactileIconButton");
+        {
+            snd::ui::iconButton("tk_set", ICON_MD_SETTINGS);
+            ImGui::SameLine();
+            snd::ui::iconButton("tk_play", ICON_MD_PLAY_ARROW);
+            ImGui::SameLine();
+            snd::ui::iconButton("tk_save", ICON_MD_SAVE);
+            ImGui::SameLine();
+            static bool held = true;
+            if (snd::ui::iconButton("tk_pow", ICON_MD_POWER_SETTINGS_NEW, ImVec2(0, 0),
+                                    nullptr, held))
+                held = !held;
+            ImGui::SameLine();
+            snd::ui::iconButton("tk_eq", ICON_MD_GRAPHIC_EQ, ImVec2(0, 0), nullptr, false,
+                                IM_COL32(0x2e, 0x6d, 0xb4, 255));
+        }
+
+        section(SEC_LedBtn, "LED button", "paint::drawLedButton");
+        {
+            static bool armRec = false, mon = true, solo = false;
+            snd::ui::ledButton("lb_rec", ICON_MD_MIC, &armRec, armRec);
+            ImGui::SameLine();
+            snd::ui::ledButton("lb_mon", ICON_MD_HEADPHONES, &mon);
+            ImGui::SameLine();
+            snd::ui::ledButton("lb_solo", ICON_MD_STAR, &solo, false, ImVec2(0, 0), nullptr,
+                               IM_COL32(240, 190, 90, 255));
+        }
+
+        // ---- Indicators ----
+        section(SEC_Led, "LED", "paint::drawLed");
+        {
+            static bool l1 = true, l2 = true, l3 = false;
+            if (snd::ui::led("led1", l1, 6.0f, true))
+                l1 = !l1;
+            ImGui::SameLine();
+            if (snd::ui::led("led2", l2, 6.0f, true, IM_COL32(80, 220, 120, 255)))
+                l2 = !l2;
+            ImGui::SameLine();
+            if (snd::ui::led("led3", l3, 6.0f, true, IM_COL32(255, 80, 70, 255)))
+                l3 = !l3;
+        }
+
+        section(SEC_Meter, "Meter", "paint::drawMeter");
+        {
+            static snd::ui::MeterState mv, mh;
+            float sig = 0.5f + 0.45f * (float)std::sin(t * 3.0);
+            snd::ui::meter("mv", mv, sig, ImVec2(12.0f, 120.0f));
+            ImGui::SameLine();
+            snd::ui::meter("mh", mh, sig, ImVec2(240.0f, 12.0f));
+        }
+
+        section(SEC_Badge, "Badge & section header", "paint::drawBadge \xc2\xb7 drawSectionHeader");
+        {
+            snd::ui::badge("VST3");
+            ImGui::SameLine();
+            snd::ui::badge("AU");
+            ImGui::SameLine();
+            snd::ui::badge("48k");
+            ImGui::SameLine();
+            snd::ui::badge("MIDI", IM_COL32(80, 220, 120, 120));
+        }
+
+        section(SEC_List, "List item", "paint::drawListItem");
+        {
+            static std::vector<std::string> items = {"Kick", "Snare", "Hat",
+                                                     "Clap", "Rim",   "Tom"};
+            static int sel = 0;
+            snd::ui::selectableList("list", items, &sel, ImVec2(200.0f, 120.0f));
+        }
+
+        section(SEC_ValueRow, "Value row & drag number", "paint::drawValueRow");
+        {
+            static float g = -6.0f, tempo = 120.0f, mixv = 0.3f;
+            snd::ui::dragNumber("Gain dB", &g, 0.1f, -60.0f, 12.0f, "%.1f");
+            snd::ui::dragNumber("Tempo", &tempo, 0.5f, 20.0f, 300.0f, "%.0f");
+            snd::ui::dragNumber("Mix", &mixv, 0.005f, 0.0f, 1.0f);
+        }
+
+        // ---- Instruments ----
+        section(SEC_Grid, "Pattern grid", "paint::drawPatternGrid");
+        {
+            static bool cells[4 * 16] = {};
+            static bool seeded = false;
+            if (!seeded) {
+                for (int i = 0; i < 16; i += 4)
+                    cells[i] = true;
+                seeded = true;
+            }
+            int step = (int)(t * 4.0) % 16;
+            snd::ui::patternGrid("grid", cells, 4, 16, ImVec2(360.0f, 88.0f), step);
+        }
+
+        section(SEC_Matrix, "Sequencer matrix", "paint::drawPatternGrid (multi-row)");
+        {
+            static bool mcells[8 * 16] = {};
+            int step = (int)(t * 4.0) % 16;
+            snd::ui::patternGrid("matrix", mcells, 8, 16, ImVec2(360.0f, 150.0f), step);
+        }
+
+        section(SEC_Xy, "XY pad", "paint::drawXYPad");
+        {
+            static float px = 0.5f, py = 0.5f;
+            snd::ui::xyPad("xy", &px, &py, ImVec2(140.0f, 140.0f));
+        }
+
+        section(SEC_Env, "Envelope / Canvas", "paint::drawEnvelope");
+        {
+            static std::vector<snd::ui::EnvPoint> env = {
+                {0.0f, 0.0f}, {0.3f, 1.0f}, {0.7f, 0.4f}, {1.0f, 0.0f}};
+            snd::ui::envelopeEditor("env", env, ImVec2(280.0f, 120.0f));
+        }
+
+        section(SEC_Keys, "Keyboard", "paint::drawKeyboard");
+        {
+            static snd::ui::KeyboardState kb;
+            snd::ui::keyboard("kb", kb, ImVec2(360.0f, 80.0f), 48, 2,
+                              [](uint8_t, uint8_t) {}, [](uint8_t) {});
+        }
+
+        // ---- aGooey ----
+        section(SEC_Surface, "aGooey render surface", "draw::Surface (paint vocabulary)");
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            snd::ui::paint::ControlState st;
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImVec2 sz(360.0f, 120.0f);
+            dl->PushClipRect(p, ImVec2(p.x + sz.x, p.y + sz.y), true);
+            snd::ui::paint::drawGradientPanel(dl, p, sz, IM_COL32(40, 44, 60, 255),
+                                              IM_COL32(30, 34, 48, 255),
+                                              IM_COL32(22, 24, 34, 255),
+                                              IM_COL32(34, 30, 46, 255));
+            snd::ui::paint::drawKnob(dl, ImVec2(p.x + 24.0f, p.y + 30.0f), 56.0f, 0.62f,
+                                     snd::ui::KnobStyle::Synth, pal, st);
+            snd::ui::paint::drawMeter(dl, ImVec2(p.x + 100.0f, p.y + 24.0f),
+                                      ImVec2(12.0f, 72.0f), 0.6f, 0.85f, -48.0f, pal);
+            static float wav[128];
+            for (int i = 0; i < 128; ++i)
+                wav[i] = 0.8f * (float)std::sin(i * 0.2f + t);
+            snd::ui::paint::drawWaveform(dl, ImVec2(p.x + 132.0f, p.y + 20.0f),
+                                         ImVec2(206.0f, 80.0f), wav, 128, pal);
+            dl->PopClipRect();
+            ImGui::Dummy(sz);
+        }
+
+        section(SEC_Menus, "Menus", "paint::drawMenuPanel \xc2\xb7 drawMenuItem");
+        {
+            static const char* waves[] = {"Sine", "Saw", "Square", "Noise"};
+            static int msel = 0;
+            std::vector<snd::ui::MenuItem> items;
+            for (int i = 0; i < 4; ++i) {
+                snd::ui::MenuItem m;
+                m.id = waves[i];
+                m.label = waves[i];
+                items.push_back(m);
+            }
+            snd::ui::dropdownMenu("wave", waves[msel], items, &msel, ImVec2(150.0f, 28.0f));
+        }
+
+        section(SEC_Dialogs, "Modal dialogs", "ImGui modal + outlineButton");
+        {
+            if (snd::ui::outlineButton("Delete module\xe2\x80\xa6", ImVec2(150.0f, 28.0f)))
+                ImGui::OpenPopup("delmod");
+            if (ImGui::BeginPopupModal("delmod", nullptr,
+                                       ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextUnformatted("Delete module?");
+                ImGui::PushStyleColor(ImGuiCol_Text, dim);
+                ImGui::TextUnformatted("This cannot be undone.");
+                ImGui::PopStyleColor();
+                ImGui::Dummy(ImVec2(0.0f, 8.0f));
+                if (snd::ui::outlineButton("Cancel", ImVec2(90.0f, 26.0f)))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SameLine();
+                if (snd::ui::outlineButton("Delete", ImVec2(90.0f, 26.0f)))
+                    ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+        }
+
+        section(SEC_Graph, "Graph surface", "paint::drawGraphGrid \xc2\xb7 drawModuleBox \xc2\xb7 drawCable");
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            snd::ui::paint::ControlState st;
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImVec2 sz(400.0f, 170.0f);
+            snd::ui::paint::GraphSurfaceStyle style =
+                snd::ui::paint::graphSkinStyle(snd::ui::paint::GraphSkin::Neo);
+            style.backdrop = snd::ui::paint::GraphSurfaceStyle::Backdrop::Grid;
+            style.backdropFill = snd::ui::paint::graphBackdropFill(style.backdrop);
+            dl->PushClipRect(p, ImVec2(p.x + sz.x, p.y + sz.y), true);
+            snd::ui::paint::drawGraphGrid(dl, p, sz, ImVec2(0.0f, 0.0f), 1.0f, pal, st, style);
+            snd::ui::paint::drawCable(dl, ImVec2(p.x + 150.0f, p.y + 62.0f),
+                                      ImVec2(p.x + 250.0f, p.y + 112.0f), pal, st, 0, 2.6f,
+                                      style);
+            snd::ui::paint::drawModuleBox(dl, font, ImVec2(p.x + 30.0f, p.y + 30.0f),
+                                          ImVec2(120.0f, 64.0f), "Oscillator", pal, st,
+                                          false, false, style);
+            snd::ui::paint::drawModuleBox(dl, font, ImVec2(p.x + 250.0f, p.y + 80.0f),
+                                          ImVec2(120.0f, 64.0f), "Filter", pal, st, false,
+                                          false, style);
+            dl->PopClipRect();
+            ImGui::Dummy(sz);
+        }
+
+        section(SEC_Fields, "Text field & value field", "ImGui::InputText \xc2\xb7 dragNumber");
+        {
+            static char name[64] = "Preset 01";
+            ImGui::SetNextItemWidth(220.0f);
+            ImGui::InputText("##name", name, sizeof name);
+            static float freq = 440.0f;
+            snd::ui::dragNumber("Frequency", &freq, 1.0f, 20.0f, 20000.0f, "%.0f Hz");
+        }
+
+        section(SEC_Scroll, "Scroll view & splitter", "ImGui child + draggable divider");
+        {
+            static float splitW = 150.0f;
+            const float h = 130.0f;
+            ImGui::BeginChild("scrollL", ImVec2(splitW, h), true);
+            for (int i = 0; i < 30; ++i)
+                ImGui::Text("Sample %02d.wav", i);
+            ImGui::EndChild();
+            ImGui::SameLine();
+            ImGui::InvisibleButton("split", ImVec2(8.0f, h));
+            if (ImGui::IsItemActive())
+                splitW += ImGui::GetIO().MouseDelta.x;
+            if (splitW < 90.0f)
+                splitW = 90.0f;
+            if (splitW > 320.0f)
+                splitW = 320.0f;
+            ImVec2 sp0 = ImGui::GetItemRectMin(), sp1 = ImGui::GetItemRectMax();
+            ImU32 hcol = ImGui::IsItemActive() ? pal.accent : pal.frameBright;
+            float cx = (sp0.x + sp1.x) * 0.5f;
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(cx, sp0.y + 6.0f),
+                                                ImVec2(cx, sp1.y - 6.0f), hcol, 2.0f);
+            ImGui::SameLine();
+            ImGui::BeginChild("scrollR", ImVec2(0.0f, h), true);
+            ImGui::TextWrapped("Right pane. Drag the divider to resize; the list on the "
+                               "left scrolls with the wheel.");
+            ImGui::EndChild();
+        }
+
+        // ---- Assets ----
+        section(SEC_Icons, "Icon catalogue", "Material Icons + Lucide");
+        {
+            const char* glyphs[] = {
+                ICON_MD_SETTINGS,   ICON_MD_PLAY_ARROW, ICON_MD_PAUSE,
+                ICON_MD_STOP,       ICON_MD_FOLDER,     ICON_MD_SAVE,
+                ICON_MD_SEARCH,     ICON_MD_ADD,        ICON_MD_REMOVE,
+                ICON_MD_DELETE,     ICON_MD_EDIT,       ICON_MD_CLOSE,
+                ICON_MD_CHECK,      ICON_MD_HOME,       ICON_MD_MENU,
+                ICON_MD_MIC,        ICON_MD_VOLUME_UP,  ICON_MD_TUNE,
+                ICON_MD_PIANO,      ICON_MD_GRAPHIC_EQ, ICON_MD_HEADPHONES,
+                ICON_MD_SPEED,      ICON_MD_LAYERS,     ICON_MD_GRID_VIEW,
+                ICON_MD_FAVORITE,   ICON_MD_STAR,       ICON_MD_LOCK,
+                ICON_MD_VISIBILITY, ICON_MD_REFRESH,    ICON_MD_UNDO,
+                ICON_MD_REDO,       ICON_MD_INFO,
+            };
+            int n = (int)(sizeof(glyphs) / sizeof(glyphs[0]));
+            for (int i = 0; i < n; ++i) {
+                ImGui::TextUnformatted(glyphs[i]);
+                if ((i % 12) != 11 && i + 1 < n)
+                    ImGui::SameLine();
+            }
+            ImGui::Dummy(ImVec2(0.0f, 8.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, dim);
+            ImGui::TextUnformatted("Lucide (second font):");
+            ImGui::PopStyleColor();
+            ImGui::SameLine();
+            ImGui::PushFont(snd::ui::iconFontLucide());
+            ImGui::TextUnformatted(ICON_LC_SETTINGS);
+            ImGui::PopFont();
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 36.0f));
+        ImGui::Unindent(20.0f);
+        ImGui::EndChild(); // content
+        ImGui::End();      // root
 
         window.endFrame();
     }
