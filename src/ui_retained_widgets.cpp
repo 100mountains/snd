@@ -3927,7 +3927,7 @@ int portFlushEdge(const GraphNode& node, const GraphPort& port)
 
 void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
-                   const GraphSurfaceStyle& style, int flushEdge)
+                   const GraphSurfaceStyle& style, int flushEdge, float zoom)
 {
     // Kind colour reduced 1.5, black 0.45 outline, white 0.18 inner outline
     // reduced 2; square or round per skin. A flush pin (square only) opens
@@ -3942,18 +3942,23 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
     (void)state;
     if (!style.squarePins)
         flushEdge = 0;
-    const ImVec2 a(bounds.x + (flushEdge == 1 ? 0.0f : 1.5f),
-                   bounds.y + 1.5f);
-    const ImVec2 b(bounds.x + bounds.w - (flushEdge == 2 ? 0.0f : 1.5f),
-                   bounds.y + bounds.h - 1.5f);
+    const float s = std::max(0.05f, zoom);
+    const float outerInset = 1.5f * s;
+    const float innerInset = 2.0f * s;
+    const ImVec2 a(bounds.x + (flushEdge == 1 ? 0.0f : outerInset),
+                   bounds.y + outerInset);
+    const ImVec2 b(bounds.x + bounds.w -
+                       (flushEdge == 2 ? 0.0f : outerInset),
+                   bounds.y + bounds.h - outerInset);
     const ImU32 outline = IM_COL32(0, 0, 0, 115);
     const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
         dl.AddRectFilled(a, b, col, 0.0f);
         if (flushEdge == 0) {
-            dl.AddRect(a, b, outline, 0.0f);
-            dl.AddRect(ImVec2(a.x + 2.0f, a.y + 2.0f),
-                       ImVec2(b.x - 2.0f, b.y - 2.0f), inner, 0.0f);
+            dl.AddRect(a, b, outline, 0.0f, 0, 1.0f * s);
+            dl.AddRect(ImVec2(a.x + innerInset, a.y + innerInset),
+                       ImVec2(b.x - innerInset, b.y - innerInset), inner,
+                       0.0f, 0, 1.0f * s);
         } else {
             // owner: the socket keeps its "slightly darker border box" on the
             // three closed sides (visible on any node fill), open outside
@@ -3966,23 +3971,26 @@ void drawGraphPort(ImDrawList& dl, Rect bounds, const GraphPort& port,
                 if (flushEdge != 2)
                     dl.AddLine(ImVec2(hi.x, lo.y), hi, c, t);
             };
-            sides(a, b, frame, 1.5f);
-            sides(ImVec2(a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f),
-                  ImVec2(b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f),
-                  inner, 1.0f);
+            sides(a, b, frame, 1.5f * s);
+            sides(ImVec2(a.x + (flushEdge == 1 ? 0.0f : innerInset),
+                         a.y + innerInset),
+                  ImVec2(b.x - (flushEdge == 2 ? 0.0f : innerInset),
+                         b.y - innerInset),
+                  inner, 1.0f * s);
         }
     } else {
         const ImVec2 c((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f);
-        const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
+        const float r = std::max(2.0f * s, (b.x - a.x) * 0.5f);
         dl.AddCircleFilled(c, r, col);
-        dl.AddCircle(c, r, outline);
-        dl.AddCircle(c, r - 2.0f, inner);
+        dl.AddCircle(c, r, outline, 0, 1.0f * s);
+        dl.AddCircle(c, std::max(0.0f, r - innerInset), inner, 0,
+                     1.0f * s);
     }
 }
 
 void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
                    const paint::ControlState& state,
-                   const GraphSurfaceStyle& style, int flushEdge)
+                   const GraphSurfaceStyle& style, int flushEdge, float zoom)
 {
     const Palette& pal = palette();
     ImU32 col = port.invalidDrop ? pal.meterHot
@@ -3992,18 +4000,23 @@ void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
     (void)state;
     if (!style.squarePins)
         flushEdge = 0;
-    const draw::Vec2 a{bounds.x + (flushEdge == 1 ? 0.0f : 1.5f),
-                       bounds.y + 1.5f};
-    const draw::Vec2 b{bounds.x + bounds.w - (flushEdge == 2 ? 0.0f : 1.5f),
-                       bounds.y + bounds.h - 1.5f};
+    const float s = std::max(0.05f, zoom);
+    const float outerInset = 1.5f * s;
+    const float innerInset = 2.0f * s;
+    const draw::Vec2 a{bounds.x + (flushEdge == 1 ? 0.0f : outerInset),
+                       bounds.y + outerInset};
+    const draw::Vec2 b{bounds.x + bounds.w -
+                           (flushEdge == 2 ? 0.0f : outerInset),
+                       bounds.y + bounds.h - outerInset};
     const ImU32 outline = IM_COL32(0, 0, 0, 115);
     const ImU32 inner = IM_COL32(255, 255, 255, 46);
     if (style.squarePins) {
         surface.fillRect(a, b, col, 0.0f);
         if (flushEdge == 0) {
-            surface.strokeRect(a, b, outline, 0.0f);
-            surface.strokeRect({a.x + 2.0f, a.y + 2.0f},
-                               {b.x - 2.0f, b.y - 2.0f}, inner, 0.0f);
+            surface.strokeRect(a, b, outline, 0.0f, 1.0f * s);
+            surface.strokeRect({a.x + innerInset, a.y + innerInset},
+                               {b.x - innerInset, b.y - innerInset}, inner,
+                               0.0f, 1.0f * s);
         } else {
             // owner: darker border box on the three closed sides, open outside
             const ImU32 frame = paint::mix(col, IM_COL32(0, 0, 0, 255), 0.45f);
@@ -4016,17 +4029,20 @@ void drawGraphPort(draw::Surface& surface, Rect bounds, const GraphPort& port,
                 if (flushEdge != 2)
                     surface.line({hi.x, lo.y}, hi, c, t);
             };
-            sides(a, b, frame, 1.5f);
-            sides({a.x + (flushEdge == 1 ? 0.0f : 2.0f), a.y + 2.0f},
-                  {b.x - (flushEdge == 2 ? 0.0f : 2.0f), b.y - 2.0f}, inner,
-                  1.0f);
+            sides(a, b, frame, 1.5f * s);
+            sides({a.x + (flushEdge == 1 ? 0.0f : innerInset),
+                   a.y + innerInset},
+                  {b.x - (flushEdge == 2 ? 0.0f : innerInset),
+                   b.y - innerInset},
+                  inner, 1.0f * s);
         }
     } else {
         const draw::Vec2 c{(a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f};
-        const float r = std::max(2.0f, (b.x - a.x) * 0.5f);
+        const float r = std::max(2.0f * s, (b.x - a.x) * 0.5f);
         surface.fillCircle(c, r, col);
-        surface.strokeCircle(c, r, outline);
-        surface.strokeCircle(c, r - 2.0f, inner);
+        surface.strokeCircle(c, r, outline, 1.0f * s);
+        surface.strokeCircle(c, std::max(0.0f, r - innerInset), inner,
+                             1.0f * s);
     }
 }
 
@@ -7368,7 +7384,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                              (state.cablePreviewValid &&
                                               sameGraphHit(state.cablePreviewTarget, portHit));
                         drawGraphPort(dl, pr, port, portState, graphStyle,
-                                      portFlushEdge(graphNode, port));
+                                      portFlushEdge(graphNode, port),
+                                      zoomScale);
                     }
                 };
                 drawPortList(graphNode.inputs);
@@ -7555,8 +7572,10 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                                   sameGraphHit(state.cablePreviewStart, portHit)) ||
                                                  (state.cablePreviewValid &&
                                                   sameGraphHit(state.cablePreviewTarget, portHit));
-                            drawGraphPort(surface, pr, port, portState, graphStyle,
-                                          portFlushEdge(graphNode, port));
+                            drawGraphPort(surface, pr, port, portState,
+                                          graphStyle,
+                                          portFlushEdge(graphNode, port),
+                                          zoomScale);
                             if (port.kind == GraphPortKind::Control &&
                                 port.direction == GraphPortDirection::Output &&
                                 !port.label.empty()) {

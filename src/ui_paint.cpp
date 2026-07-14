@@ -3620,7 +3620,7 @@ void strokeConicRim(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
 // overlap accumulates smoothly toward the body — strokes banded into
 // concentric rings (owner: "weird two border thing").
 void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
-                  float corner, ImU32 glowA, ImU32 glowB)
+                  float corner, ImU32 glowA, ImU32 glowB, float scale)
 {
     constexpr int kLayers = 5;
     const auto halo = [&](ImU32 colour, float dx) {
@@ -3631,13 +3631,13 @@ void drawNodeGlow(draw::Surface& surface, draw::Vec2 a, draw::Vec2 b,
         if (alpha == 0)
             return;
         for (int i = kLayers; i >= 1; --i) {
-            const float e = (float)i * 2.2f;
+            const float e = (float)i * 2.2f * scale;
             surface.fillRect({a.x - e + dx, a.y - e}, {b.x + e + dx, b.y + e},
                              withAlpha(colour, alpha), corner + e);
         }
     };
-    halo(glowA, -2.5f);
-    halo(glowB, 2.5f);
+    halo(glowA, -2.5f * scale);
+    halo(glowB, 2.5f * scale);
 }
 
 } // namespace
@@ -3718,17 +3718,17 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     const ImU32 selectedCol =
         col(style.selectedBorder, IM_COL32(0xff, 0xc2, 0x4a, 255));
 
-    // r = local bounds reduced 1.0
-    const draw::Vec2 a{topLeft.x + 1.0f, topLeft.y + 1.0f};
-    const draw::Vec2 b{topLeft.x + size.x - 1.0f, topLeft.y + size.y - 1.0f};
-    const float corner = std::max(0.0f, style.corner);
-    // whole-pixel header height: a fractional zoomed header puts the
-    // separator (and the title centring) on subpixels, which shimmers
-    const float hh =
-        std::round(std::min(std::max(0.0f, headerH), b.y - a.y));
+    const float uiScale = std::max(0.05f, headerH / 24.0f);
+    const float inset = 1.0f * uiScale;
+    const draw::Vec2 a{topLeft.x + inset, topLeft.y + inset};
+    const draw::Vec2 b{topLeft.x + size.x - inset,
+                       topLeft.y + size.y - inset};
+    const float corner = std::max(0.0f, style.corner * uiScale);
+    const float hh = std::min(std::max(0.0f, headerH), b.y - a.y);
 
     if (((style.glowA | style.glowB) & 0xFF000000u) != 0 && !bypassed)
-        drawNodeGlow(surface, a, b, corner, style.glowA, style.glowB);
+        drawNodeGlow(surface, a, b, corner, style.glowA, style.glowB,
+                     uiScale);
     surface.fillRect(a, b, nodeCol, corner);
 
     // header bar + 3px accent stripe + bold title (murk rounds the header
@@ -3740,8 +3740,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     surface.fillRect(a, hMax, headerCol, corner);
     if (style.headerStripe) {
         const float stripeTop = std::min(a.y + corner, hMax.y);
-        const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
-        const float stripeW = std::max(1.0f, std::round(3.0f * uiScale));
+        const float stripeW = 3.0f * uiScale;
         surface.fillRect({a.x, stripeTop}, {a.x + stripeW, hMax.y},
                          withAlpha(accentCol, 0xD1), 0.0f);
     }
@@ -3750,9 +3749,8 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         // otherwise re-centres the title every frame and the text wobbles
         const float titlePx = std::max(1.0f, std::round(fontSizePx * 2.0f) * 0.5f);
         const draw::Vec2 ts = surface.measureText(font, titlePx, title);
-        const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
-        const float titleInset = std::max(1.0f, std::round(12.0f * uiScale));
-        const float titleRightPad = std::max(1.0f, std::round(8.0f * uiScale));
+        const float titleInset = 12.0f * uiScale;
+        const float titleRightPad = 8.0f * uiScale;
         surface.pushClip({a.x + titleInset, a.y}, {b.x - titleRightPad, hMax.y},
                          true);
         surface.text(font, titlePx,
@@ -3761,8 +3759,8 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                      textCol, title);
         surface.popClip();
     }
-    // 1px black separator under the header (black @ 0.42)
-    surface.fillRect({a.x, hMax.y}, {b.x, hMax.y + 1.0f},
+    surface.fillRect({a.x, hMax.y},
+                     {b.x, hMax.y + 1.0f * uiScale},
                      IM_COL32(0, 0, 0, 107), 0.0f);
 
     // border last so it sits over the header edges; selected = murk amber 2px.
@@ -3777,15 +3775,17 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                                      1.0);
         // a LIP, not a tube (owner): the colour band sits just inside a
         // hard 1px dark arris on the true outline, like a machined edge
-        const float inset = 1.5f;
-        strokeConicRim(surface, {a.x + inset, a.y + inset},
-                       {b.x - inset, b.y - inset},
-                       std::max(0.0f, corner - inset), rim, rimCount, phase,
-                       1.5f); // owner: tight; spin marks selection
-        surface.strokeRect(a, b, IM_COL32(0, 0, 0, 150), corner, 1.0f);
+        const float rimInset = 1.5f * uiScale;
+        strokeConicRim(surface, {a.x + rimInset, a.y + rimInset},
+                       {b.x - rimInset, b.y - rimInset},
+                       std::max(0.0f, corner - rimInset), rim, rimCount, phase,
+                       1.5f * uiScale); // owner: tight; spin marks selection
+        surface.strokeRect(a, b, IM_COL32(0, 0, 0, 150), corner,
+                           1.0f * uiScale);
     } else {
         surface.strokeRect(a, b, state.selected ? selectedCol : borderCol,
-                           corner, state.selected ? 2.0f : 1.0f);
+                           corner,
+                           (state.selected ? 2.0f : 1.0f) * uiScale);
     }
 
     if (bypassed) {
@@ -3795,8 +3795,7 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         const float tagSize = std::round(fontSizePx * 0.75f * 2.0f) * 0.5f;
         if (tagSize >= 1.0f) {
             const draw::Vec2 ts = surface.measureText(font, tagSize, tag);
-            const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
-            const float tagPad = std::max(1.0f, std::round(8.0f * uiScale));
+            const float tagPad = 8.0f * uiScale;
             surface.text(font, tagSize,
                          {std::round(b.x - tagPad - ts.x),
                           std::round(a.y + std::max(0.0f, hh - ts.y) * 0.5f)},
@@ -3804,9 +3803,14 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         }
     }
     if (error) { // SND semantic murk has no equivalent for; small hot triangle
-        const draw::Vec2 c{b.x - 12.0f, a.y + hh + 10.0f};
-        surface.fillTriangle({c.x, c.y - 5.0f}, {c.x - 5.0f, c.y + 4.0f},
-                             {c.x + 5.0f, c.y + 4.0f}, pal.meterHot);
+        const draw::Vec2 c{b.x - 12.0f * uiScale,
+                           a.y + hh + 10.0f * uiScale};
+        surface.fillTriangle({c.x, c.y - 5.0f * uiScale},
+                             {c.x - 5.0f * uiScale,
+                              c.y + 4.0f * uiScale},
+                             {c.x + 5.0f * uiScale,
+                              c.y + 4.0f * uiScale},
+                             pal.meterHot);
     }
     // No focus ring on module boxes (owner: it doubled the border and put a
     // blue outer ring over Neo's rim). Keyboard focus reads through the
