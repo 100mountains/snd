@@ -22,6 +22,7 @@
 #if defined(__APPLE__)
 namespace snd::ui {
 void nativeDragImpl(GLFWwindow* window);
+void macPrepareWindowResizeImpl(GLFWwindow* window);
 void macPrepareFramelessImpl(GLFWwindow* window);
 void macToggleZoomImpl(GLFWwindow* window);
 void macToggleFullscreenImpl(GLFWwindow* window);
@@ -156,6 +157,10 @@ struct GlWindow::Impl {
     std::array<double, 3> lastClickTime{{0.0, 0.0, 0.0}};
     std::array<Vec2, 3> lastClickPos{};
     bool frameOpen = false;
+    bool surfaceReady = false;
+    bool rendering = false;
+    Tree* activeTree = nullptr;
+    PaintRenderer* activeRenderer = nullptr;
     // undecorated-window management (title-bar-driven; see GlWindow::beginNativeDrag)
     bool dragging = false;
     double dragStartCursorX = 0.0, dragStartCursorY = 0.0; // window-relative cursor at drag start
@@ -316,6 +321,90 @@ struct GlWindow::Impl {
         for (int i = 0; i < count; ++i)
             self->droppedFiles.push_back(paths[i]);
     }
+
+    static void framebufferSizeCallback(GLFWwindow* w, int, int)
+    {
+        if (Impl* self = from(w))
+            self->redrawActiveTree(true);
+    }
+
+    static void windowRefreshCallback(GLFWwindow* w)
+    {
+        if (Impl* self = from(w))
+            self->redrawActiveTree(true);
+    }
+
+    Vec2 logicalSize() const
+    {
+        int windowW = 0;
+        int windowH = 0;
+        if (window)
+            glfwGetWindowSize(window, &windowW, &windowH);
+        return {(float)std::max(1, windowW), (float)std::max(1, windowH)};
+    }
+
+    void updateFrameContext()
+    {
+        context.font = fonts.defaultFontRef();
+        context.iconFontLucide = fonts.iconFontLucideRef();
+        context.fontSizePx = 13.0f;
+        context.timeSeconds = glfwGetTime();
+        context.pointer = {pointer.x, pointer.y};
+        context.pointerValid = pointerValid;
+    }
+
+    void drawTree(Tree& tree, PaintRenderer& renderer, bool present,
+                  bool refreshAndLayout)
+    {
+        if (!window || !surfaceReady || rendering)
+            return;
+
+        rendering = true;
+        glfwMakeContextCurrent(window);
+
+        int windowW = 0;
+        int windowH = 0;
+        int fbW = 0;
+        int fbH = 0;
+        glfwGetWindowSize(window, &windowW, &windowH);
+        glfwGetFramebufferSize(window, &fbW, &fbH);
+        const Vec2 logical{(float)std::max(1, windowW),
+                           (float)std::max(1, windowH)};
+
+        updateFrameContext();
+        if (refreshAndLayout) {
+            tree.refreshBoundValues();
+            tree.layout(logical);
+            renderer.prepareOpenPopups(tree);
+        }
+
+        float r = 0.0f, g = 0.0f, b = 0.0f, a = 1.0f;
+        colorFloats(clearColor, r, g, b, a);
+        glViewport(0, 0, std::max(1, fbW), std::max(1, fbH));
+        glClearColor(r, g, b, a);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        surface.beginFrame({(float)std::max(1, windowW),
+                            (float)std::max(1, windowH)},
+                           std::max(1, fbW), std::max(1, fbH));
+        renderer.render(tree, surface, context);
+        surface.endFrame();
+
+        if (present) {
+            glfwSwapBuffers(window);
+            frameOpen = false;
+        } else {
+            frameOpen = true;
+        }
+        rendering = false;
+    }
+
+    void redrawActiveTree(bool present)
+    {
+        if (!activeTree || !activeRenderer)
+            return;
+        drawTree(*activeTree, *activeRenderer, present, true);
+    }
 };
 
 GlWindow::GlWindow() : impl_(new Impl) {}
@@ -350,6 +439,7 @@ bool GlWindow::create(int width, int height, const std::string& title,
     }
     snd::ui::detail::registerGlfwWindow(impl_->window);
 #if defined(__APPLE__)
+    snd::ui::macPrepareWindowResizeImpl(impl_->window);
     if (!decorated)
         snd::ui::macPrepareFramelessImpl(impl_->window);
 #endif
@@ -361,6 +451,8 @@ bool GlWindow::create(int width, int height, const std::string& title,
     glfwSetKeyCallback(impl_->window, Impl::keyCallback);
     glfwSetCharCallback(impl_->window, Impl::charCallback);
     glfwSetDropCallback(impl_->window, Impl::dropCallback);
+    glfwSetFramebufferSizeCallback(impl_->window, Impl::framebufferSizeCallback);
+    glfwSetWindowRefreshCallback(impl_->window, Impl::windowRefreshCallback);
     glfwMakeContextCurrent(impl_->window);
     glfwSwapInterval(1);
 
@@ -375,6 +467,7 @@ bool GlWindow::create(int width, int height, const std::string& title,
         return false;
     }
     impl_->fonts.upload();
+    impl_->surfaceReady = true;
     return true;
 }
 
@@ -382,6 +475,9 @@ void GlWindow::destroy()
 {
     if (!impl_ || !impl_->window)
         return;
+    impl_->surfaceReady = false;
+    impl_->activeTree = nullptr;
+    impl_->activeRenderer = nullptr;
     glfwMakeContextCurrent(impl_->window);
     impl_->surface.destroyGl();
     impl_->fonts.destroyGl();
@@ -407,6 +503,8 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
     if (!impl_->window)
         return false;
 
+    impl_->activeTree = &tree;
+    impl_->activeRenderer = &renderer;
     glfwPollEvents();
     // native window drag: while the title bar is held, move the OS window so the
     // grabbed point stays under the cursor (self-correcting via the window-relative
@@ -446,21 +544,8 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
                                                  impl_->mods()));
     }
 
-    int windowW = 0;
-    int windowH = 0;
-    int fbW = 0;
-    int fbH = 0;
-    glfwGetWindowSize(impl_->window, &windowW, &windowH);
-    glfwGetFramebufferSize(impl_->window, &fbW, &fbH);
-    const Vec2 logical{(float)std::max(1, windowW),
-                       (float)std::max(1, windowH)};
-
-    impl_->context.font = impl_->fonts.defaultFontRef();
-    impl_->context.iconFontLucide = impl_->fonts.iconFontLucideRef();
-    impl_->context.fontSizePx = 13.0f;
-    impl_->context.timeSeconds = glfwGetTime();
-    impl_->context.pointer = {impl_->pointer.x, impl_->pointer.y};
-    impl_->context.pointerValid = impl_->pointerValid;
+    const Vec2 logical = impl_->logicalSize();
+    impl_->updateFrameContext();
 
     bool changed = tree.refreshBoundValues();
     tree.layout(logical);
@@ -488,18 +573,7 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
     }
     (void)changed;
 
-    float r = 0.0f, g = 0.0f, b = 0.0f, a = 1.0f;
-    colorFloats(impl_->clearColor, r, g, b, a);
-    glViewport(0, 0, fbW, fbH);
-    glClearColor(r, g, b, a);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    impl_->surface.beginFrame({(float)std::max(1, windowW),
-                               (float)std::max(1, windowH)},
-                              std::max(1, fbW), std::max(1, fbH));
-    renderer.render(tree, impl_->surface, impl_->context);
-    impl_->surface.endFrame();
-    impl_->frameOpen = true;
+    impl_->drawTree(tree, renderer, false, false);
     return true;
 }
 

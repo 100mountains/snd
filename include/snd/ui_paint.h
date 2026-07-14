@@ -706,8 +706,7 @@ void drawGraphGrid(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
 // `zoom` scales the gravity constants (bulge/sag minimums) so a wire keeps
 // its graph-space shape at any viewport zoom -- pass the viewport zoom when
 // the endpoints are in zoomed screen space, and 1 when they are graph-space.
-// This keeps the drawn curve identical to the hit-tested one (hit testing
-// samples in graph space).
+// Retained graph hit-testing samples the same zoomed screen-space curve.
 void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
                const Palette& pal, const ControlState& state,
                ImU32 color = 0, float thickness = 2.6f,

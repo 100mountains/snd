@@ -2875,6 +2875,50 @@ void graphCableControls(const ImVec2& from, const ImVec2& to,
     c2 = ImVec2(b.x, b.y);
 }
 
+draw::Vec2 sampleCubic(draw::Vec2 p1, draw::Vec2 p2, draw::Vec2 p3,
+                       draw::Vec2 p4, float t)
+{
+    const float u = 1.0f - t;
+    const float uu = u * u;
+    const float tt = t * t;
+    return {
+        p1.x * uu * u + 3.0f * p2.x * uu * t + 3.0f * p3.x * u * tt +
+            p4.x * tt * t,
+        p1.y * uu * u + 3.0f * p2.y * uu * t + 3.0f * p3.y * u * tt +
+            p4.y * tt * t,
+    };
+}
+
+float cableLengthEstimate(draw::Vec2 from, draw::Vec2 c1, draw::Vec2 c2,
+                          draw::Vec2 to)
+{
+    const auto dist = [](draw::Vec2 a, draw::Vec2 b) {
+        const float dx = b.x - a.x;
+        const float dy = b.y - a.y;
+        return std::sqrt(dx * dx + dy * dy);
+    };
+    return dist(from, c1) + dist(c1, c2) + dist(c2, to);
+}
+
+int graphCableSegments(draw::Vec2 from, draw::Vec2 c1, draw::Vec2 c2,
+                       draw::Vec2 to)
+{
+    return std::clamp((int)std::ceil(cableLengthEstimate(from, c1, c2, to) /
+                                     10.0f),
+                      32, 128);
+}
+
+float graphCableScreenThickness(float thickness,
+                                const GraphSurfaceStyle& style, float zoom)
+{
+    const float base =
+        thickness > 0.0f ? thickness
+                         : style.wireThickness > 0.0f ? style.wireThickness
+                                                       : 2.0f;
+    const float z = std::clamp(zoom > 0.0f ? zoom : 1.0f, 0.40f, 1.0f);
+    return std::max(1.0f, base * z);
+}
+
 } // namespace
 
 namespace {
@@ -3614,9 +3658,8 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
     draw::Vec2 c1;
     draw::Vec2 c2;
     graphCableControls(from, to, style, c1, c2, zoom);
-    const float lineW =
-        thickness > 0.0f ? thickness
-                         : style.wireThickness > 0.0f ? style.wireThickness : 2.0f;
+    const float lineW = graphCableScreenThickness(thickness, style, zoom);
+    const int segments = graphCableSegments(from, c1, c2, to);
     if ((style.wireGradientEnd & 0xFF000000u) != 0) {
         // Gradient wire (Neo-class): sample the same cubic and lerp colour
         // along it, start→end.
@@ -3628,24 +3671,18 @@ void drawCable(draw::Surface& surface, draw::Vec2 from, draw::Vec2 to,
         ImU32 g1 = state.disabled
                        ? mix(style.wireGradientEnd, pal.frameBright, 0.70f)
                        : style.wireGradientEnd;
-        // one continuous strip: per-segment lines double-blended at every
-        // joint (24 beads along a translucent wire -- owner's "shadow")
-        constexpr int kSegs = 24;
-        draw::Vec2 pts[kSegs + 1];
-        ImU32 cols[kSegs + 1];
-        for (int i = 0; i <= kSegs; ++i) {
-            const float t = (float)i / kSegs;
-            const float it = 1.0f - t;
-            pts[i] = {it * it * it * from.x + 3 * it * it * t * c1.x +
-                          3 * it * t * t * c2.x + t * t * t * to.x,
-                      it * it * it * from.y + 3 * it * it * t * c1.y +
-                          3 * it * t * t * c2.y + t * t * t * to.y};
+        std::vector<draw::Vec2> pts((std::size_t)segments + 1);
+        std::vector<ImU32> cols((std::size_t)segments + 1);
+        for (int i = 0; i <= segments; ++i) {
+            const float t = (float)i / (float)segments;
+            pts[(std::size_t)i] = sampleCubic(from, c1, c2, to, t);
             cols[i] = mix(g0, g1, t);
         }
-        surface.polylineGradient(pts, kSegs + 1, cols, lineW, /*closed*/ false);
+        surface.polylineGradient(pts.data(), (int)pts.size(), cols.data(), lineW,
+                                 /*closed*/ false);
         return;
     }
-    surface.bezierCubic(from, c1, c2, to, color, lineW, 24);
+    surface.bezierCubic(from, c1, c2, to, color, lineW, segments);
 }
 
 void drawCable(ImDrawList* dl, const ImVec2& from, const ImVec2& to,
@@ -3703,7 +3740,9 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     surface.fillRect(a, hMax, headerCol, corner);
     if (style.headerStripe) {
         const float stripeTop = std::min(a.y + corner, hMax.y);
-        surface.fillRect({a.x, stripeTop}, {a.x + 3.0f, hMax.y},
+        const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
+        const float stripeW = std::max(1.0f, std::round(3.0f * uiScale));
+        surface.fillRect({a.x, stripeTop}, {a.x + stripeW, hMax.y},
                          withAlpha(accentCol, 0xD1), 0.0f);
     }
     if (title && title[0] && fontSizePx >= 1.0f) { // sub-1px: skip, not assert
@@ -3711,9 +3750,13 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         // otherwise re-centres the title every frame and the text wobbles
         const float titlePx = std::max(1.0f, std::round(fontSizePx * 2.0f) * 0.5f);
         const draw::Vec2 ts = surface.measureText(font, titlePx, title);
-        surface.pushClip({a.x + 12.0f, a.y}, {b.x - 8.0f, hMax.y}, true);
+        const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
+        const float titleInset = std::max(1.0f, std::round(12.0f * uiScale));
+        const float titleRightPad = std::max(1.0f, std::round(8.0f * uiScale));
+        surface.pushClip({a.x + titleInset, a.y}, {b.x - titleRightPad, hMax.y},
+                         true);
         surface.text(font, titlePx,
-                     {std::round(a.x + 12.0f),
+                     {std::round(a.x + titleInset),
                       std::round(a.y + std::max(0.0f, hh - ts.y) * 0.5f)},
                      textCol, title);
         surface.popClip();
@@ -3752,8 +3795,10 @@ void drawModuleBox(draw::Surface& surface, draw::FontRef font, float fontSizePx,
         const float tagSize = std::round(fontSizePx * 0.75f * 2.0f) * 0.5f;
         if (tagSize >= 1.0f) {
             const draw::Vec2 ts = surface.measureText(font, tagSize, tag);
+            const float uiScale = std::clamp(hh / 24.0f, 0.05f, 4.0f);
+            const float tagPad = std::max(1.0f, std::round(8.0f * uiScale));
             surface.text(font, tagSize,
-                         {std::round(b.x - 8.0f - ts.x),
+                         {std::round(b.x - tagPad - ts.x),
                           std::round(a.y + std::max(0.0f, hh - ts.y) * 0.5f)},
                          IM_COL32(0xff, 0x9e, 0x3d, 255), tag);
         }

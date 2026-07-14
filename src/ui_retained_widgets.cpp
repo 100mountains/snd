@@ -3310,27 +3310,38 @@ Vec2 cubic(Vec2 a, Vec2 b, Vec2 c, Vec2 d, float t)
 }
 
 void graphCableControls(Vec2 from, Vec2 to, const GraphSurfaceStyle& style,
-                        Vec2& c1, Vec2& c2)
+                        Vec2& c1, Vec2& c2, float zoom)
 {
-    const float dx = std::max(style.wireDroop ? 40.0f : 38.0f,
+    const float z = zoom > 0.0f ? zoom : 1.0f;
+    const float dx = std::max((style.wireDroop ? 40.0f : 38.0f) * z,
                               std::abs(to.x - from.x) *
                                   (style.wireDroop ? 0.50f : 0.52f));
     const float sag = style.wireDroop
-                          ? std::min(80.0f, 22.0f + std::abs(to.x - from.x) * 0.18f)
+                          ? std::min(80.0f * z,
+                                     22.0f * z +
+                                         std::abs(to.x - from.x) * 0.18f)
                           : 0.0f;
     c1 = {from.x + dx, from.y + sag};
     c2 = {to.x - dx, to.y + sag};
 }
 
-float distanceToCable(Vec2 p, Vec2 from, Vec2 to, const GraphSurfaceStyle& style)
+int graphCableSegments(Vec2 from, Vec2 c1, Vec2 c2, Vec2 to)
+{
+    const float len = distance(from, c1) + distance(c1, c2) + distance(c2, to);
+    return std::clamp((int)std::ceil(len / 10.0f), 32, 128);
+}
+
+float distanceToCable(Vec2 p, Vec2 from, Vec2 to, const GraphSurfaceStyle& style,
+                      float zoom)
 {
     Vec2 c1;
     Vec2 c2;
-    graphCableControls(from, to, style, c1, c2);
+    graphCableControls(from, to, style, c1, c2, zoom);
     float best = std::numeric_limits<float>::max();
     Vec2 prev = from;
-    for (int i = 1; i <= 24; ++i) {
-        const Vec2 cur = cubic(from, c1, c2, to, (float)i / 24.0f);
+    const int segments = graphCableSegments(from, c1, c2, to);
+    for (int i = 1; i <= segments; ++i) {
+        const Vec2 cur = cubic(from, c1, c2, to, (float)i / (float)segments);
         best = std::min(best, distanceToSegment(p, prev, cur));
         prev = cur;
     }
@@ -4276,8 +4287,9 @@ GraphHit hitTestGraph(const GraphViewport& viewport,
             hit.output = distance(screenPoint, fromScreen) <= 7.0f;
             return hit;
         }
+        const float zoom = std::max(0.05f, viewport.zoom);
         const float tolerance = std::max(6.0f, style.wireThickness + 4.0f);
-        if (distanceToCable(screenPoint, fromScreen, toScreen, style) <= tolerance) {
+        if (distanceToCable(screenPoint, fromScreen, toScreen, style, zoom) <= tolerance) {
             GraphHit hit = makeGraphHit(GraphHitKind::Cable, graphPoint);
             hit.cableId = cable.id;
             return hit;
@@ -7557,8 +7569,10 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                     continue;
                                 const draw::Vec2 ts = surface.measureText(
                                     context.font, ls, port.label.c_str());
+                                const float labelGap =
+                                    std::max(1.0f, std::round(3.0f * zoomScale));
                                 surface.text(context.font, ls,
-                                             {std::round(pr.x - 3.0f - ts.x),
+                                             {std::round(pr.x - labelGap - ts.x),
                                               std::round(pr.y +
                                                          (pr.h - ts.y) * 0.5f)},
                                              paint::withAlpha(
