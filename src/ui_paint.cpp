@@ -1,3 +1,7 @@
+#include "imgui.h"
+
+#include "imgui.h"
+
 #include "snd/ui_paint.h"
 
 #include "ui_draw_imgui.h"
@@ -42,9 +46,7 @@ float effectiveButtonFontSize(const ButtonPaintArgs& args)
 {
     if (args.fontSizePx > 0.0f)
         return args.fontSizePx;
-    if (args.drawList && args.font)
-        return ImGui::GetFontSize() * args.fontScale;
-    return 0.0f;
+    return draw::kUiFontPx * args.fontScale;
 }
 } // namespace
 
@@ -646,22 +648,16 @@ int comboWindowHitEnd(const ImVec2& topLeft, const ImVec2& size,
 
 void drawDefaultKnob(const KnobPaintArgs& args)
 {
-    if (!args.palette || !args.state)
+    if (!args.palette || !args.state || !args.surface)
         return;
-    if (args.surface)
-        drawKnob(*args.surface, draw::toDrawVec2(args.topLeft), args.size,
-                 args.normalizedValue, args.style, *args.palette, *args.state,
-                 args.bipolar, args.accent);
-    else
-        drawKnob(args.drawList, args.topLeft, args.size, args.normalizedValue,
-                 args.style, *args.palette, *args.state, args.bipolar, args.accent);
+    drawKnob(*args.surface, draw::toDrawVec2(args.topLeft), args.size,
+             args.normalizedValue, args.style, *args.palette, *args.state,
+             args.bipolar, args.accent);
 }
 
 void drawKnobWithPainter(const KnobPaintArgs& args, const KnobPainter& painter)
 {
-    ImDrawList* dl = args.drawList;
-    draw::ImGuiSurface localSurface(dl);
-    draw::Surface* surface = args.surface ? args.surface : (dl ? &localSurface : nullptr);
+    draw::Surface* surface = args.surface;
 
     ControlState bodyState = args.state ? *args.state : ControlState{};
     bodyState.focused = false;
@@ -1559,7 +1555,7 @@ const SvgTexture* transportIconTexture(Icon icon)
 {
     auto& cache = transportIconCache();
     auto it = cache.find(static_cast<int>(icon));
-    if (it != cache.end() && it->second.id != ImTextureID_Invalid)
+    if (it != cache.end() && it->second.id != 0)
         return &it->second;
     return nullptr;
 }
@@ -1583,7 +1579,7 @@ void releaseTransportIcons()
 {
     auto& cache = transportIconCache();
     for (auto& entry : cache)
-        if (entry.second.id != ImTextureID_Invalid)
+        if (entry.second.id != 0)
             releaseTexture(entry.second.id);
     cache.clear();
 }
@@ -2152,25 +2148,18 @@ void drawOutlineButton(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,
 
 void drawDefaultButton(const ButtonPaintArgs& args)
 {
-    if (!args.palette || !args.state)
+    if (!args.palette || !args.state || !args.surface)
         return;
-    if (args.surface) {
-        drawButton(*args.surface, effectiveButtonFont(args),
-                   effectiveButtonFontSize(args),
-                   draw::toDrawVec2(args.topLeft), draw::toDrawVec2(args.size),
-                   args.text, *args.palette, *args.state);
-    } else {
-        drawButton(args.drawList, args.font, args.topLeft, args.size, args.text,
-                   *args.palette, *args.state, args.fontScale);
-    }
+    drawButton(*args.surface, effectiveButtonFont(args),
+               effectiveButtonFontSize(args),
+               draw::toDrawVec2(args.topLeft), draw::toDrawVec2(args.size),
+               args.text, *args.palette, *args.state);
 }
 
 void drawButtonWithPainter(const ButtonPaintArgs& args,
                            const ButtonPainter& painter)
 {
-    ImDrawList* dl = args.drawList;
-    draw::ImGuiSurface localSurface(dl);
-    draw::Surface* surface = args.surface ? args.surface : (dl ? &localSurface : nullptr);
+    draw::Surface* surface = args.surface;
 
     ControlState bodyState = args.state ? *args.state : ControlState{};
     bodyState.focused = false;
@@ -2588,22 +2577,16 @@ void drawXYPad(ImDrawList* dl, const ImVec2& topLeft, const ImVec2& size,
 
 void drawDefaultXYPad(const XYPadPaintArgs& args)
 {
-    if (!args.palette || !args.state)
+    if (!args.palette || !args.state || !args.surface)
         return;
-    if (args.surface)
-        drawXYPad(*args.surface, draw::toDrawVec2(args.topLeft),
-                  draw::toDrawVec2(args.size), args.x, args.y,
-                  *args.palette, *args.state);
-    else
-        drawXYPad(args.drawList, args.topLeft, args.size, args.x, args.y,
-                  *args.palette, *args.state);
+    drawXYPad(*args.surface, draw::toDrawVec2(args.topLeft),
+              draw::toDrawVec2(args.size), args.x, args.y,
+              *args.palette, *args.state);
 }
 
 void drawXYPadWithPainter(const XYPadPaintArgs& args, const XYPadPainter& painter)
 {
-    ImDrawList* dl = args.drawList;
-    draw::ImGuiSurface localSurface(dl);
-    draw::Surface* surface = args.surface ? args.surface : (dl ? &localSurface : nullptr);
+    draw::Surface* surface = args.surface;
 
     ControlState bodyState = args.state ? *args.state : ControlState{};
     bodyState.focused = false;

@@ -3,7 +3,7 @@
 // ImGui. Vector logos/icons stay crisp at any size/DPI. rasterizeSvg is
 // GL-free (unit-testable, headless); loadSvgTexture needs a live GL context.
 
-#include "snd/ui.h"
+#include "snd/ui_types.h"
 
 #include <cmath>
 #include <cstdint>
@@ -127,7 +127,7 @@ SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h)
     glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previousTexture);
 
-    tex.id = (ImTextureID)(intptr_t)id;
+    tex.id = static_cast<draw::TextureRef>(id);
     tex.w = w;
     tex.h = h;
     return tex;
@@ -141,11 +141,11 @@ SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint)
     return loadTextureRGBA(bmp.rgba.data(), bmp.w, bmp.h);
 }
 
-void releaseTexture(ImTextureID id)
+void releaseTexture(draw::TextureRef id)
 {
-    if (id == ImTextureID_Invalid)
+    if (id == 0)
         return;
-    GLuint gl = (GLuint)(intptr_t)id;
+    GLuint gl = (GLuint)id;
     GLint previousTexture = 0;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
     glDeleteTextures(1, &gl);

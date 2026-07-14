@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <vector>
 
-#include "snd/ui.h"
 #include "snd/ui_draw.h"
+#include "snd/ui_types.h"
 
 namespace snd::ui::paint {
 

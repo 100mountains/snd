@@ -2,21 +2,9 @@
 #pragma once
 
 #include "snd/ui_draw.h"
-
-#include "imgui.h"
+#include "snd/ui_types.h"
 
 namespace snd::ui::draw {
-
-inline Vec2 toDrawVec2(const ImVec2& v) { return {v.x, v.y}; }
-inline ImVec2 toImVec2(Vec2 v) { return ImVec2(v.x, v.y); }
-inline FontRef fontRef(ImFont* font)
-{
-    return {reinterpret_cast<uintptr_t>(font)};
-}
-inline ImFont* imFont(FontRef font)
-{
-    return reinterpret_cast<ImFont*>(font.handle);
-}
 
 class ImGuiSurface final : public Surface {
 public:

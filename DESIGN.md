@@ -1,6 +1,6 @@
 # Design
 
-Verified against: `5fc8967`.
+Verified against: `72f150b` plus the retained/ImGui target split.
 
 This is the current high-level design for this project. It records architectural
 decisions, ownership boundaries, and the technical reasons behind them.
@@ -80,16 +80,37 @@ buffers). These are genuinely separable concerns, not entangled ones — which i
 why SND keeps device I/O, UI, plugin hosting, and plugin-client wrapping as
 separable layers even though all of them now exist in-tree.
 
-## SND's Own Layering (Intended)
+## SND's Own Layering
 
 - **Vendored, unmodified**: miniaudio, Dear ImGui, GLFW — pulled in via CMake
   `FetchContent`, never forked. This keeps upstream bugfixes flowing, and keeps
   code we didn't write clearly separate from code we did.
-- **SND's own layer**: a thin, original API wrapping the above
-  (`include/snd/audio.h`, `include/snd/ui.h` — names, types, and ergonomics are
+- **SND's own layer**: thin, original APIs wrapping those dependencies
+  (`include/snd/audio.h`, `include/snd/ui*.h` — names, types, and ergonomics are
   SND's, not miniaudio's or ImGui's verbatim surface). This is the part that's
   actually ours: fully ours to redesign, extend, or eventually relicense, since
   wrapping a permissively-licensed dependency creates no obligation back to it.
+
+The CMake targets mirror those boundaries:
+
+- `snd_core`: audio, MIDI, DSP, state, platform, plugin hosting/client core.
+- `snd_ui_foundation`: shared UI data types, palette, renderer-neutral draw
+  surface, recording surface, font atlas, and shared paint helpers.
+- `snd_ui_retained`: retained tree widgets over the shared paint vocabulary.
+- `snd_ui_retained_gl`: pure retained/aGooey GLFW/OpenGL window and draw
+  backend. Consumers that want retained UI without immediate/ImGui code link
+  this target.
+- `snd_ui_imgui`: Dear ImGui compatibility shell, immediate widgets, ImGui draw
+  adapter, ImGui backends, imgui-knobs, and GL texture upload helpers.
+- `snd`: compatibility aggregate linking core, retained GL, and ImGui
+  compatibility for existing examples/plugins.
+
+Some shared paint and retained source files still carry source-compatible ImGui
+bridge overloads beside the neutral paths. They are compiled into sectioned
+objects, and `snd_ui_retained_gl` propagates dead-strip/link-GC options so a
+retained-only binary does not require or ship those unused ImGui sections. The
+build-only `snd-retained-linkcheck` target proves this boundary without running
+an app.
 
 Forking and renaming miniaudio's own source was considered and rejected: the
 license already permits using it freely as-is, so forking it would only mean
@@ -112,8 +133,9 @@ SND has one shared UI toolkit with two authoring models:
 
 These are not separate visual toolkits. Immediate and retained widgets should
 share SND paint, style, icon, and semantic vocabulary. The shared draw-only
-surface lives under `snd::ui::paint`; retained widgets should map their local
-interaction state into those helpers rather than copying visual code.
+surface lives under `snd::ui::draw`, and shared widget bodies live under
+`snd::ui::paint`; retained widgets should map their local interaction state
+into those helpers rather than copying visual code.
 
 The retained tree owns only UI-local state: node lifetime, layout bounds,
 focus/pressed flags, hit-test state, dirty invalidation, and semantic metadata.

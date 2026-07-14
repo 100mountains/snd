@@ -12,6 +12,11 @@ that other code should follow.
 UI programming (the `snd::ui` window shell, frame loop, and widgets) has its
 own reference: `UI_PROGRAMMING_GUIDE.md`.
 
+The UI build split is intentional: link `snd_ui_retained_gl` for pure
+retained/aGooey UI without the immediate/ImGui compatibility target, link
+`snd_ui_imgui` when maintaining immediate-mode tools, and link aggregate `snd`
+when a consumer deliberately wants both.
+
 ## Core Rule
 
 Before adding a new helper, owner, scheduler, style, or data path, look for the
@@ -153,7 +158,8 @@ semantic focus, but should not draw the focus-visible ring.
 
 Use `nodeSnapshot()` as the renderer/widget boundary and `semanticSnapshot()`
 as the accessibility boundary. Shared visual work should consume
-`snd::ui::paint` helpers rather than copying immediate-mode drawing code.
+`snd::ui::draw::Surface` and `snd::ui::paint` helpers rather than copying
+immediate-mode drawing code.
 If a caller-owned bound value changes outside retained dispatch, call
 `refreshBoundValues()` on the UI thread before deciding whether to repaint or
 publish fresh semantics. Custom Canvas/widgets with caller-owned models that

@@ -1,9 +1,9 @@
+#include "imgui.h"
+
 #include "snd/ui_retained_widgets.h"
 
 #include "snd/ui.h"
 #include "ui_draw_imgui.h"
-
-#include "imgui.h"
 
 #include <algorithm>
 #include <array>
@@ -5808,7 +5808,7 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
         state.open = true;
         state.anchorToPosition = true;
         state.highlightedIndex = -1;
-        state.position = ImVec2(event.position.x, event.position.y);
+        state.position = {event.position.x, event.position.y};
         if (onOpen)
             onOpen(n, event.position);
         return true;
@@ -5821,7 +5821,7 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
         state.highlightedIndex = -1;
         const Rect b = n.bounds();
         Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
-        state.position = ImVec2(pos.x, pos.y);
+        state.position = {pos.x, pos.y};
         if (onOpen)
             onOpen(n, pos);
         return true;
@@ -5858,7 +5858,7 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
         state.open = true;
         state.anchorToPosition = true;
         state.highlightedIndex = -1;
-        state.position = ImVec2(event.position.x, event.position.y);
+        state.position = {event.position.x, event.position.y};
         if (onOpen)
             onOpen(n, event.position);
         return true;
@@ -5871,7 +5871,7 @@ Node::Ptr contextMenuRegion(NodeId id, std::string name, Vec2 intrinsicSize,
         state.highlightedIndex = -1;
         const Rect b = n.bounds();
         Vec2 pos{b.x + b.w * 0.5f, b.y + b.h * 0.5f};
-        state.position = ImVec2(pos.x, pos.y);
+        state.position = {pos.x, pos.y};
         if (onOpen)
             onOpen(n, pos);
         return true;
@@ -6868,7 +6868,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 contextMenu->open = true;
                 contextMenu->anchorToPosition = true;
                 contextMenu->highlightedIndex = -1;
-                contextMenu->position = ImVec2(anchor.x, anchor.y);
+                contextMenu->position = {anchor.x, anchor.y};
             }
             if (callbacks.onContextMenu) {
                 const Rect nb = n.bounds();
@@ -6898,7 +6898,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
             contextMenu->open = true;
             contextMenu->anchorToPosition = true;
             contextMenu->highlightedIndex = -1;
-            contextMenu->position = ImVec2(pos.x, pos.y);
+            contextMenu->position = {pos.x, pos.y};
         }
         if (callbacks.onContextMenu)
             callbacks.onContextMenu(state.hovered, state.hovered.graphPosition,
@@ -7093,7 +7093,7 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 contextMenu->open = true;
                 contextMenu->anchorToPosition = true;
                 contextMenu->highlightedIndex = -1;
-                contextMenu->position = ImVec2(event.position.x, event.position.y);
+                contextMenu->position = {event.position.x, event.position.y};
             }
             if (callbacks.onContextMenu)
                 callbacks.onContextMenu(state.hovered, state.hovered.graphPosition,

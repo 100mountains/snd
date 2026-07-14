@@ -66,7 +66,8 @@ Primitive parity contract:
 ## The aGooey window and frame loop
 
 For a new retained/aGooey app, include the retained headers and use
-`snd::ui::retained::GlWindow`. This path has no ImGui context.
+`snd::ui::retained::GlWindow`. Link `snd_ui_retained_gl`; this path has no
+ImGui context or immediate-mode compatibility target.
 
 ```cpp
 #include "snd/ui_retained.h"
@@ -226,8 +227,9 @@ art that must stay crisp at any size or DPI:
   recolour a monochrome glyph, or fade one toward a watermark.
 - `loadSvgTexture(svgText, heightPx, tint = 0)` → `SvgTexture{id, w, h}`.
   Uploads to a GL texture — call it once a context exists (after
-  `Window::create`, or inside the frame loop) and feed `id` to
-  `ImGui::Image`. Release with `releaseTexture(id)`.
+  `Window::create`, or inside the frame loop). In ImGui code, cast `id` to
+  `ImTextureID` before feeding it to `ImGui::Image`. Release with
+  `releaseTexture(id)`.
 
 Width follows the source aspect ratio; a parse failure returns an empty
 bitmap / invalid texture id.
@@ -296,7 +298,7 @@ custom face cannot remove keyboard visibility.
 Painter args now carry both `drawList` and `surface`. Under the ImGui backend
 both are populated, so existing ImDrawList painters keep working. Prefer
 `a.surface` for new draw-only bodies; a painter that uses only
-`snd::ui::draw::Surface` can run on a non-ImGui retained renderer later. The
+`snd::ui::draw::Surface` runs on the retained GL renderer without ImGui. The
 button painter args also carry `fontRef` and `fontSizePx` so surface-only
 button faces can call `paint::drawDefaultButton(a)` and keep their label text.
 The default knob, button, toggle, LED, meter, fader, XY pad, pattern-grid,

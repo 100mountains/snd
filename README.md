@@ -10,13 +10,12 @@ see [License](#license).
 
 - `snd::audio` — device playback/capture, file decode (wav/aiff/flac/mp3/ogg),
   streaming reads, encoders (FLAC, MP3), resampling, a gapless `Player`
-- `snd::ui` — native window + Dear ImGui frame shell (GLFW/OpenGL underneath),
-  frameless windows with app-drawn title bars, multi-window, file
-  drag-and-drop, and a themed audio widget set (knobs, meters, faders,
+- `snd::ui` — shared audio UI toolkit with two front ends: retained/aGooey
+  (`snd_ui_retained_gl`, no ImGui target) and Dear ImGui compatibility
+  (`snd_ui_imgui`). Widgets share paint helpers for knobs, meters, faders,
   keyboard, pattern grid, sequencer matrix, envelope editor, graph surface,
-  menus, …) in both immediate and retained modes. The retained tree adds
-  layout, keyboard focus, and accessibility semantics; custom painter hooks
-  re-skin controls without forking behaviour. See `UI_PROGRAMMING_GUIDE.md`.
+  menus, and custom painter hooks. The retained tree adds layout, keyboard
+  focus, and accessibility semantics. See `UI_PROGRAMMING_GUIDE.md`.
 - `snd::plugin` — VST3 + AU **hosting** (editor GUIs in native windows, MIDI,
   host transport) and a **client SDK**: write a `Processor` + ImGui editor once
   and build it as VST3, AU, and a standalone app. Multichannel buses, an

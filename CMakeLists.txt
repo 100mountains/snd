@@ -167,23 +167,9 @@ else()
         ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_linux.cpp)
 endif()
 
-add_library(snd STATIC
+set(SND_CORE_SOURCES
     src/audio.cpp
     src/midi.cpp
-    src/ui.cpp
-    src/ui_glfw_shared.cpp
-    src/ui_widgets.cpp
-    src/ui_draw_gl.cpp
-    src/ui_draw_imgui.cpp
-    src/ui_draw_recording.cpp
-    src/ui_font_atlas_stb.cpp
-    src/ui_paint.cpp
-    src/ui_fonts.cpp
-    src/ui_retained_gl.cpp
-    src/ui_retained_matrix.cpp
-    src/ui_retained_widgets.cpp
-    src/ui_retained.cpp
-    src/svg.cpp
     src/dsp.cpp
     src/platform.cpp
     src/state.cpp
@@ -191,10 +177,40 @@ add_library(snd STATIC
     src/plugin_hosted.cpp
     src/plugin_graph.cpp
     src/plugin_host/vst3/vst3_format.cpp
-    ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
     ${pffft_SOURCE_DIR}/src/pffft.c
     ${pffft_SOURCE_DIR}/src/pffft_common.c
     ${SND_VST3_HOSTING_EXTRA}
+)
+
+set(SND_UI_FOUNDATION_SOURCES
+    src/ui_draw_recording.cpp
+    src/ui_font_atlas_stb.cpp
+    src/ui_paint.cpp
+    src/ui_palette.cpp
+)
+
+set(SND_UI_RETAINED_SOURCES
+    src/ui_retained.cpp
+    src/ui_retained_matrix.cpp
+    src/ui_retained_widgets.cpp
+)
+
+set(SND_UI_GLFW_SOURCES
+    src/ui_glfw_shared.cpp
+)
+
+set(SND_UI_RETAINED_GL_SOURCES
+    src/ui_draw_gl.cpp
+    src/ui_retained_gl.cpp
+)
+
+set(SND_UI_IMGUI_SOURCES
+    src/ui.cpp
+    src/ui_widgets.cpp
+    src/ui_draw_imgui.cpp
+    src/ui_fonts.cpp
+    src/svg.cpp
+    ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
@@ -203,45 +219,103 @@ add_library(snd STATIC
     ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 )
 
+add_library(snd_core STATIC ${SND_CORE_SOURCES})
+add_library(snd_ui_foundation STATIC ${SND_UI_FOUNDATION_SOURCES})
+add_library(snd_ui_retained STATIC ${SND_UI_RETAINED_SOURCES})
+add_library(snd_ui_glfw STATIC ${SND_UI_GLFW_SOURCES})
+add_library(snd_ui_retained_gl STATIC ${SND_UI_RETAINED_GL_SOURCES})
+add_library(snd_ui_imgui STATIC ${SND_UI_IMGUI_SOURCES})
+
 if(UNIX AND NOT APPLE)
-    target_sources(snd PRIVATE src/plugin_host/editor_window_x11.cpp)
+    target_sources(snd_core PRIVATE src/plugin_host/editor_window_x11.cpp)
 endif()
 
 if(WIN32)
-    target_sources(snd PRIVATE src/plugin_host/editor_window_win.cpp)
+    target_sources(snd_core PRIVATE src/plugin_host/editor_window_win.cpp)
 endif()
 
 if(APPLE)
-    target_sources(snd PRIVATE
+    target_sources(snd_core PRIVATE
         src/audio_media_mac.mm
         src/plugin_host/au/au_format.mm
-        src/plugin_host/editor_window_mac.mm
-        src/ui_mac.mm)
+        src/plugin_host/editor_window_mac.mm)
+    target_sources(snd_ui_glfw PRIVATE src/ui_mac.mm)
     set_source_files_properties(
         src/plugin_host/editor_window_mac.mm src/audio_media_mac.mm
         PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
-target_include_directories(snd
+foreach(_snd_target
+        snd_core
+        snd_ui_foundation
+        snd_ui_retained
+        snd_ui_glfw
+        snd_ui_retained_gl
+        snd_ui_imgui)
+    target_include_directories(${_snd_target}
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
+endforeach()
+
+target_include_directories(snd_core
     PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${miniaudio_SOURCE_DIR}
+    PRIVATE
+        ${pffft_SOURCE_DIR}/src
+        ${pffft_SOURCE_DIR}/include/pffft
+)
+
+target_include_directories(snd_ui_foundation PRIVATE
+        ${nanosvg_SOURCE_DIR}/src
+        ${imgui_SOURCE_DIR})
+
+target_include_directories(snd_ui_retained PRIVATE
+        ${nanosvg_SOURCE_DIR}/src
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends)
+
+target_include_directories(snd_ui_imgui
+    PUBLIC
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends
         ${imgui_knobs_SOURCE_DIR}
     PRIVATE
-        ${pffft_SOURCE_DIR}/src
-        ${pffft_SOURCE_DIR}/include/pffft
         ${nanosvg_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
 )
 
-target_link_libraries(snd PUBLIC glfw sdk_hosting nfd FLAC)
+target_link_libraries(snd_core PUBLIC sdk_hosting nfd FLAC)
+target_link_libraries(snd_ui_foundation PUBLIC snd_core)
+target_link_libraries(snd_ui_retained PUBLIC snd_ui_foundation)
+target_link_libraries(snd_ui_glfw PUBLIC glfw)
+target_link_libraries(snd_ui_retained_gl PUBLIC snd_ui_retained snd_ui_glfw)
+target_link_libraries(snd_ui_imgui PUBLIC snd_ui_foundation snd_ui_glfw)
+
+# The retained and shared-paint sources still carry source-compatible ImGui
+# bridge overloads beside the renderer-neutral paths. Compile them into
+# sectioned objects and make retained-only consumers dead-strip unused bridge
+# sections so linking snd_ui_retained_gl does not ship or require ImGui code.
+if(MSVC)
+    target_compile_options(snd_ui_foundation PRIVATE /Gy /Gw)
+    target_compile_options(snd_ui_retained PRIVATE /Gy /Gw)
+    target_link_options(snd_ui_retained_gl INTERFACE /OPT:REF)
+elseif(APPLE)
+    target_compile_options(snd_ui_foundation PRIVATE -ffunction-sections -fdata-sections)
+    target_compile_options(snd_ui_retained PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(snd_ui_retained_gl INTERFACE -Wl,-dead_strip)
+else()
+    target_compile_options(snd_ui_foundation PRIVATE -ffunction-sections -fdata-sections)
+    target_compile_options(snd_ui_retained PRIVATE -ffunction-sections -fdata-sections)
+    target_link_options(snd_ui_retained_gl INTERFACE -Wl,--gc-sections)
+endif()
+
+add_library(snd INTERFACE)
+target_link_libraries(snd INTERFACE snd_core snd_ui_retained_gl snd_ui_imgui)
 
 if(APPLE)
-    target_link_libraries(snd PUBLIC
+    target_link_libraries(snd_core PUBLIC
         "-framework Cocoa"
-        "-framework OpenGL"
         "-framework CoreAudio"
         "-framework CoreFoundation"
         "-framework AudioToolbox"
@@ -250,14 +324,18 @@ if(APPLE)
         "-framework CoreMIDI"
         "-framework AVFoundation"
         "-framework CoreMedia")
+    target_link_libraries(snd_ui_glfw PUBLIC
+        "-framework Cocoa"
+        "-framework OpenGL")
 elseif(WIN32)
-    target_link_libraries(snd PUBLIC opengl32 winmm
-        mfplat mfreadwrite mfuuid ole32)
+    target_link_libraries(snd_core PUBLIC winmm mfplat mfreadwrite mfuuid ole32)
+    target_link_libraries(snd_ui_glfw PUBLIC opengl32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)
     find_package(X11 REQUIRED)
-    target_link_libraries(snd PUBLIC OpenGL::GL Threads::Threads m dl asound X11::X11)
+    target_link_libraries(snd_core PUBLIC Threads::Threads m dl asound X11::X11)
+    target_link_libraries(snd_ui_glfw PUBLIC OpenGL::GL X11::X11)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -370,3 +448,10 @@ target_compile_definitions(snd-example PRIVATE
 add_executable(snd-widget-shots tools/widget-shots/main.cpp)
 target_link_libraries(snd-widget-shots PRIVATE snd)
 target_include_directories(snd-widget-shots PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Build-only retained/Agooey link proof: depends on the retained GL target and
+# recording surface, but not the immediate/ImGui compatibility target. Do not
+# run it as an app; the target exists so CI/local builds catch accidental ImGui
+# linkage leaking back into the pure retained layer.
+add_executable(snd-retained-linkcheck tools/retained-linkcheck/main.cpp)
+target_link_libraries(snd-retained-linkcheck PRIVATE snd_ui_retained_gl)

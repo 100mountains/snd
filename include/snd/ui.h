@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "snd/ui_types.h"
 
 namespace snd::ui {
 
@@ -147,17 +148,6 @@ bool cycleButton(const char* id, const char* const* labels, int count,
 
 // Vector transport/tool icons, drawn as crisp geometry (no bitmaps, scale-
 // independent like SVG). `active` renders with the accent colour + border.
-enum class Icon {
-    Play,
-    Stop,
-    Record,
-    SkipToStart,
-    SkipToEnd,
-    Loop,
-    Waveform,
-    Spectrum,
-    Follow, // playhead line + arrow: "view follows transport"
-};
 bool iconButton(const char* id, Icon icon, const ImVec2& size, ImU32 accent,
                 bool active = false);
 // Outline-chrome transport button using SND transport semantics. Default
@@ -201,31 +191,11 @@ bool ledButton(const char* id, const char* glyph, bool* on, bool blink = false,
 // Parse + rasterize an SVG document (nanosvg) so vector logos/icons stay crisp
 // at any size or DPI. Rasterizes heightPx tall; width follows the source
 // aspect. tint != 0 multiplies every texel (recolour a monochrome glyph, or
-// fade one to a watermark). rasterizeSvg is GL-free and headless-safe;
-// loadSvgTexture uploads to a GL texture, so call it once a context exists
-// (after Window::create / inside the frame loop).
-struct SvgBitmap {
-    std::vector<unsigned char> rgba; // straight-alpha RGBA8, row-major
-    int w = 0, h = 0;                // rgba is empty on a parse failure
-};
-SvgBitmap rasterizeSvg(const char* svgText, int heightPx, ImU32 tint = 0);
-
-struct SvgTexture {
-    ImTextureID id = ImTextureID_Invalid; // 0 on failure; feed to ImGui::Image
-    int w = 0, h = 0;
-};
-SvgTexture loadSvgTexture(const char* svgText, int heightPx, ImU32 tint = 0);
-// Decode a PNG held in memory to straight-alpha RGBA8 (vendored stb_image,
-// PNG-only build). GL-free and headless-safe like rasterizeSvg; rgba is
-// empty on a decode failure.
-SvgBitmap decodeImage(const unsigned char* bytes, int byteCount);
-// Decode + upload in one call. Same lifetime rules as loadSvgTexture.
-SvgTexture loadImageTexture(const unsigned char* bytes, int byteCount);
-// Upload caller-provided straight-alpha RGBA8 pixels (row-major, w*h*4 bytes)
-// to a GL texture -- the raster-image path for decoded images or generated
-// bitmaps. Same lifetime rules as loadSvgTexture.
-SvgTexture loadTextureRGBA(const unsigned char* rgba, int w, int h);
-void releaseTexture(ImTextureID id); // glDeleteTextures a loadSvgTexture/loadTextureRGBA id
+// fade one to a watermark). rasterizeSvg/decodeImage are GL-free and
+// headless-safe; loadSvgTexture/loadImageTexture/loadTextureRGBA upload to a
+// GL texture, so call them once a context exists (after Window::create /
+// inside the frame loop). The function declarations live in ui_types.h because
+// retained and immediate paint share texture-backed icons.
 
 // --- The audio widget set ---------------------------------------------------
 // Themed controls for audio apps: knobs, switches, LEDs, meters, faders.
@@ -233,66 +203,13 @@ void releaseTexture(ImTextureID id); // glDeleteTextures a loadSvgTexture/loadTe
 // changes re-skins every widget. Knobs are the vendored imgui-knobs
 // underneath; the rest is SND's own drawing.
 
-struct Palette {
-    ImU32 accent = IM_COL32(240, 190, 90, 255);    // active/lit elements
-    ImU32 accentDim = IM_COL32(120, 95, 45, 255);  // their darker relative
-    ImU32 text = IM_COL32(230, 232, 240, 255);
-    ImU32 textDim = IM_COL32(140, 145, 158, 255);
-    ImU32 frame = IM_COL32(34, 37, 46, 255);       // control bodies
-    ImU32 frameBright = IM_COL32(58, 63, 78, 255); // borders/tracks
-    ImU32 ledOff = IM_COL32(70, 74, 88, 255);
-    ImU32 meterLow = IM_COL32(80, 220, 120, 235);  // classic hardware zones
-    ImU32 meterMid = IM_COL32(255, 185, 70, 235);
-    ImU32 meterHot = IM_COL32(255, 80, 70, 235);
-};
 void setPalette(const Palette& p);
 const Palette& palette();
-
-struct MenuItem {
-    std::string id;
-    std::string label;
-    std::string icon;
-    bool separator = false;
-    bool enabled = true;
-    bool checked = false;
-    std::string rightText;
-    bool danger = false;
-    // Optional nested submenu rows. State remains in PopupMenuState.
-    std::vector<MenuItem> children;
-    // Optional texture icon for the row (a loadSvgTexture/loadImageTexture
-    // id); when valid it takes the icon column instead of `icon`. The
-    // texture must outlive the menu. Deliberately the last field so every
-    // existing positional aggregate initializer keeps its meaning; set it by
-    // name (item.image = ...).
-    ImTextureID image = ImTextureID_Invalid;
-};
-
-struct PopupMenuState {
-    bool open = false;
-    int highlightedIndex = -1;
-    bool closeOnOutsideClick = true;
-    bool anchorToPosition = false;
-    ImVec2 position = ImVec2(0.0f, 0.0f);
-    // Retained menus use this to keep nested submenu rows caller-owned.
-    std::vector<std::string> openSubmenuPath;
-    std::string typeahead;
-};
 
 struct MenuOptions {
     float width = 0.0f;
     float itemHeight = 0.0f;
     ImFont* iconFont = nullptr;
-};
-
-struct MenuResult {
-    bool activated = false;
-    int index = -1;
-    // The activated item's id (its label when it has no id). Match on this.
-    std::string id;
-    // Full open path to the item ("parent/child/leaf") — disambiguates equal
-    // ids under different submenus. NOT the item id; prefix checks against
-    // item ids must use `id`.
-    std::string targetId;
 };
 
 void openPopupMenu(const char* popupId);
@@ -328,13 +245,6 @@ bool knobDb(const char* label, float* db, float minDb, float maxDb,
 // from 12 o'clock (for -x..+x params). `accent` 0 = palette accent. Returns
 // true while the value is changing. (The plain knob()/knobDb() above stay the
 // vendored imgui-knobs wiper/tick styles.)
-enum class KnobStyle {
-    Davies, // synth-panel knob: dark dished face, chrome skirt, pointer, ticks
-    Ring,   // ring only: dim background arc + accent value arc + thumb dot
-    Seq,    // sequencer ring: flat/butt-capped arcs, no thumb dot (SEQ matrix)
-    Synth,  // flat disc + track ring + accent value arc + single pointer tick
-    Nxd,    // scalloped rotating case + inner face + tick ring + pointer (AID/NxD)
-};
 bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, float size = 0.0f, const char* format = "%.2f",
           bool bipolar = false, ImU32 accent = 0);
@@ -347,11 +257,6 @@ bool knob(const char* label, float* value, float minV, float maxV,
 // normalized range away from the value, plus a live dot at the modulated
 // position. SND draws it over any body -- built-in styles or custom painters
 // -- so modulated knobs keep one shared look. color 0 = a light accent tint.
-struct KnobMod {
-    float depth = 0.0f;   // signed sweep from the value, in normalized units
-    float value = -1.0f;  // live modulated position 0..1; < 0 hides the dot
-    ImU32 color = 0;
-};
 bool knob(const char* label, float* value, float minV, float maxV,
           KnobStyle style, const KnobMod& mod, float size = 0.0f,
           const char* format = "%.2f", bool bipolar = false, ImU32 accent = 0);
@@ -374,11 +279,6 @@ bool led(const char* id, bool on, float radius = 5.0f, bool clickable = false,
 // Level meter on a dB scale (floorDb..0) with peak-hold. `level` is linear
 // amplitude 0..1 for this frame; the state carries decay + hold between
 // frames. Horizontal when size.x > size.y.
-struct MeterState {
-    float shown = 0.0f;   // decayed bar level (linear)
-    float peak = 0.0f;    // held peak (linear)
-    float peakAge = 0.0f; // frames since the peak was set
-};
 void meter(const char* id, MeterState& st, float level, const ImVec2& size,
            float floorDb = -48.0f);
 
@@ -412,11 +312,6 @@ void timelineRuler(const char* id, double startBeat, double endBeat,
                    float playhead = -1.0f);
 
 // A breakpoint in an automation lane: time and value both normalized 0..1.
-struct AutoPoint {
-    float time = 0.0f;
-    float value = 0.0f;
-};
-
 // Automation / curve lane over `points` (kept time-sorted). Drag a point to
 // move it (its time clamps between its neighbours), double-click empty space to
 // add one, double-click or right-click a point to remove it. Returns true on
@@ -432,14 +327,6 @@ bool colorPicker(const char* id, float* h, float* s, float* v,
 // Transient notification stack (caller-owned). Toast display is a mode-specific
 // system: pushToast() queues a message; the immediate toasts() driver or the
 // retained toastOverlay() draws + prunes them, both via paint::drawToast.
-struct ToastStack {
-    struct Item {
-        std::string text;
-        double bornAt = 0.0;
-        double expiry = 0.0;
-    };
-    std::vector<Item> items;
-};
 void pushToast(ToastStack& stack, std::string text, double now,
                double seconds = 2.5);
 // Draw + prune the stack, stacked upward from anchorBottomRight, fading in/out,
@@ -459,12 +346,6 @@ void propertyRow(const char* label, const ImVec2& size, float labelWidth = 110.0
 
 // A columnar table model (caller-owned): column headers + widths (px), a
 // cell(row, col) text provider, and the row count.
-struct TableModel {
-    std::vector<std::string> headers;
-    std::vector<float> colWidths;
-    std::function<std::string(int row, int col)> cell;
-    int rows = 0;
-};
 // Columnar table: sticky header, 20px rows, selection highlight + alt stripes,
 // wheel scroll, up/down keyboard nav. Returns the (possibly changed) selected
 // row index.
@@ -474,12 +355,6 @@ int table(const char* id, const TableModel& model, const ImVec2& size,
 // Drag-and-drop payload (caller-owned). DnD is a mode-specific system: a drag
 // source calls beginDrag(); a drop target checks dropMatches() then endDrag();
 // dragGhost() / dragGhostOverlay draw the floating chip.
-struct DragPayload {
-    std::string kind;
-    std::string label;
-    std::string id;
-    bool active = false;
-};
 void beginDrag(DragPayload& p, std::string kind, std::string label,
                std::string id);
 void endDrag(DragPayload& p);
@@ -489,10 +364,6 @@ bool dropMatches(const DragPayload& p, const char* acceptKind);
 void dragGhost(DragPayload& p);
 
 // A command for commandPalette: a display label + an id returned on pick.
-struct CommandItem {
-    std::string label;
-    std::string id;
-};
 // Searchable command list: a query box over a substring-filtered list with
 // up/down + Enter. Returns the picked index into `items` (or -1). `query` is
 // caller-owned.
@@ -514,9 +385,6 @@ void sectionHeader(const char* text);
 // Piano keyboard. Click plays (velocity from how far down the key you hit),
 // dragging glissandos. noteOn/noteOff fire on transitions; also render any
 // externally-held notes by passing them in `lit` (e.g. from incoming MIDI).
-struct KeyboardState {
-    int mouseNote = -1; // note the mouse currently holds, -1 = none
-};
 bool keyboard(const char* id, KeyboardState& st, const ImVec2& size,
               int firstNote, int octaves,
               const std::function<void(uint8_t note, uint8_t velocity)>& noteOn,
@@ -541,9 +409,6 @@ bool patternGrid(const char* id, bool* cells, int rows, int steps,
 // Optional `tensions`: per-segment bend, -1..1 (entry i curves the segment
 // points[i]->points[i+1]; kept the same length as points). Dragging the
 // middle of a segment bends it; segments draw as eased curves.
-struct EnvPoint {
-    float x = 0.0f, y = 0.0f;
-};
 bool envelopeEditor(const char* id, std::vector<EnvPoint>& points,
                     const ImVec2& size, std::vector<float>* tensions = nullptr);
 
@@ -565,10 +430,6 @@ bool dragNumber(const char* label, float* value, float speed, float minV,
 // File browser panel: directory listing + breadcrumb up-navigation.
 // Returns true when the user picks a file (path written to outPath).
 // extensions = comma list ("wav,flac"); null shows everything.
-struct FileBrowserState {
-    std::string dir;      // current directory ("" = start in HOME)
-    std::string selected; // highlighted entry
-};
 bool fileBrowser(const char* id, FileBrowserState& st, const ImVec2& size,
                  std::string* outPath, const char* extensions = nullptr);
 

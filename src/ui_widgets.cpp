@@ -5,6 +5,8 @@
 #include "snd/ui.h"
 #include "snd/ui_paint.h"
 
+#include "ui_draw_imgui.h"
+
 #include "imgui-knobs.h"
 #include "imgui_internal.h"
 
@@ -21,7 +23,7 @@ namespace snd::ui {
 
 namespace {
 
-Palette gPalette;
+const Palette& gPalette = palette();
 
 const char* visibleLabelEnd(const char* label)
 {
@@ -74,6 +76,7 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
     float frac = (maxV != minV) ? (*value - minV) / (maxV - minV) : 0.0f;
     frac = std::clamp(frac, 0.0f, 1.0f);
     auto* dl = ImGui::GetWindowDrawList();
+    draw::ImGuiSurface surface(dl);
     paint::ControlState state;
     state.hovered = ImGui::IsItemHovered();
     state.active = ImGui::IsItemActive();
@@ -81,6 +84,7 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
 
     paint::KnobPaintArgs args;
     args.drawList = dl;
+    args.surface = &surface;
     args.topLeft = p;
     args.size = size;
     args.rawValue = value ? *value : 0.0f;
@@ -111,9 +115,6 @@ bool knobPainted(const char* label, float* value, float minV, float maxV,
 }
 
 } // namespace
-
-void setPalette(const Palette& p) { gPalette = p; }
-const Palette& palette() { return gPalette; }
 
 bool knob(const char* label, float* value, float size, const char* format)
 {
@@ -828,6 +829,8 @@ bool xyPad(const char* id, float* x, float* y, const ImVec2& size,
 
     paint::XYPadPaintArgs args;
     args.drawList = ImGui::GetWindowDrawList();
+    draw::ImGuiSurface surface(args.drawList);
+    args.surface = &surface;
     args.topLeft = p;
     args.size = size;
     args.x = *x;

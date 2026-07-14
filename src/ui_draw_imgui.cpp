@@ -1,6 +1,6 @@
-#include "ui_draw_imgui.h"
-
 #include "imgui_internal.h" // ImDrawListSharedData: TexUvWhitePixel for PrimWriteVtx
+
+#include "ui_draw_imgui.h"
 
 #include <cfloat>
 #include <cmath>
