@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "imgui.h"
 #include "snd/ui_draw.h"
 #include "snd/ui_types.h"
 

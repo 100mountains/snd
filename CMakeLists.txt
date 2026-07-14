@@ -270,6 +270,9 @@ target_include_directories(snd_core
 target_include_directories(snd_ui_foundation PRIVATE
         ${nanosvg_SOURCE_DIR}/src
         ${imgui_SOURCE_DIR})
+target_include_directories(snd_ui_foundation PUBLIC
+        ${imgui_SOURCE_DIR}
+        ${imgui_SOURCE_DIR}/backends)
 
 target_include_directories(snd_ui_retained PRIVATE
         ${nanosvg_SOURCE_DIR}/src

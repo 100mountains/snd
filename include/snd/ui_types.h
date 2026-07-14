@@ -11,7 +11,7 @@
 
 #include "snd/ui_draw.h"
 
-#ifndef IM_COL32_R_SHIFT
+#if !defined(IMGUI_VERSION) && !defined(IM_COL32_R_SHIFT)
 using ImU32 = uint32_t; // legacy-compatible colour alias, not an ImGui dep.
 struct ImVec2 {
     float x = 0.0f;
