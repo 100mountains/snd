@@ -6200,6 +6200,92 @@ Node::Ptr modalDialog(NodeId id, std::string title, std::string message,
     return overlay;
 }
 
+Node::Ptr modalPanel(NodeId id, ModalDialogState& state, Node::Ptr panel,
+                     PaintRenderer* renderer, ModalDialogOptions options)
+{
+    NodeId sid = id;
+    const NodeId panelId = panel ? panel->id() : sid + ".panel";
+
+    Layout overlayLayout;
+    overlayLayout.kind = LayoutKind::Stack;
+    overlayLayout.mainAlign = Align::Center;
+    overlayLayout.crossAlign = Align::Center;
+    auto overlay = Node::make(std::move(id), Role::Group);
+    overlay->setLayout(overlayLayout);
+    overlay->setSize(Length::fill(), Length::fill());
+    overlay->setIntrinsicSize(options.size);
+    overlay->setOverlay(true);
+    overlay->setVisible(state.open);
+    overlay->setModal(state.open);
+    overlay->setSemantics(named(Role::Group, std::string{}));
+
+    overlay->setOnRefresh([&state](Node& n) {
+        const bool changed = n.visible() != state.open ||
+                             n.modal() != state.open;
+        n.setVisible(state.open);
+        n.setModal(state.open);
+        return changed;
+    });
+
+    overlay->setOnEvent([&state, panelId, options](Node& n, const Event& e) {
+        if (!state.open)
+            return false;
+        if (e.type == EventType::KeyDown && e.key == Key::Escape) {
+            if (options.escapePolicy == ModalEscapePolicy::Ignore)
+                return true;
+            dismissModal(state, ModalDialogResult::Dismissed, "escape");
+            syncModalRootFromState(n, state);
+            return true;
+        }
+
+        if (e.type == EventType::MouseMove ||
+            e.type == EventType::MouseWheel ||
+            e.type == EventType::ContextMenu ||
+            e.type == EventType::MouseDown ||
+            e.type == EventType::MouseUp) {
+            if (e.type == EventType::MouseUp && e.button == MouseButton::Left &&
+                options.closeOnScrimClick) {
+                const Node* modalPanelNode = n.find(panelId);
+                if (!modalPanelNode || !modalPanelNode->bounds().contains(e.position)) {
+                    dismissModal(state, ModalDialogResult::Dismissed, "scrim");
+                    syncModalRootFromState(n, state);
+                }
+            }
+            return true;
+        }
+        return false;
+    });
+
+    if (renderer) {
+        VisualStyle scrim;
+        scrim.kind = VisualKind::Canvas;
+        scrim.panelBorder = false;
+        scrim.canvasClip = false;
+        scrim.canvasFocusRing = false;
+        scrim.canvasSurfaceDraw =
+            [backdrop = options.backdrop,
+             dimColor = options.scrimColor,
+             blankColor = options.blankColor](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState&, const draw::FrameContext&) {
+                if (backdrop == ModalBackdrop::None)
+                    return;
+                const ImU32 color = backdrop == ModalBackdrop::Blank
+                                        ? blankColor
+                                        : dimColor;
+                surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
+                                 color, 0.0f);
+            };
+        renderer->setStyle(sid, scrim);
+    }
+
+    if (panel) {
+        panel->setRole(options.role);
+        overlay->addChild(std::move(panel));
+    }
+    return overlay;
+}
+
 Node::Ptr alertDialog(NodeId id, std::string title, std::string message,
                       ModalDialogState& state,
                       std::function<void()> onOk,

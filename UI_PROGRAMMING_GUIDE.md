@@ -752,6 +752,9 @@ builds a top-level overlay with a configurable backdrop, centred dialog panel,
 title, message, real retained buttons, focus trap, Escape handling, and inert
 background input. `widgets::alertDialog(...)` and
 `widgets::confirmDialog(...)` are convenience wrappers over the same primitive.
+Use `widgets::modalPanel(...)` when the modal body is a real retained panel,
+such as a settings page, browser, or inspector, rather than a title/message
+dialog.
 
 Add the returned node as a top-level child of the retained root, usually last:
 
@@ -765,6 +768,20 @@ root.addChild(widgets::confirmDialog(
     [&] { deleteSelectedModule(); },
     [&] { keepModule(); },
     &renderer));
+```
+
+For arbitrary modal content, build the panel normally and pass it to
+`modalPanel(...)`:
+
+```cpp
+auto panel = widgets::panel("audio.settings.panel");
+// add rows, controls, menus...
+
+ModalDialogOptions options;
+options.backdrop = ModalBackdrop::None;
+options.escapePolicy = ModalEscapePolicy::Close;
+root.addChild(widgets::modalPanel("audio.settings", state,
+                                  std::move(panel), &renderer, options));
 ```
 
 The caller owns `ModalDialogState::open`. While the modal node is visible,
@@ -1001,11 +1018,11 @@ members).
   `MenuItem::rightText` draws shortcut/value text on the right; `danger` adds a
   destructive-action cue. Retained menus expose `Role::Menu`,
   `Role::MenuItem`, and `Role::ComboBox` semantics.
-- `widgets::modalDialog(...)`, `widgets::alertDialog(...)`,
-  `widgets::confirmDialog(...)` -> retained overlay nodes. They draw the
-  selected `ModalBackdrop` (`Dim`, `Blank`, or `None`), trap Tab focus, consume
-  background input, expose `Role::Dialog` / `Role::Alert`, and close according
-  to `ModalEscapePolicy`.
+- `widgets::modalDialog(...)`, `widgets::modalPanel(...)`,
+  `widgets::alertDialog(...)`, `widgets::confirmDialog(...)` -> retained
+  overlay nodes. They draw the selected `ModalBackdrop` (`Dim`, `Blank`, or
+  `None`), trap Tab focus, consume background input, expose modal semantics, and
+  close according to `ModalEscapePolicy`.
 
 ### Continuous controls
 

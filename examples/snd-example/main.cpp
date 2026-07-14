@@ -1979,6 +1979,43 @@ static bool selftestRetainedUi()
          modalBackdropPaintOk(r::ModalBackdrop::None, 0x11223344u, false) &&
          modalBackdropPaintOk(r::ModalBackdrop::None, 0x55667788u, false);
 
+    r::ModalDialogState panelState;
+    panelState.open = true;
+    r::ModalDialogOptions panelOptions;
+    panelOptions.backdrop = r::ModalBackdrop::None;
+    panelOptions.escapePolicy = r::ModalEscapePolicy::Close;
+    panelOptions.role = r::Role::Dialog;
+    panelOptions.size = {320.0f, 180.0f};
+    auto modalPanelBody = w::panel("modal.panel.body");
+    modalPanelBody->setSize(r::Length::fixed(320.0f),
+                            r::Length::fixed(180.0f));
+    modalPanelBody->setSemantics(named(r::Role::Dialog,
+                                       "Audio / MIDI Settings"));
+    modalPanelBody->addChild(w::label("modal.panel.label", "Output",
+                                      &modalRenderer));
+    auto panelRoot = r::Node::make("modal.panel.root");
+    panelRoot->setLayout(modalLayout);
+    panelRoot->addChild(w::button(
+        "modal.panel.background", "Background",
+        [&](r::Node&) { ++modalBackgroundActivations; }, &modalRenderer));
+    panelRoot->addChild(w::modalPanel("modal.panel", panelState,
+                                      std::move(modalPanelBody),
+                                      &modalRenderer, panelOptions));
+    r::Tree panelTree(std::move(panelRoot));
+    panelTree.layout({420.0f, 260.0f});
+    r::SemanticNode panelSem;
+    ok = ok && panelTree.validate().empty() &&
+         panelTree.semanticNode("modal.panel.body", panelSem) &&
+         panelSem.role == r::Role::Dialog &&
+         panelSem.name == "Audio / MIDI Settings" &&
+         !panelTree.semanticNode("modal.panel.background", modalBackgroundSem);
+    key = {};
+    key.type = r::EventType::KeyDown;
+    key.key = r::Key::Escape;
+    ok = ok && panelTree.dispatch(key) && !panelState.open &&
+         panelState.lastResult == r::ModalDialogResult::Dismissed &&
+         panelState.lastAction == "escape";
+
     r::GraphSurfaceState graphState;
     graphState.viewport.pan = {10.0f, 5.0f};
     graphState.viewport.zoom = 1.0f;
