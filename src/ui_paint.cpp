@@ -374,9 +374,6 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
         surface.fillCircle(c, innerR,
                            mix(IM_COL32(0x24, 0x29, 0x30, 255),
                                IM_COL32(0x12, 0x16, 0x1c, 255), 0.5f));
-        surface.fillCircle({c.x - outerR * 0.11f, c.y - outerR * 0.14f},
-                           innerR * 0.54f,
-                           IM_COL32(255, 255, 255, 15)); // specular
         for (int i = 0; i < tickCount; ++i) {
             const float a = valAng + (float)i * tickStep;
             const ImVec2 d = dirAt(a);
