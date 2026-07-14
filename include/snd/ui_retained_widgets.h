@@ -434,7 +434,8 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
                       std::string* outPath,
                       PaintRenderer* renderer = nullptr,
                       Vec2 size = {260.0f, 180.0f},
-                      const char* extensions = nullptr);
+                      const char* extensions = nullptr,
+                      std::function<void()> onChange = {});
 Node::Ptr menuItem(NodeId id, MenuItem item,
                    std::function<void(Node&, const MenuItem&, int)> onSelect = {},
                    PaintRenderer* renderer = nullptr, int index = -1,

@@ -5492,7 +5492,8 @@ Node::Ptr selectableList(NodeId id, std::string name,
 
 Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
                       std::string* outPath, PaintRenderer* renderer,
-                      Vec2 size, const char* extensions)
+                      Vec2 size, const char* extensions,
+                      std::function<void()> onChange)
 {
     namespace fs = std::filesystem;
     if (size.x <= 0.0f)
@@ -5524,10 +5525,13 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
 
     auto up = outlineButton(
         upId, "^ up",
-        [&state](Node&) {
+        [&state, onChange](Node&) {
             const fs::path parent = fs::path(state.dir).parent_path();
-            if (!parent.empty())
+            if (!parent.empty()) {
                 state.dir = parent.string();
+                if (onChange)
+                    onChange();
+            }
             state.selected.clear();
         },
         renderer, {54.0f, headerHeight});
@@ -5561,7 +5565,7 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
         auto suppressPointerActivate = std::make_shared<bool>(false);
         auto handledPointerDoubleClick = std::make_shared<bool>(false);
         item->setOnEvent(
-            [&state, outPath, entries, entry, suppressPointerActivate,
+            [&state, outPath, entries, entry, onChange, suppressPointerActivate,
              handledPointerDoubleClick](Node& itemNode, const Event& event) {
                 if (event.button != MouseButton::Left)
                     return false;
@@ -5572,6 +5576,8 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
                     if (*handledPointerDoubleClick) {
                         activateFileBrowserEntry(state, outPath, entry);
                         refreshFileBrowserSelectionFor(itemNode, entries, state);
+                        if (onChange)
+                            onChange();
                         return true;
                     }
                     return false;
@@ -5590,6 +5596,8 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
                     if (!*handledPointerDoubleClick) {
                         activateFileBrowserEntry(state, outPath, entry);
                         refreshFileBrowserSelectionFor(itemNode, entries, state);
+                        if (onChange)
+                            onChange();
                     }
                     *handledPointerDoubleClick = false;
                     *suppressPointerActivate = true;
@@ -5601,7 +5609,7 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
                 return false;
             });
         item->setOnAction(
-            [&state, outPath, entries, entry, suppressPointerActivate,
+            [&state, outPath, entries, entry, onChange, suppressPointerActivate,
              handledPointerDoubleClick](Node& itemNode, Action action, double) {
                 if (action != Action::Activate)
                     return false;
@@ -5614,6 +5622,8 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
 
                 activateFileBrowserEntry(state, outPath, entry);
                 refreshFileBrowserSelectionFor(itemNode, entries, state);
+                if (onChange)
+                    onChange();
                 return true;
             });
         list->addChild(std::move(item));

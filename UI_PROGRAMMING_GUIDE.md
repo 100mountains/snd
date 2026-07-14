@@ -1093,7 +1093,7 @@ Shift drags 10× slower.
   `FileBrowserState{dir, selected}`: `dir=""` starts in HOME. `extensions` is a
   comma list ("wav,flac"); `nullptr` shows everything.
   Retained: `widgets::fileBrowser(id, name, state, outPath, renderer, size,
-  extensions)` uses the same `FileBrowserState`, filtering, and caller-owned
+  extensions, onChange)` uses the same `FileBrowserState`, filtering, and caller-owned
   output path. Directory content is enumerated when the subtree is built, so
   rebuild after changing `state.dir` or when the filesystem changes.
 
