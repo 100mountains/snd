@@ -402,8 +402,6 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
         const float faceR = radius - std::max(2.5f, radius * 0.12f);
         const ImU32 face = mix(pal.frame, IM_COL32(0, 0, 0, 255), 0.30f);
         surface.fillCircle(c, faceR, face);
-        surface.fillCircle({c.x, c.y - faceR * 0.30f}, faceR * 0.42f,
-                           IM_COL32(255, 255, 255, 15));
         surface.strokeCircle(c, faceR, IM_COL32(10, 10, 10, 255), 0, 1.0f);
         surface.strokeCircle(c, radius, IM_COL32(0x19, 0x1b, 0x1e, 255),
                              0, 1.0f);
