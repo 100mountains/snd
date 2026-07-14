@@ -2324,31 +2324,26 @@ void drawListItem(draw::Surface& surface, draw::FontRef font, float fontSizePx,
                   const Palette& pal, const ControlState& state)
 {
     const draw::Vec2 mx{topLeft.x + size.x, topLeft.y + size.y};
-    ImU32 fill = state.selected ? withAlpha(pal.accent, 0x38) : pal.frame;
-    if (state.hovered && !state.disabled)
-        fill = mix(fill, pal.frameBright, 0.65f);
-    if (state.active && !state.disabled)
-        fill = mix(fill, pal.accent, 0.35f);
-    if (state.disabled)
-        fill = mix(fill, IM_COL32(0, 0, 0, 255), 0.35f);
-
-    surface.fillRect(topLeft, mx, fill, 3.0f);
-    surface.strokeRect(topLeft, mx, state.selected ? pal.accent : pal.frameBright, 3.0f);
-    if (state.selected) {
-        surface.fillRect({topLeft.x + 2.0f, topLeft.y + 3.0f},
-                         {topLeft.x + 5.0f, mx.y - 3.0f}, pal.accent, 2.0f);
+    if (!state.disabled && (state.selected || state.hovered || state.active)) {
+        ImU32 fill = state.selected ? withAlpha(pal.accent, 0x28) : pal.frame;
+        if (state.hovered)
+            fill = mix(fill, pal.frameBright, 0.45f);
+        if (state.active)
+            fill = mix(fill, pal.accent, 0.28f);
+        surface.fillRect(topLeft, mx, fill, 0.0f);
     }
+
+    if (!state.disabled && (state.selected || state.focused))
+        surface.fillRect({topLeft.x, topLeft.y + 2.0f},
+                         {topLeft.x + 2.0f, mx.y - 2.0f}, pal.accent, 0.0f);
 
     if (text && text[0] && fontSizePx > 0.0f) {
         draw::Vec2 ts = surface.measureText(font, fontSizePx, text);
         surface.text(font, fontSizePx,
-                     {topLeft.x + 10.0f,
+                     {topLeft.x + 8.0f,
                       topLeft.y + std::max(0.0f, size.y - ts.y) * 0.5f},
                      state.disabled ? pal.textDim : pal.text, text);
     }
-
-    if (state.focused && !state.disabled)
-        drawFocusRing(surface, topLeft, mx, pal, 3.0f);
 }
 
 void drawListItem(ImDrawList* dl, ImFont* font, const ImVec2& topLeft,

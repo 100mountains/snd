@@ -5575,7 +5575,7 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
     header->addChild(std::move(up));
     header->addChild(std::move(dirLabel));
 
-    auto list = scrollView(listId, 2.0f, Insets::all(4.0f), renderer);
+    auto list = scrollView(listId, 0.0f, Insets::all(2.0f), renderer);
     list->setIntrinsicSize({size.x, listHeight});
     list->setSize(Length::fixed(size.x), Length::fixed(listHeight));
     list->setSemantics(named(Role::Group, name.empty() ? "Files"
@@ -5589,6 +5589,7 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
             !entry.directory && state.selected == entry.path,
             {},
             renderer);
+        item->setIntrinsicSize({size.x - 4.0f, 24.0f});
         addFileBrowserActivationSemantics(*item);
         auto suppressPointerActivate = std::make_shared<bool>(false);
         auto handledPointerDoubleClick = std::make_shared<bool>(false);
