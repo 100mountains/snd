@@ -27,12 +27,6 @@ void macPrepareWindowResizeImpl(GLFWwindow* window)
     if (!nsWindow)
         return;
     [nsWindow setPreservesContentDuringLiveResize:NO];
-    NSView* contentView = [nsWindow contentView];
-    if (contentView) {
-        [contentView setPostsFrameChangedNotifications:YES];
-        if ([contentView respondsToSelector:@selector(setLayerContentsRedrawPolicy:)])
-            [contentView setLayerContentsRedrawPolicy:NSViewLayerContentsRedrawDuringViewResize];
-    }
 }
 
 // Frameless windows need the resizable style bit or AppKit refuses both the

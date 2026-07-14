@@ -322,12 +322,6 @@ struct GlWindow::Impl {
             self->droppedFiles.push_back(paths[i]);
     }
 
-    static void framebufferSizeCallback(GLFWwindow* w, int, int)
-    {
-        if (Impl* self = from(w))
-            self->redrawActiveTree(true);
-    }
-
     static void windowRefreshCallback(GLFWwindow* w)
     {
         if (Impl* self = from(w))
@@ -451,7 +445,6 @@ bool GlWindow::create(int width, int height, const std::string& title,
     glfwSetKeyCallback(impl_->window, Impl::keyCallback);
     glfwSetCharCallback(impl_->window, Impl::charCallback);
     glfwSetDropCallback(impl_->window, Impl::dropCallback);
-    glfwSetFramebufferSizeCallback(impl_->window, Impl::framebufferSizeCallback);
     glfwSetWindowRefreshCallback(impl_->window, Impl::windowRefreshCallback);
     glfwMakeContextCurrent(impl_->window);
     glfwSwapInterval(1);
