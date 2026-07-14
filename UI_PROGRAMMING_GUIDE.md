@@ -728,7 +728,9 @@ Retained helpers mirror the same model. `widgets::popupMenu(...)` builds a
 retained menu list with separators, disabled rows, checked rows, icon labels,
 optional nested submenu rows, typeahead by visible label prefix, keyboard
 Up/Down, Enter/Space activation, Right/Left submenu open/close, and Escape
-close. `widgets::dropdownMenu(...)` adds a retained combo-box face and popup
+close. Long retained menus and flyout folders use a bounded scrolling panel;
+pass the complete item list instead of truncating it. `widgets::dropdownMenu(...)`
+adds a retained combo-box face and popup
 list using caller-owned `PopupMenuState` and selected index. Pass a
 `paint::OutlineButtonStyle` to `widgets::dropdownMenu(...)` when the combo-box
 face needs custom square/hover/selected treatment; do not restyle the generated

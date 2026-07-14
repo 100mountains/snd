@@ -151,6 +151,8 @@ submenu rows. The normal retained ImGui bridge positions anchored popups after
 layout and before input/render so hit testing, semantics, and pixels agree.
 Nested submenu rows use `MenuItem::children` and caller-owned
 `PopupMenuState::openSubmenuPath`.
+Long retained menu panels and flyouts are height-bounded and scroll their
+complete direct item list.
 If the dropdown face needs custom square/hover/selected treatment, pass a
 `paint::OutlineButtonStyle` to `rw::dropdownMenu(...)`; consumers should not
 reach in and restyle the generated `<id>.button` child by ID.

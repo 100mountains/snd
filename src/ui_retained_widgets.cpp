@@ -2933,6 +2933,16 @@ float retainedVisibleMenuHeight(const std::vector<MenuItem>& items,
     return total;
 }
 
+constexpr float kRetainedMenuMaxHeight = 360.0f;
+
+float retainedMenuPanelHeight(const std::vector<MenuItem>& items,
+                              const PopupMenuState* state,
+                              const std::string& parentPath = {})
+{
+    return std::min(retainedVisibleMenuHeight(items, state, parentPath),
+                    kRetainedMenuMaxHeight);
+}
+
 std::string menuChildId(const NodeId& parentId, const MenuItem& item, int index)
 {
     if (!item.id.empty())
@@ -2967,12 +2977,13 @@ void addMenuItemNodes(Node& menu, const NodeId& sid,
             // Real flyout: the submenu is its own overlay panel, anchored to
             // the right of its parent row by prepareOpenPopups, not an
             // inline accordion in the same column.
-            auto sub = widgets::column(rowId + ".sub", 0.0f, Insets::all(4.0f));
+            auto sub = widgets::scrollView(rowId + ".sub", 0.0f,
+                                           Insets::all(4.0f), renderer);
             sub->setOverlay(true);
-            sub->setSize(Length::fixed(width + 8.0f), Length::intrinsic());
+            const float subHeight = retainedMenuPanelHeight(item.children, state);
+            sub->setSize(Length::fixed(width + 8.0f), Length::fixed(subHeight));
             sub->setIntrinsicSize({width + 8.0f,
-                                   retainedVisibleMenuHeight(item.children,
-                                                             state)});
+                                   subHeight});
             Semantics subSem = named(Role::Menu, item.label + " submenu");
             sub->setSemantics(subSem);
             const std::string subPath = path;
@@ -5661,18 +5672,20 @@ Node::Ptr popupMenu(NodeId id, PopupMenuState* state,
                     PaintRenderer* renderer, float width)
 {
     NodeId sid = id;
-    auto node = column(std::move(id), 0.0f, Insets::all(4.0f));
-    node->setSize(Length::fixed(width + 8.0f), Length::intrinsic());
+    auto node = scrollView(std::move(id), 0.0f, Insets::all(4.0f), renderer);
+    const float panelHeight = retainedMenuPanelHeight(items, state);
+    node->setSize(Length::fixed(width + 8.0f), Length::fixed(panelHeight));
     node->setOverlay(true);
     Semantics sem = named(Role::Menu, "Menu");
     node->setSemantics(sem);
     setMenuVisibleFromState(*node, state);
-    node->setIntrinsicSize({width + 8.0f, retainedVisibleMenuHeight(items, state)});
+    node->setIntrinsicSize({width + 8.0f, panelHeight});
     node->setOnRefresh([state, items, width](Node& n) {
         const bool wasVisible = n.visible();
         setMenuVisibleFromState(n, state);
         const Vec2 before = n.intrinsicSize();
-        const Vec2 next{width + 8.0f, retainedVisibleMenuHeight(items, state)};
+        const Vec2 next{width + 8.0f, retainedMenuPanelHeight(items, state)};
+        n.setSize(Length::fixed(width + 8.0f), Length::fixed(next.y));
         n.setIntrinsicSize(next);
         return wasVisible != n.visible() ||
                before.x != next.x || before.y != next.y;
