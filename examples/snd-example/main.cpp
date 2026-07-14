@@ -1986,26 +1986,26 @@ static bool selftestRetainedUi()
     panelOptions.escapePolicy = r::ModalEscapePolicy::Close;
     panelOptions.role = r::Role::Dialog;
     panelOptions.size = {320.0f, 180.0f};
-    auto modalPanelBody = w::panel("modal.panel.body");
-    modalPanelBody->setSize(r::Length::fixed(320.0f),
-                            r::Length::fixed(180.0f));
-    modalPanelBody->setSemantics(named(r::Role::Dialog,
-                                       "Audio / MIDI Settings"));
-    modalPanelBody->addChild(w::label("modal.panel.label", "Output",
-                                      &modalRenderer));
+    auto modalOverlayBody = w::panel("modal.overlay.body");
+    modalOverlayBody->setSize(r::Length::fixed(320.0f),
+                              r::Length::fixed(180.0f));
+    modalOverlayBody->setSemantics(named(r::Role::Dialog,
+                                         "Audio / MIDI Settings"));
+    modalOverlayBody->addChild(w::label("modal.overlay.label", "Output",
+                                        &modalRenderer));
     auto panelRoot = r::Node::make("modal.panel.root");
     panelRoot->setLayout(modalLayout);
     panelRoot->addChild(w::button(
         "modal.panel.background", "Background",
         [&](r::Node&) { ++modalBackgroundActivations; }, &modalRenderer));
-    panelRoot->addChild(w::modalPanel("modal.panel", panelState,
-                                      std::move(modalPanelBody),
-                                      &modalRenderer, panelOptions));
+    panelRoot->addChild(w::modalOverlay("modal.overlay", panelState,
+                                        std::move(modalOverlayBody),
+                                        &modalRenderer, panelOptions));
     r::Tree panelTree(std::move(panelRoot));
     panelTree.layout({420.0f, 260.0f});
     r::SemanticNode panelSem;
     ok = ok && panelTree.validate().empty() &&
-         panelTree.semanticNode("modal.panel.body", panelSem) &&
+         panelTree.semanticNode("modal.overlay.body", panelSem) &&
          panelSem.role == r::Role::Dialog &&
          panelSem.name == "Audio / MIDI Settings" &&
          !panelTree.semanticNode("modal.panel.background", modalBackgroundSem);

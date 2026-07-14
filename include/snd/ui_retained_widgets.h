@@ -489,9 +489,9 @@ Node::Ptr modalDialog(NodeId id, std::string title, std::string message,
                       std::vector<ModalDialogButton> buttons,
                       PaintRenderer* renderer = nullptr,
                       ModalDialogOptions options = {});
-Node::Ptr modalPanel(NodeId id, ModalDialogState& state, Node::Ptr panel,
-                     PaintRenderer* renderer = nullptr,
-                     ModalDialogOptions options = {});
+Node::Ptr modalOverlay(NodeId id, ModalDialogState& state, Node::Ptr content,
+                       PaintRenderer* renderer = nullptr,
+                       ModalDialogOptions options = {});
 Node::Ptr alertDialog(NodeId id, std::string title, std::string message,
                       ModalDialogState& state,
                       std::function<void()> onOk = {},
