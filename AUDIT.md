@@ -84,6 +84,9 @@ small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
 
+- Resolved in `bf767bd`: retained list rows are plain by default; idle rows no
+  longer draw a filled rounded box or border, while hover, focus, and selection
+  retain compact square feedback. File-browser rows use the same dense style.
 - Resolved in `87e506d`: retained popup menus keep clear of their trigger and
   scroll or flip within the available viewport; editable value fields expose
   live text semantics, duplicate validation reports are deduplicated, and the
