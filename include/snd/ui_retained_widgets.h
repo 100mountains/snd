@@ -222,6 +222,7 @@ enum class GraphNodePartKind {
     Title,
     Readout,
     Meter,
+    LoadMeter,
     Toggle,
     Action,
     Status,

@@ -3611,6 +3611,7 @@ Role graphPartRole(GraphNodePartKind kind)
     case GraphNodePartKind::Toggle: return Role::Toggle;
     case GraphNodePartKind::Action: return Role::Button;
     case GraphNodePartKind::Meter: return Role::Meter;
+    case GraphNodePartKind::LoadMeter: return Role::Meter;
     case GraphNodePartKind::Readout:
     case GraphNodePartKind::Status:
     case GraphNodePartKind::Title:
@@ -4004,6 +4005,19 @@ void drawGraphPart(ImDrawList& dl, ImFont* font, Rect bounds,
                          (float)std::clamp(part.value, 0.0, 1.0), -48.0f, pal);
         return;
     }
+    if (part.kind == GraphNodePartKind::LoadMeter) {
+        const float load = (float)std::clamp(part.value, 0.0, 1.0);
+        const ImU32 color = load < 0.5f
+                                ? IM_COL32(0x45, 0xd1, 0x7a, 0xff)
+                            : load < 0.8f
+                                ? IM_COL32(0xff, 0xc0, 0x4a, 0xff)
+                                : IM_COL32(0xff, 0x5a, 0x52, 0xff);
+        dl.AddRectFilled(p, {p.x + s.x, p.y + s.y},
+                         IM_COL32(0, 0, 0, 0x47));
+        dl.AddRectFilled({p.x, p.y + s.y * (1.0f - load)},
+                         {p.x + s.x, p.y + s.y}, color);
+        return;
+    }
     if (part.kind == GraphNodePartKind::Toggle) {
         paint::drawToggle(&dl, p, s.x, s.y, part.checked ? 1.0f : 0.0f, pal, inner);
         return;
@@ -4041,6 +4055,19 @@ void drawGraphPart(draw::Surface& surface, draw::FontRef font, float fontSizePx,
     if (part.kind == GraphNodePartKind::Meter) {
         paint::drawMeter(surface, p, s, (float)std::clamp(part.value, 0.0, 1.0),
                          (float)std::clamp(part.value, 0.0, 1.0), -48.0f, pal);
+        return;
+    }
+    if (part.kind == GraphNodePartKind::LoadMeter) {
+        const float load = (float)std::clamp(part.value, 0.0, 1.0);
+        const ImU32 color = load < 0.5f
+                                ? IM_COL32(0x45, 0xd1, 0x7a, 0xff)
+                            : load < 0.8f
+                                ? IM_COL32(0xff, 0xc0, 0x4a, 0xff)
+                                : IM_COL32(0xff, 0x5a, 0x52, 0xff);
+        surface.fillRect(p, {p.x + s.x, p.y + s.y},
+                         IM_COL32(0, 0, 0, 0x47));
+        surface.fillRect({p.x, p.y + s.y * (1.0f - load)},
+                         {p.x + s.x, p.y + s.y}, color);
         return;
     }
     if (part.kind == GraphNodePartKind::Toggle) {
@@ -7200,6 +7227,19 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                          24.0f * zoomScale, ImGui::GetTime());
                 }
 
+                for (const GraphNodePart& part : graphNode.parts) {
+                    if (part.kind != GraphNodePartKind::LoadMeter)
+                        continue;
+                    Rect partRect = graphToScreen(
+                        state.viewport, nodeLocalRect(graphNode, part.bounds));
+                    partRect.x = std::round(partRect.x + bounds.x);
+                    partRect.y = std::round(partRect.y + bounds.y);
+                    draw::ImGuiSurface partSurface(&dl);
+                    drawGraphPart(partSurface, draw::fontRef(ImGui::GetFont()),
+                                  ImGui::GetFontSize() * zoomScale, partRect,
+                                  part, {});
+                }
+
                 auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                     for (const GraphPort& port : ports) {
                         Rect pr = graphToScreen(state.viewport,
@@ -7231,7 +7271,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                 drawPortList(graphNode.outputs);
 
                 for (const GraphNodePart& part : graphNode.parts) {
-                    if (part.kind == GraphNodePartKind::Title)
+                    if (part.kind == GraphNodePartKind::Title ||
+                        part.kind == GraphNodePartKind::LoadMeter)
                         continue;
                     Rect partRect = graphToScreen(state.viewport,
                                                   nodeLocalRect(graphNode, part.bounds));
@@ -7374,6 +7415,19 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                                          graphNode.bypassed, graphNode.error, graphStyle,
                                          24.0f * zoomScale, context.timeSeconds);
 
+                    for (const GraphNodePart& part : graphNode.parts) {
+                        if (part.kind != GraphNodePartKind::LoadMeter)
+                            continue;
+                        Rect partRect = graphToScreen(
+                            state.viewport,
+                            nodeLocalRect(graphNode, part.bounds));
+                        partRect.x = std::round(partRect.x + bounds.x);
+                        partRect.y = std::round(partRect.y + bounds.y);
+                        drawGraphPart(surface, context.font,
+                                      context.fontSizePx * zoomScale,
+                                      partRect, part, {});
+                    }
+
                     auto drawPortList = [&](const std::vector<GraphPort>& ports) {
                         for (const GraphPort& port : ports) {
                             Rect pr = graphToScreen(state.viewport,
@@ -7428,7 +7482,8 @@ Node::Ptr graphSurface(NodeId id, std::string name, GraphSurfaceState& state,
                     drawPortList(graphNode.outputs);
 
                     for (const GraphNodePart& part : graphNode.parts) {
-                        if (part.kind == GraphNodePartKind::Title)
+                        if (part.kind == GraphNodePartKind::Title ||
+                            part.kind == GraphNodePartKind::LoadMeter)
                             continue;
                         Rect partRect = graphToScreen(state.viewport,
                                                       nodeLocalRect(graphNode, part.bounds));
@@ -7967,7 +8022,7 @@ Node::Ptr toggle(NodeId id, std::string name, ValueBinding binding,
     NodeId sid = id;
     auto node = Node::make(std::move(id), Role::Toggle);
     node->setIntrinsicSize({36.0f, 20.0f});
-    node->setSize(Length::intrinsic(), Length::intrinsic());
+    node->setSize(Length::fixed(36.0f), Length::fixed(20.0f));
     node->setFocusable(true);
     Semantics sem = named(Role::Toggle, name);
     sem.value.hasNumeric = true;

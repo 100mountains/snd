@@ -3,13 +3,7 @@
 SND is the backbone: audio I/O, UI, plugin hosting, DSP, and all
 platform-specific glue live here behind one API.
 
-Historical downstream surface covered by the port: 1 JUCE GUI app + main
-plugin targets (Standalone/VST3/AU) + module plugins (Pattern, Seq, PbQuntise,
-BassController, module-plugin set) + panel-preview dev tools; 57 app source
-files, **53 of them touching MIDI**; ONNX engine on the side. Current state:
-the downstream surface is done on SND/GL, with Arrange and Perform pages done.
-
-Sizes are t-shirt (S/M/L), not dates. No CI — `tools/build.sh` by hand, as ever.
+No CI — `tools/build.sh` by hand
 
 ## Module map (current)
 
@@ -154,17 +148,6 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
    `web/` dir, accessibility (ImGui has none — known regression), AAX (never
    asked for)
 
-## Milestone gates
-
-- **M1** — ✅ DONE: SND-built ImGui plugin (DemoFilter) hosted + editor verified
-- **M2** — ✅ DONE: MIDI blessed, host wired, client-SDK MIDI-in synth (DemoSynth) + keyboard widget
-- **M3** — ✅ DONE (and then some): 14 of 15 bob modules ship on SND as
-  VST3+AU+standalone with behaviour-verifying selftests, incl. the ONNX ones
-  (pattern groove/feel, nxd neural drum). Last module bassmodel in flight.
-- **M4** — ✅ DONE: bob app shell and downstream GL surface on SND, including
-  Arrange and Perform pages
-- **M5** — JUCE deleted from the bob tree
-
 ## Still-true operational notes
 
 - macOS packaging: hosting third-party plugins under the hardened runtime
@@ -174,7 +157,3 @@ Each module is an `snd::plugin::client::Processor` built VST3+AU+standalone via
 - The legacy JUCE tree remains read-only reference material when historical
   behaviour needs checking; current work lands in bob/SND, not in that
   reference tree.
-
-**How much, in one line:** the old SND buildout and downstream GL surface work
-are done; remaining roadmap items should be concrete foundation fixes,
-downstream bug reports, or owner-approved cleanup.

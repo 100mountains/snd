@@ -113,6 +113,7 @@ struct GraphSurfaceStyle {
         Mosaic,
         Aurora,       // smooth drifting aurora mesh
         AuroraMosaic, // faceted aurora mesh + bright wireframe
+        WhiteGrid,    // light drafting canvas with dark minor/major lines
     };
 
     ImU32 node = 0;

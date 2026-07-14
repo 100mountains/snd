@@ -19,6 +19,15 @@
 #include <cmath>
 #include <utility>
 
+#if defined(__APPLE__)
+namespace snd::ui {
+void nativeDragImpl(GLFWwindow* window);
+void macPrepareFramelessImpl(GLFWwindow* window);
+void macToggleZoomImpl(GLFWwindow* window);
+void macToggleFullscreenImpl(GLFWwindow* window);
+} // namespace snd::ui
+#endif
+
 namespace snd::ui::retained {
 
 namespace {
@@ -340,6 +349,10 @@ bool GlWindow::create(int width, int height, const std::string& title,
         return false;
     }
     snd::ui::detail::registerGlfwWindow(impl_->window);
+#if defined(__APPLE__)
+    if (!decorated)
+        snd::ui::macPrepareFramelessImpl(impl_->window);
+#endif
 
     glfwSetWindowUserPointer(impl_->window, impl_.get());
     glfwSetCursorPosCallback(impl_->window, Impl::cursorCallback);
@@ -538,16 +551,23 @@ void GlWindow::toggleMaximize()
 {
     if (!impl_ || !impl_->window)
         return;
+#if defined(__APPLE__)
+    snd::ui::macToggleZoomImpl(impl_->window);
+#else
     if (glfwGetWindowAttrib(impl_->window, GLFW_MAXIMIZED))
         glfwRestoreWindow(impl_->window);
     else
         glfwMaximizeWindow(impl_->window);
+#endif
 }
 
 void GlWindow::toggleFullscreen()
 {
     if (!impl_ || !impl_->window)
         return;
+#if defined(__APPLE__)
+    snd::ui::macToggleFullscreenImpl(impl_->window);
+#else
     GLFWwindow* w = impl_->window;
     if (!impl_->fullscreen) {
         glfwGetWindowPos(w, &impl_->savedX, &impl_->savedY);
@@ -563,6 +583,7 @@ void GlWindow::toggleFullscreen()
                              impl_->savedH > 0 ? impl_->savedH : 800, 0);
         impl_->fullscreen = false;
     }
+#endif
 }
 
 void GlWindow::setMouseCaptured(bool captured)
@@ -576,8 +597,12 @@ void GlWindow::beginNativeDrag()
 {
     if (!impl_ || !impl_->window)
         return;
+#if defined(__APPLE__)
+    snd::ui::nativeDragImpl(impl_->window);
+#else
     impl_->dragging = true;
     glfwGetCursorPos(impl_->window, &impl_->dragStartCursorX, &impl_->dragStartCursorY);
+#endif
 }
 
 draw::FrameContext GlWindow::frameContext() const

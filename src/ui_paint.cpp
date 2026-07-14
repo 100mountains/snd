@@ -323,8 +323,6 @@ void drawKnob(draw::Surface& surface, draw::Vec2 topLeft, float size, float frac
                            IM_COL32(0, 0, 0, 90)); // shadow
         surface.fillCircle(c, radius,
                            IM_COL32(0x1c, 0x1f, 0x25, 255)); // body base
-        surface.fillCircle({c.x, c.y - radius * 0.34f}, radius * 0.62f,
-                           IM_COL32(0x28, 0x2c, 0x33, 150)); // top-lit
         surface.strokeCircle(c, radius - 0.5f,
                              IM_COL32(255, 255, 255, 16), 0, 1.0f); // rim
         const float tr = std::max(4.0f, radius - 6.0f);
@@ -3358,6 +3356,8 @@ ImU32 graphBackdropFill(GraphSurfaceStyle::Backdrop mode)
         return IM_COL32(0x09, 0x0b, 0x11, 0xff); // murk mosaic/aurora base
     case GraphSurfaceStyle::Backdrop::GreenGrid:
         return IM_COL32(0x04, 0x13, 0x0b, 0xff);
+    case GraphSurfaceStyle::Backdrop::WhiteGrid:
+        return IM_COL32(0xf2, 0xf3, 0xf5, 0xff);
     case GraphSurfaceStyle::Backdrop::Flat:
     case GraphSurfaceStyle::Backdrop::Grid:
         return IM_COL32(0x0d, 0x0f, 0x14, 0xff);
@@ -3374,6 +3374,7 @@ const char* graphBackdropName(GraphSurfaceStyle::Backdrop mode)
     case GraphSurfaceStyle::Backdrop::AuroraMosaic: return "Aurora Mosaic";
     case GraphSurfaceStyle::Backdrop::GreenGrid: return "Green Grid (breathing)";
     case GraphSurfaceStyle::Backdrop::Grid: return "Grid";
+    case GraphSurfaceStyle::Backdrop::WhiteGrid: return "White Grid";
     case GraphSurfaceStyle::Backdrop::Flat: return "Off";
     }
     return "Off";
@@ -3466,9 +3467,14 @@ void drawGraphGrid(draw::Surface& surface, draw::Vec2 topLeft, draw::Vec2 size,
     while (minor > 48.0f)
         minor *= 0.5f;
     const float major = minor * 4.0f;
-    const ImU32 gridBase = pal.frameBright;
-    const ImU32 minorCol = withAlpha(gridBase, state.disabled ? 0x24 : 0x38);
-    const ImU32 majorCol = withAlpha(gridBase, state.disabled ? 0x38 : 0x62);
+    const bool lightGrid =
+        style.backdrop == GraphSurfaceStyle::Backdrop::WhiteGrid;
+    const ImU32 gridBase = lightGrid ? IM_COL32(0x42, 0x4a, 0x58, 0xff)
+                                     : pal.frameBright;
+    const ImU32 minorCol = withAlpha(
+        gridBase, state.disabled ? 0x24 : lightGrid ? 0x30 : 0x38);
+    const ImU32 majorCol = withAlpha(
+        gridBase, state.disabled ? 0x38 : lightGrid ? 0x68 : 0x62);
 
     const float ox = std::fmod(pan.x * zoom, minor);
     const float oy = std::fmod(pan.y * zoom, minor);

@@ -156,8 +156,8 @@ Use shared paint helpers for module boxes, ports, cables, grid, and selection
 overlays so immediate/debug tools and retained GraphSurface share the same paint
 language.
 Use `GraphSurfaceStyle` for consumer skins that need square pins, custom module
-chrome, drooping wires, or flat/grid/green-grid/mosaic backdrops; do not fork
-the graph painter for those choices.
+chrome, drooping wires, or flat/dark-grid/light-grid/green-grid/mosaic
+backdrops; do not fork the graph painter for those choices.
 
 ## Interaction Contract
 

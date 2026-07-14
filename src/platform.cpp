@@ -16,8 +16,16 @@
 
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
+#include <spawn.h>
 #elif defined(_WIN32)
+#include <shellapi.h>
 #include <windows.h>
+#else
+#include <spawn.h>
+#endif
+
+#if !defined(_WIN32)
+extern char** environ;
 #endif
 
 namespace snd::platform {
@@ -93,6 +101,43 @@ std::optional<std::string> saveFileDialog(const std::string& defaultName,
     std::string result = path;
     NFD_FreePath(path);
     return result;
+}
+
+bool revealPath(const std::string& path)
+{
+    if (path.empty())
+        return false;
+    const std::filesystem::path target(path);
+#if defined(_WIN32)
+    std::error_code error;
+    if (std::filesystem::is_directory(target, error))
+        return reinterpret_cast<intptr_t>(ShellExecuteA(
+                   nullptr, "open", target.string().c_str(), nullptr, nullptr,
+                   SW_SHOWNORMAL)) > 32;
+    const std::string argument = "/select,\"" + target.string() + "\"";
+    return reinterpret_cast<intptr_t>(ShellExecuteA(
+               nullptr, "open", "explorer.exe", argument.c_str(), nullptr,
+               SW_SHOWNORMAL)) > 32;
+#elif defined(__APPLE__)
+    pid_t process = 0;
+    const std::string value = target.string();
+    char* const arguments[] = {
+        const_cast<char*>("/usr/bin/open"), const_cast<char*>("-R"),
+        const_cast<char*>(value.c_str()), nullptr};
+    return posix_spawn(&process, arguments[0], nullptr, nullptr, arguments,
+                       environ) == 0;
+#else
+    std::error_code error;
+    const auto folder = std::filesystem::is_directory(target, error)
+                            ? target
+                            : target.parent_path();
+    const std::string value = folder.string();
+    pid_t process = 0;
+    char* const arguments[] = {
+        const_cast<char*>("xdg-open"), const_cast<char*>(value.c_str()), nullptr};
+    return posix_spawnp(&process, arguments[0], nullptr, nullptr, arguments,
+                        environ) == 0;
+#endif
 }
 
 std::string configDir(const std::string& appName)

@@ -1,9 +1,9 @@
 # SND
 
-**A source-available JUCE/iPlug replacement.** SND is a small, in-house
+SND is a small, in-house
 audio+UI foundation library — cross-platform audio I/O, a GUI shell, plugin
 hosting, and a write-once plugin SDK. Apps build on SND instead
-of on JUCE. Free for any noncommercial use; commercial use needs a licence —
+of on JUCE/iPlug. Free for any noncommercial use; commercial use needs a licence —
 see [License](#license).
 
 ## Modules

@@ -24,6 +24,9 @@ std::optional<std::string> openFolderDialog();
 std::optional<std::string> saveFileDialog(const std::string& defaultName,
                                           const std::vector<FileFilter>& filters = {});
 
+// Reveal a file in the platform file manager, or open the directory itself.
+bool revealPath(const std::string& path);
+
 // Per-OS config directory for this app, created if missing:
 // mac ~/Library/Application Support/<app>, win %APPDATA%/<app>, linux ~/.config/<app>
 std::string configDir(const std::string& appName);

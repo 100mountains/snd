@@ -84,6 +84,11 @@ private:
 // on a worker/message thread, never in an audio callback.
 class StreamWriter {
 public:
+    enum class WavFormat {
+        Float32,
+        Pcm24,
+    };
+
     StreamWriter();
     ~StreamWriter();
     StreamWriter(const StreamWriter&) = delete;
@@ -91,6 +96,9 @@ public:
 
     bool openWav(const std::string& path, uint32_t channels,
                  uint32_t sampleRate, std::string* error = nullptr);
+    bool openWav(const std::string& path, uint32_t channels,
+                 uint32_t sampleRate, WavFormat format,
+                 std::string* error = nullptr);
     void close();
     bool isOpen() const;
     bool write(const float* interleaved, uint64_t frames,

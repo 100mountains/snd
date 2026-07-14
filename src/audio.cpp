@@ -336,6 +336,8 @@ struct StreamWriter::Impl {
     ma_encoder encoder{};
     bool open = false;
     uint32_t channels = 0;
+    StreamWriter::WavFormat format = StreamWriter::WavFormat::Float32;
+    std::vector<uint8_t> pcm24;
 };
 
 StreamWriter::StreamWriter() : impl(std::make_unique<Impl>()) {}
@@ -348,18 +350,28 @@ StreamWriter::~StreamWriter()
 bool StreamWriter::openWav(const std::string& path, uint32_t channels,
                            uint32_t sampleRate, std::string* error)
 {
+    return openWav(path, channels, sampleRate, WavFormat::Float32, error);
+}
+
+bool StreamWriter::openWav(const std::string& path, uint32_t channels,
+                           uint32_t sampleRate, WavFormat format,
+                           std::string* error)
+{
     close();
     if (path.empty() || channels == 0 || sampleRate == 0) {
         if (error) *error = "invalid stream writer configuration";
         return false;
     }
+    const auto sampleFormat = format == WavFormat::Pcm24 ? ma_format_s24
+                                                         : ma_format_f32;
     const auto config = ma_encoder_config_init(
-        ma_encoding_format_wav, ma_format_f32, channels, sampleRate);
+        ma_encoding_format_wav, sampleFormat, channels, sampleRate);
     if (ma_encoder_init_file(path.c_str(), &config, &impl->encoder) != MA_SUCCESS) {
         if (error) *error = "could not open for writing: " + path;
         return false;
     }
     impl->channels = channels;
+    impl->format = format;
     impl->open = true;
     return true;
 }
@@ -371,6 +383,8 @@ void StreamWriter::close()
     if (impl) {
         impl->open = false;
         impl->channels = 0;
+        impl->format = WavFormat::Float32;
+        impl->pcm24.clear();
     }
 }
 
@@ -388,9 +402,23 @@ bool StreamWriter::write(const float* interleaved, uint64_t frames,
     }
     if (frames == 0)
         return true;
+    const void* samples = interleaved;
+    if (impl->format == WavFormat::Pcm24) {
+        const auto sampleCount = static_cast<std::size_t>(frames) *
+                                 impl->channels;
+        impl->pcm24.resize(sampleCount * 3);
+        for (std::size_t index = 0; index < sampleCount; ++index) {
+            const auto value = static_cast<int32_t>(std::lround(
+                std::clamp(interleaved[index], -1.0f, 1.0f) * 8388607.0f));
+            impl->pcm24[index * 3] = static_cast<uint8_t>(value);
+            impl->pcm24[index * 3 + 1] = static_cast<uint8_t>(value >> 8);
+            impl->pcm24[index * 3 + 2] = static_cast<uint8_t>(value >> 16);
+        }
+        samples = impl->pcm24.data();
+    }
     ma_uint64 written = 0;
     const auto result = ma_encoder_write_pcm_frames(
-        &impl->encoder, interleaved, frames, &written);
+        &impl->encoder, samples, frames, &written);
     if (result != MA_SUCCESS || written != frames) {
         if (error) *error = "short stream write";
         return false;
