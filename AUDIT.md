@@ -84,6 +84,13 @@ small test plugin/selftest assertion for tempo and project-quarter position.
 
 ### Done This Pass
 
+- Resolved in `87e506d`: retained popup menus keep clear of their trigger and
+  scroll or flip within the available viewport; editable value fields expose
+  live text semantics, duplicate validation reports are deduplicated, and the
+  focused retained UI contract passes headlessly.
+- Resolved in `0535602`: removed the off-centre highlight disc from the shared
+  Davies knob painter without changing its control geometry or interaction.
+
 - Uncommitted against `d09c76b`: the prepared graph now routes explicit audio
   channel ranges across instance-reported bus widths without callback
   allocation; Bob3's headless contract covers a stereo source routed into
