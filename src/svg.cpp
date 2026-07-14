@@ -1,7 +1,6 @@
-// snd::ui SVG assets: parse + rasterize an SVG document to an RGBA bitmap
-// (nanosvg -- zlib-licensed, header-only) and upload it to a GL texture for
-// ImGui. Vector logos/icons stay crisp at any size/DPI. rasterizeSvg is
-// GL-free (unit-testable, headless); loadSvgTexture needs a live GL context.
+// snd::ui SVG/image assets: parse/rasterize to RGBA, then optionally upload to
+// a shared GL texture token used by both retained GL and ImGui compatibility.
+// rasterizeSvg/decodeImage are GL-free; load*Texture needs a live GL context.
 
 #include "snd/ui_types.h"
 

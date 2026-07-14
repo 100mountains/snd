@@ -468,10 +468,15 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
 
     bool consumed = false;
     for (const Event& event : impl_->events) {
+        bool popupDismissed = false;
         if (event.type == EventType::MouseDown) {
-            renderer.dismissOpenPopupsOutside(
+            popupDismissed = renderer.dismissOpenPopupsOutside(
                 tree, ImVec2(0.0f, 0.0f),
                 ImVec2(event.position.x, event.position.y));
+        }
+        if (popupDismissed) {
+            consumed = true;
+            continue;
         }
         consumed = tree.dispatch(event) || consumed;
     }

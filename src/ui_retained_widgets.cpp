@@ -5557,10 +5557,10 @@ Node::Ptr fileBrowser(NodeId id, std::string name, FileBrowserState& state,
             const fs::path parent = fs::path(state.dir).parent_path();
             if (!parent.empty()) {
                 state.dir = parent.string();
+                state.selected.clear();
                 if (onChange)
                     onChange();
             }
-            state.selected.clear();
         },
         renderer, {54.0f, headerHeight});
 

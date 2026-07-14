@@ -15,7 +15,8 @@ own reference: `UI_PROGRAMMING_GUIDE.md`.
 The UI build split is intentional: link `snd_ui_retained_gl` for pure
 retained/aGooey UI without the immediate/ImGui compatibility target, link
 `snd_ui_imgui` when maintaining immediate-mode tools, and link aggregate `snd`
-when a consumer deliberately wants both.
+when a consumer deliberately wants both. Shared OpenGL texture upload helpers
+live in `snd_ui_gl`, which both UI front ends link.
 
 ## Core Rule
 

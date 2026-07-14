@@ -31,6 +31,7 @@ void macPrepareFramelessImpl(GLFWwindow* window)
     if (!nsWindow)
         return;
     [nsWindow setStyleMask:[nsWindow styleMask] | NSWindowStyleMaskResizable];
+    [nsWindow setPreservesContentDuringLiveResize:NO];
     [nsWindow setCollectionBehavior:[nsWindow collectionBehavior] |
                                     NSWindowCollectionBehaviorFullScreenPrimary];
 }

@@ -199,6 +199,10 @@ set(SND_UI_GLFW_SOURCES
     src/ui_glfw_shared.cpp
 )
 
+set(SND_UI_GL_SOURCES
+    src/svg.cpp
+)
+
 set(SND_UI_RETAINED_GL_SOURCES
     src/ui_draw_gl.cpp
     src/ui_retained_gl.cpp
@@ -209,7 +213,6 @@ set(SND_UI_IMGUI_SOURCES
     src/ui_widgets.cpp
     src/ui_draw_imgui.cpp
     src/ui_fonts.cpp
-    src/svg.cpp
     ${imgui_knobs_SOURCE_DIR}/imgui-knobs.cpp
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -223,6 +226,7 @@ add_library(snd_core STATIC ${SND_CORE_SOURCES})
 add_library(snd_ui_foundation STATIC ${SND_UI_FOUNDATION_SOURCES})
 add_library(snd_ui_retained STATIC ${SND_UI_RETAINED_SOURCES})
 add_library(snd_ui_glfw STATIC ${SND_UI_GLFW_SOURCES})
+add_library(snd_ui_gl STATIC ${SND_UI_GL_SOURCES})
 add_library(snd_ui_retained_gl STATIC ${SND_UI_RETAINED_GL_SOURCES})
 add_library(snd_ui_imgui STATIC ${SND_UI_IMGUI_SOURCES})
 
@@ -250,6 +254,7 @@ foreach(_snd_target
         snd_ui_foundation
         snd_ui_retained
         snd_ui_glfw
+        snd_ui_gl
         snd_ui_retained_gl
         snd_ui_imgui)
     target_include_directories(${_snd_target}
@@ -279,6 +284,9 @@ target_include_directories(snd_ui_retained PRIVATE
         ${imgui_SOURCE_DIR}
         ${imgui_SOURCE_DIR}/backends)
 
+target_include_directories(snd_ui_gl PRIVATE
+        ${nanosvg_SOURCE_DIR}/src)
+
 target_include_directories(snd_ui_imgui
     PUBLIC
         ${imgui_SOURCE_DIR}
@@ -292,8 +300,8 @@ target_link_libraries(snd_core PUBLIC sdk_hosting nfd FLAC)
 target_link_libraries(snd_ui_foundation PUBLIC snd_core)
 target_link_libraries(snd_ui_retained PUBLIC snd_ui_foundation)
 target_link_libraries(snd_ui_glfw PUBLIC glfw)
-target_link_libraries(snd_ui_retained_gl PUBLIC snd_ui_retained snd_ui_glfw)
-target_link_libraries(snd_ui_imgui PUBLIC snd_ui_foundation snd_ui_glfw)
+target_link_libraries(snd_ui_retained_gl PUBLIC snd_ui_retained snd_ui_glfw snd_ui_gl)
+target_link_libraries(snd_ui_imgui PUBLIC snd_ui_foundation snd_ui_glfw snd_ui_gl)
 
 # The retained and shared-paint sources still carry source-compatible ImGui
 # bridge overloads beside the renderer-neutral paths. Compile them into
@@ -330,15 +338,18 @@ if(APPLE)
     target_link_libraries(snd_ui_glfw PUBLIC
         "-framework Cocoa"
         "-framework OpenGL")
+    target_link_libraries(snd_ui_gl PUBLIC "-framework OpenGL")
 elseif(WIN32)
     target_link_libraries(snd_core PUBLIC winmm mfplat mfreadwrite mfuuid ole32)
     target_link_libraries(snd_ui_glfw PUBLIC opengl32)
+    target_link_libraries(snd_ui_gl PUBLIC opengl32)
 else()
     find_package(OpenGL REQUIRED)
     find_package(Threads REQUIRED)
     find_package(X11 REQUIRED)
     target_link_libraries(snd_core PUBLIC Threads::Threads m dl asound X11::X11)
     target_link_libraries(snd_ui_glfw PUBLIC OpenGL::GL X11::X11)
+    target_link_libraries(snd_ui_gl PUBLIC OpenGL::GL)
 endif()
 
 # ---------------------------------------------------------------------------

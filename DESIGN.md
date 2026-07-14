@@ -97,11 +97,13 @@ The CMake targets mirror those boundaries:
 - `snd_ui_foundation`: shared UI data types, palette, renderer-neutral draw
   surface, recording surface, font atlas, and shared paint helpers.
 - `snd_ui_retained`: retained tree widgets over the shared paint vocabulary.
+- `snd_ui_gl`: shared OpenGL texture upload/release helpers used by both UI
+  front ends.
 - `snd_ui_retained_gl`: pure retained/aGooey GLFW/OpenGL window and draw
   backend. Consumers that want retained UI without immediate/ImGui code link
   this target.
 - `snd_ui_imgui`: Dear ImGui compatibility shell, immediate widgets, ImGui draw
-  adapter, ImGui backends, imgui-knobs, and GL texture upload helpers.
+  adapter, ImGui backends, and imgui-knobs.
 - `snd`: compatibility aggregate linking core, retained GL, and ImGui
   compatibility for existing examples/plugins.
 

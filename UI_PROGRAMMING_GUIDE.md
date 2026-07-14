@@ -227,8 +227,9 @@ art that must stay crisp at any size or DPI:
   recolour a monochrome glyph, or fade one toward a watermark.
 - `loadSvgTexture(svgText, heightPx, tint = 0)` → `SvgTexture{id, w, h}`.
   Uploads to a GL texture — call it once a context exists (after
-  `Window::create`, or inside the frame loop). In ImGui code, cast `id` to
-  `ImTextureID` before feeding it to `ImGui::Image`. Release with
+  `Window::create`, or inside the frame loop). These helpers live in the shared
+  `snd_ui_gl` target used by both retained GL and ImGui compatibility. In ImGui
+  code, cast `id` to `ImTextureID` before feeding it to `ImGui::Image`. Release with
   `releaseTexture(id)`.
 
 Width follows the source aspect ratio; a parse failure returns an empty
@@ -817,9 +818,9 @@ filled-stack approximation stays until a real blur pass replaces it.
 skins; when on, the stripe starts below the corner arc so it never juts past
 rounded corners.
 
-Viewport navigation: plain mouse wheel scrolls the canvas (shift for
-horizontal), cmd+wheel zooms at the cursor, cmd/alt+left-drag or middle-drag
-pans, and cmd+arrow keys step-scroll while the surface is focused.
+Viewport navigation: plain mouse wheel is ignored by the graph surface,
+cmd+wheel zooms at the cursor, cmd/alt+left-drag or middle-drag pans, and
+cmd+arrow keys step-scroll while the surface is focused.
 
 Square pins whose node-local rect sits flush against the node's left or right
 edge render as sockets: the fill runs to the edge over the node border and the
