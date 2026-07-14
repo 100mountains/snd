@@ -384,6 +384,12 @@ enum class ModalEscapePolicy {
     Primary,
 };
 
+enum class ModalBackdrop {
+    Dim,
+    Blank,
+    None,
+};
+
 struct ModalDialogState {
     bool open = false;
     ModalDialogResult lastResult = ModalDialogResult::None;
@@ -402,7 +408,9 @@ struct ModalDialogOptions {
     Vec2 size = {360.0f, 168.0f};
     ModalEscapePolicy escapePolicy = ModalEscapePolicy::Cancel;
     bool closeOnScrimClick = false;
+    ModalBackdrop backdrop = ModalBackdrop::Dim;
     ImU32 scrimColor = IM_COL32(0, 0, 0, 156);
+    ImU32 blankColor = IM_COL32(0, 0, 0, 255);
     ImU32 panelFill = 0;
     ImU32 panelBorder = 0;
     Role role = Role::Dialog;

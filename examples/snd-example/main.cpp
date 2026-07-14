@@ -444,6 +444,21 @@ static bool selftestRetainedUi()
     auto closeEnough = [](float a, float b) {
         return std::abs(a - b) < 0.0001f;
     };
+    auto hasFullFrameFill =
+        [&](const snd::ui::draw::RecordingSurface& surface,
+            snd::ui::draw::Color color) {
+            for (const auto& op : surface.ops()) {
+                if (op.name != "fillRect" || op.points.size() < 2 ||
+                    op.colors.empty() || op.colors.front() != color)
+                    continue;
+                if (closeEnough(op.points[0].x, 0.0f) &&
+                    closeEnough(op.points[0].y, 0.0f) &&
+                    closeEnough(op.points[1].x, 420.0f) &&
+                    closeEnough(op.points[1].y, 260.0f))
+                    return true;
+            }
+            return false;
+        };
 
     snd::ui::draw::RecordingSurface recording;
     recording.fillRect({1.0f, 2.0f}, {3.0f, 4.0f}, 0x01020304u, 2.0f,
@@ -1936,6 +1951,33 @@ static bool selftestRetainedUi()
          alertState.lastResult == r::ModalDialogResult::Dismissed &&
          alertState.lastAction == "scrim" && alertOk == 0 &&
          modalBackgroundActivations == 0;
+
+    auto modalBackdropPaintOk =
+        [&](r::ModalBackdrop backdrop, snd::ui::draw::Color expected,
+            bool shouldPaint) {
+            r::PaintRenderer backdropRenderer;
+            r::ModalDialogState backdropState;
+            backdropState.open = true;
+            r::ModalDialogOptions backdropOptions;
+            backdropOptions.backdrop = backdrop;
+            backdropOptions.scrimColor = 0x11223344u;
+            backdropOptions.blankColor = 0x55667788u;
+            auto backdropRoot = r::Node::make("backdrop.root");
+            backdropRoot->setLayout(modalLayout);
+            backdropRoot->addChild(w::modalDialog(
+                "backdrop.modal", "Settings", "Choose devices.",
+                backdropState, {}, &backdropRenderer, backdropOptions));
+            r::Tree backdropTree(std::move(backdropRoot));
+            backdropTree.layout({420.0f, 260.0f});
+            snd::ui::draw::RecordingSurface backdropRecording;
+            backdropRenderer.render(backdropTree, backdropRecording);
+            return hasFullFrameFill(backdropRecording, expected) == shouldPaint;
+        };
+    ok = ok &&
+         modalBackdropPaintOk(r::ModalBackdrop::Dim, 0x11223344u, true) &&
+         modalBackdropPaintOk(r::ModalBackdrop::Blank, 0x55667788u, true) &&
+         modalBackdropPaintOk(r::ModalBackdrop::None, 0x11223344u, false) &&
+         modalBackdropPaintOk(r::ModalBackdrop::None, 0x55667788u, false);
 
     r::GraphSurfaceState graphState;
     graphState.viewport.pan = {10.0f, 5.0f};

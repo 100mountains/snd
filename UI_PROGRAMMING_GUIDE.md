@@ -748,10 +748,10 @@ they do not inflate row/column layout while open.
 
 Use retained modal helpers for blocking decisions, alerts, destructive
 confirmation, and short app-state interruptions. `widgets::modalDialog(...)`
-builds a top-level overlay with a scrim, centred dialog panel, title, message,
-real retained buttons, focus trap, Escape handling, and inert background input.
-`widgets::alertDialog(...)` and `widgets::confirmDialog(...)` are convenience
-wrappers over the same primitive.
+builds a top-level overlay with a configurable backdrop, centred dialog panel,
+title, message, real retained buttons, focus trap, Escape handling, and inert
+background input. `widgets::alertDialog(...)` and
+`widgets::confirmDialog(...)` are convenience wrappers over the same primitive.
 
 Add the returned node as a top-level child of the retained root, usually last:
 
@@ -774,7 +774,12 @@ snapshots expose the dialog instead of background controls. Set
 `ModalDialogOptions::escapePolicy` to `Ignore`, `Close`, `Cancel`, or
 `Primary`; confirm dialogs default Escape to Cancel, alerts default Escape to
 the OK/primary action. `closeOnScrimClick` is off by default so destructive or
-high-cost decisions cannot disappear from an accidental outside click.
+high-cost decisions cannot disappear from an accidental outside click. Set
+`ModalDialogOptions::backdrop` to `ModalBackdrop::Dim` for the default dimmed
+scrim, `ModalBackdrop::Blank` for an opaque blanking backdrop, or
+`ModalBackdrop::None` for a floating modal that leaves the app visible while
+still trapping focus and input. Use `scrimColor` and `blankColor` only to tune
+those two painted backdrop modes.
 
 ## Graph Surfaces
 
@@ -997,9 +1002,10 @@ members).
   destructive-action cue. Retained menus expose `Role::Menu`,
   `Role::MenuItem`, and `Role::ComboBox` semantics.
 - `widgets::modalDialog(...)`, `widgets::alertDialog(...)`,
-  `widgets::confirmDialog(...)` -> retained overlay nodes. They draw a scrim,
-  trap Tab focus, consume background input, expose `Role::Dialog` /
-  `Role::Alert`, and close according to `ModalEscapePolicy`.
+  `widgets::confirmDialog(...)` -> retained overlay nodes. They draw the
+  selected `ModalBackdrop` (`Dim`, `Blank`, or `None`), trap Tab focus, consume
+  background input, expose `Role::Dialog` / `Role::Alert`, and close according
+  to `ModalEscapePolicy`.
 
 ### Continuous controls
 

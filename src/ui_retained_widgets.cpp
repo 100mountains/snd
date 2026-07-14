@@ -6108,10 +6108,16 @@ Node::Ptr modalDialog(NodeId id, std::string title, std::string message,
         scrim.canvasClip = false;
         scrim.canvasFocusRing = false;
         scrim.canvasSurfaceDraw =
-            [color = options.scrimColor](draw::Surface& surface,
-                                         const Node&, Rect bounds,
-                                         const paint::ControlState&,
-                                         const draw::FrameContext&) {
+            [backdrop = options.backdrop,
+             dimColor = options.scrimColor,
+             blankColor = options.blankColor](
+                draw::Surface& surface, const Node&, Rect bounds,
+                const paint::ControlState&, const draw::FrameContext&) {
+                if (backdrop == ModalBackdrop::None)
+                    return;
+                const ImU32 color = backdrop == ModalBackdrop::Blank
+                                        ? blankColor
+                                        : dimColor;
                 surface.fillRect(topLeftDraw(bounds), bottomRightDraw(bounds),
                                  color, 0.0f);
             };
