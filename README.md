@@ -42,6 +42,7 @@ Or by hand (same steps — use these on Windows):
 cmake -S . -B build
 cmake --build build
 ./build/snd-example --selftest   # headless checks
+./build/snd-example --selftest-retained # focused retained UI contract
 ./build/snd-example              # window + audio device demo
 ```
 

@@ -580,11 +580,28 @@ void anchorOverlayPopup(Tree& tree, Node& popup)
     Rect b = popup.bounds();
     float x = anchor.x;
     float y = anchor.y + anchor.h + 2.0f;
+    float h = b.h;
     const Vec2 viewport = tree.viewport();
     if (viewport.x > 0.0f && b.w > 0.0f)
         x = std::clamp(x, 0.0f, std::max(0.0f, viewport.x - b.w));
-    if (viewport.y > 0.0f && b.h > 0.0f)
-        y = std::clamp(y, 0.0f, std::max(0.0f, viewport.y - b.h));
+    if (viewport.y > 0.0f && h > 0.0f) {
+        const float below = std::max(0.0f, viewport.y - y);
+        const float above = std::max(0.0f, anchor.y - 2.0f);
+        if (h > below) {
+            if (above > below) {
+                h = std::min(h, above);
+                y = anchor.y - 2.0f - h;
+            } else {
+                h = below;
+            }
+        }
+    }
+    if (h != b.h) {
+        popup.setSize(Length::fixed(b.w), Length::fixed(h));
+        popup.setIntrinsicSize({b.w, h});
+        tree.layout(viewport);
+        b = popup.bounds();
+    }
     translateSubtree(popup, {x - b.x, y - b.y});
 }
 
@@ -6540,6 +6557,12 @@ Node::Ptr valueField(NodeId id, std::string name, ValueBinding binding,
                      paint::OutlineButtonStyle fieldStyle, double dragSpeed)
 {
     NodeId sid = id;
+    const ValueBinding displayBinding = binding;
+    binding.format = [sid, displayBinding](double value) {
+        if (valueFieldEditing(sid))
+            return std::string(valueFieldBuffer(sid).data());
+        return formatBindingValue(displayBinding, value);
+    };
     auto node = Node::make(std::move(id), Role::Slider);
     node->setIntrinsicSize(size);
     node->setSize(Length::intrinsic(), Length::intrinsic());

@@ -1482,22 +1482,30 @@ bool Tree::nodeSnapshot(const NodeId& id, NodeSnapshot& out) const
 std::vector<ValidationIssue> Tree::validate() const
 {
     std::vector<ValidationIssue> issues;
+    auto addIssue = [&](ValidationIssueKind kind, const NodeId& id) {
+        const auto duplicate = std::find_if(
+            issues.begin(), issues.end(), [&](const ValidationIssue& issue) {
+                return issue.kind == kind && issue.id == id;
+            });
+        if (duplicate == issues.end())
+            issues.push_back({kind, id});
+    };
     std::set<NodeId> seen;
     if (!root_)
         return issues;
 
     std::function<void(const Node&)> visit = [&](const Node& node) {
         if (node.id().empty()) {
-            issues.push_back({ValidationIssueKind::EmptyId, {}});
+            addIssue(ValidationIssueKind::EmptyId, {});
         } else if (!seen.insert(node.id()).second) {
-            issues.push_back({ValidationIssueKind::DuplicateId, node.id()});
+            addIssue(ValidationIssueKind::DuplicateId, node.id());
         }
         const Semantics& sem = node.semantics();
         const Role role = effectiveRole(node);
         const bool semanticHidden = sem.hidden || hasState(sem.states, SemanticState::Hidden);
         if (node.visible() && !semanticHidden && role != Role::None &&
             role != Role::Group && sem.name.empty()) {
-            issues.push_back({ValidationIssueKind::MissingAccessibleName, node.id()});
+            addIssue(ValidationIssueKind::MissingAccessibleName, node.id());
         }
         for (const auto& child : node.children())
             visit(*child);
@@ -1508,13 +1516,13 @@ std::vector<ValidationIssue> Tree::validate() const
     collectSemantics(*root_, {}, allSemantics);
     for (const SemanticNode& node : allSemantics) {
         if (node.id.empty()) {
-            issues.push_back({ValidationIssueKind::EmptyId, {}});
+            addIssue(ValidationIssueKind::EmptyId, {});
         } else if (!semanticSeen.insert(node.id).second) {
-            issues.push_back({ValidationIssueKind::DuplicateId, node.id});
+            addIssue(ValidationIssueKind::DuplicateId, node.id);
         }
         if (!seen.count(node.id) && node.role != Role::None &&
             node.role != Role::Group && node.name.empty()) {
-            issues.push_back({ValidationIssueKind::MissingAccessibleName, node.id});
+            addIssue(ValidationIssueKind::MissingAccessibleName, node.id);
         }
     }
     return issues;

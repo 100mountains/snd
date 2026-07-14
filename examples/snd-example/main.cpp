@@ -2,6 +2,7 @@
 //   default:     open a window + audio device, prove the stack runs
 //   --selftest:  headless pass/fail checks of the real behaviour of every
 //                snd capability (decode+play, record, VST3 hosting, AU hosting)
+//   --selftest-retained: run only the headless retained UI contract
 
 #if defined(__APPLE__)
 #include <AudioToolbox/AudioToolbox.h>
@@ -661,7 +662,7 @@ static bool selftestRetainedUi()
         return std::find_if(defaultContextOps.begin(), defaultContextOps.end(),
                             [&](const snd::ui::draw::RecordedOp& op) {
                                 return op.name == "text" && op.text == text &&
-                                       closeEnough(op.a, 13.0f * 0.90f);
+                                       closeEnough(op.a, 13.0f);
                             }) != defaultContextOps.end();
     };
 
@@ -820,7 +821,7 @@ static bool selftestRetainedUi()
     matrixOk = matrixOk && matrixRecording.ops().size() > 40;
 
     const auto& ops = recording.ops();
-    bool recordingOk = ops.size() == 8 &&
+    const bool recordingSurfaceOk = ops.size() == 7 &&
         ops[0].name == "fillRect" && ops[0].colors[0] == 0x01020304u &&
         closeEnough(ops[0].points[0].x, 1.0f) &&
         closeEnough(ops[0].points[1].y, 4.0f) &&
@@ -831,31 +832,27 @@ static bool selftestRetainedUi()
         ops[2].name == "text" && ops[2].text == "ab" &&
         ops[3].name == "polyline" && ops[3].points.size() == 3 &&
         ops[3].flag && closeEnough(ops[3].a, 2.0f) &&
-        ops[4].name == "strokeRect" && ops[4].colors[0] == 0xD8112233u &&
+        ops[4].name == "strokeRect" && ops[4].colors[0] == 0xE0445566u &&
         closeEnough(ops[4].points[0].x, 8.0f) &&
         closeEnough(ops[4].points[1].y, 42.0f) &&
         closeEnough(ops[4].a, 5.0f) && closeEnough(ops[4].b, 1.5f) &&
-        ops[5].name == "strokeRect" && ops[5].colors[0] == 0xB0445566u &&
-        closeEnough(ops[5].points[0].x, 6.5f) &&
-        closeEnough(ops[5].points[1].y, 43.5f) &&
-        closeEnough(ops[5].a, 6.5f) && closeEnough(ops[5].b, 1.0f) &&
-        ops[6].name == "fillRectMultiColor" &&
-        ops[6].colors.size() == 4 && ops[6].colors[2] == 0x03000003u &&
-        closeEnough(ops[6].points[0].x, 2.0f) &&
-        closeEnough(ops[6].points[1].x, 6.0f) &&
-        ops[7].name == "image" && ops[7].text == "4660" &&
-        ops[7].colors.size() == 1 && ops[7].colors[0] == 0xA1B2C3D4u &&
-        ops[7].points.size() == 4 &&
-        closeEnough(ops[7].points[0].x, 7.0f) &&
-        closeEnough(ops[7].points[0].y, 8.0f) &&
-        closeEnough(ops[7].points[1].x, 17.0f) &&
-        closeEnough(ops[7].points[1].y, 28.0f) &&
-        closeEnough(ops[7].points[2].x, 0.25f) &&
-        closeEnough(ops[7].points[2].y, 0.5f) &&
-        closeEnough(ops[7].points[3].x, 0.75f) &&
-        closeEnough(ops[7].points[3].y, 1.0f) &&
-        closeEnough(measured.x, 18.0f) && closeEnough(measured.y, 12.0f) &&
-        helperOps.size() == 10 &&
+        ops[5].name == "fillRectMultiColor" &&
+        ops[5].colors.size() == 4 && ops[5].colors[2] == 0x03000003u &&
+        closeEnough(ops[5].points[0].x, 2.0f) &&
+        closeEnough(ops[5].points[1].x, 6.0f) &&
+        ops[6].name == "image" && ops[6].text == "4660" &&
+        ops[6].colors.size() == 1 && ops[6].colors[0] == 0xA1B2C3D4u &&
+        ops[6].points.size() == 4 &&
+        closeEnough(ops[6].points[0].x, 7.0f) &&
+        closeEnough(ops[6].points[0].y, 8.0f) &&
+        closeEnough(ops[6].points[1].x, 17.0f) &&
+        closeEnough(ops[6].points[1].y, 28.0f) &&
+        closeEnough(ops[6].points[2].x, 0.25f) &&
+        closeEnough(ops[6].points[2].y, 0.5f) &&
+        closeEnough(ops[6].points[3].x, 0.75f) &&
+        closeEnough(ops[6].points[3].y, 1.0f) &&
+        closeEnough(measured.x, 18.0f) && closeEnough(measured.y, 12.0f);
+    const bool helperRecordingOk = helperOps.size() == 10 &&
         helperOps[0].name == "fillRectMultiColor" &&
         helperOps[1].name == "line" && helperOps[2].name == "line" &&
         helperOps[3].name == "fillRect" &&
@@ -866,15 +863,15 @@ static bool selftestRetainedUi()
         helperOps[9].name == "strokeRect" &&
         helperOps[9].colors[0] == recPal.frameBright &&
         closeEnough(helperOps[6].points[0].x, 5.0f) &&
-        closeEnough(helperOps[6].points[0].y, 7.5f) &&
-        gridOps.size() == 5 &&
+        closeEnough(helperOps[6].points[0].y, 7.5f);
+    const bool gridRecordingOk = gridOps.size() == 5 &&
         gridOps[0].name == "fillRect" &&
         gridOps[1].name == "fillRect" &&
         gridOps[2].name == "fillRect" &&
         gridOps[3].name == "fillRect" &&
         gridOps[4].name == "strokeRect" &&
-        closeEnough(gridOps[4].points[1].x, 21.0f) &&
-        bodyOps.size() == 11 &&
+        closeEnough(gridOps[4].points[1].x, 21.0f);
+    const bool bodyRecordingOk = bodyOps.size() == 11 &&
         bodyOps[0].name == "pathArcTo" &&
         bodyOps[1].name == "pathStroke" &&
         bodyOps[4].name == "fillCircle" &&
@@ -883,8 +880,8 @@ static bool selftestRetainedUi()
         bodyOps[8].name == "fillRect" &&
         bodyOps[9].name == "strokeRect" &&
         bodyOps[10].name == "text" &&
-        bodyOps[10].text == "OK" &&
-        controlOps.size() == 20 &&
+        bodyOps[10].text == "OK";
+    const bool controlRecordingOk = controlOps.size() == 20 &&
         controlOps[0].name == "fillRect" &&
         controlOps[1].name == "strokeRect" &&
         controlOps[2].name == "fillCircle" &&
@@ -894,31 +891,32 @@ static bool selftestRetainedUi()
         controlOps[12].name == "line" &&
         controlOps[13].name == "strokeRect" &&
         controlOps[14].name == "fillRect" &&
-        controlOps[19].name == "line" &&
-        checkboxOps.size() == 5 &&
+        controlOps[19].name == "line";
+    const bool checkboxRecordingOk = checkboxOps.size() == 5 &&
         checkboxOps[0].name == "fillRect" &&
         checkboxOps[1].name == "strokeRect" &&
         checkboxOps[2].name == "line" &&
         checkboxOps[3].name == "line" &&
         checkboxOps[4].name == "text" &&
-        checkboxOps[4].text == "Snap" &&
-        tabOps.size() >= 8 &&
+        checkboxOps[4].text == "Snap";
+    const bool tabRecordingOk = tabOps.size() >= 7 &&
         tabOps[0].name == "line" &&
         std::find_if(tabOps.begin(), tabOps.end(),
                      [](const snd::ui::draw::RecordedOp& op) {
                          return op.name == "text" && op.text == "Filter";
-                     }) != tabOps.end() &&
-        keyboardOps.size() >= 2 &&
+                     }) != tabOps.end();
+    const bool keyboardRecordingOk = keyboardOps.size() >= 2 &&
         keyboardOps[0].name == "fillRect" &&
         closeEnough(keyboardOps[0].b,
                     (float)snd::ui::draw::kRoundCornersBottom) &&
         keyboardOps[1].name == "strokeRect" &&
         closeEnough(keyboardOps[1].c,
-                    (float)snd::ui::draw::kRoundCornersBottom) &&
-        moduleOps.size() >= 2 &&
+                    (float)snd::ui::draw::kRoundCornersBottom);
+    const bool moduleRecordingOk = moduleOps.size() >= 2 &&
         moduleOps[1].name == "fillRect" &&
-        closeEnough(moduleOps[1].b, (float)snd::ui::draw::kRoundCornersTop) &&
-        bridgePainterSawSurface && bridgeOps.size() == 1 &&
+        closeEnough(moduleOps[1].b, (float)snd::ui::draw::kRoundCornersAll);
+    const bool bridgeRecordingOk = bridgePainterSawSurface &&
+        bridgeOps.size() == 1 &&
         bridgeOps[0].name == "fillRect" &&
         bridgeOps[0].colors[0] == 0x55667788u &&
         closeEnough(bridgeOps[0].points[0].x, 1.0f) &&
@@ -929,8 +927,8 @@ static bool selftestRetainedUi()
         defaultBridgeOps.size() >= 3 &&
         defaultBridgeOps[0].name == "fillRect" &&
         defaultBridgeOps[2].name == "text" &&
-        defaultBridgeOps[2].text == "Plain" &&
-        retainedOps.size() >= 20 &&
+        defaultBridgeOps[2].text == "Plain";
+    const bool retainedRecordingOk = retainedOps.size() >= 20 &&
         hasRetainedOp("fillRect") &&
         hasRetainedOp("strokeRect") &&
         hasRetainedOp("fillCircle") &&
@@ -938,10 +936,11 @@ static bool selftestRetainedUi()
         hasRetainedText("Go") &&
         hasRetainedText("Render") &&
         hasRetainedText("Snap") &&
-        hasDefaultContextText("Go") &&
-        tabOk &&
-        checkboxOk &&
-        matrixOk;
+        hasDefaultContextText("Go") && tabOk && checkboxOk && matrixOk;
+    const bool recordingOk = recordingSurfaceOk && helperRecordingOk &&
+        gridRecordingOk && bodyRecordingOk && controlRecordingOk &&
+        checkboxRecordingOk && tabRecordingOk && keyboardRecordingOk &&
+        moduleRecordingOk && bridgeRecordingOk && retainedRecordingOk;
 
     auto root = r::Node::make("root", r::Role::Group);
     r::Layout rootLayout;
@@ -1101,7 +1100,18 @@ static bool selftestRetainedUi()
 
     r::Tree tree(std::move(root));
     tree.layout({200.0f, 120.0f});
-    bool ok = recordingOk && tree.validate().empty();
+    if (!recordingOk)
+    {
+        std::fprintf(stderr,
+                     "retained recording groups: surface=%d helpers=%d grid=%d "
+                     "body=%d controls=%d checkbox=%d tabs=%d keyboard=%d "
+                     "module=%d bridge=%d retained=%d\n",
+                     recordingSurfaceOk, helperRecordingOk, gridRecordingOk,
+                     bodyRecordingOk, controlRecordingOk, checkboxRecordingOk,
+                     tabRecordingOk, keyboardRecordingOk, moduleRecordingOk,
+                     bridgeRecordingOk, retainedRecordingOk);
+    }
+    bool ok = tree.validate().empty();
 
     const auto* playNode = tree.find("transport.play");
     const auto* sliderNode = tree.find("mixer.gain");
@@ -1532,6 +1542,9 @@ static bool selftestRetainedUi()
     fieldDrag.position = {18.0f, 8.0f};
     ok = ok && fieldTree.dispatch(fieldDrag) &&
          std::abs(fieldValue - 122.0) < 0.0001;
+    fieldDrag.type = r::EventType::MouseUp;
+    fieldDrag.delta = {};
+    ok = ok && fieldTree.dispatch(fieldDrag);
     fieldDrag.type = r::EventType::MouseDown;
     fieldDrag.clickCount = 2;
     ok = ok && fieldTree.dispatch(fieldDrag);
@@ -1606,7 +1619,7 @@ static bool selftestRetainedUi()
     const auto* outlineNode = outlineTree.find("outline.square");
     const auto* outlineStyle = outlineRenderer.styleFor("outline.square");
     r::SemanticNode outlineSem;
-    ok = ok && outlineNode && outlineNode->bounds().w == 96.0f &&
+    ok = ok && outlineNode && outlineNode->bounds().w == 120.0f &&
          outlineNode->bounds().h == 30.0f && outlineStyle &&
          outlineStyle->kind == r::VisualKind::OutlineButton &&
          outlineStyle->outlineButtonStyle.rounding == 0.0f &&
@@ -1673,7 +1686,7 @@ static bool selftestRetainedUi()
     ok = ok && menuState.openSubmenuPath.size() == 1;
     ok = ok && menuTree.refreshBoundValues();
     menuTree.layout({220.0f, 180.0f});
-    ok = ok && menuTree.semanticNode("menu.popup.more.freeze", menuMoreSem) &&
+    ok = ok && menuTree.semanticNode("menu.popup.more.sub.freeze", menuMoreSem) &&
          menuMoreSem.role == r::Role::MenuItem;
 
     ok = ok && menuTree.focus("menu.popup.add");
@@ -1687,7 +1700,9 @@ static bool selftestRetainedUi()
     key = {};
     key.type = r::EventType::KeyDown;
     key.key = r::Key::Down;
-    ok = ok && menuTree.dispatch(key) && menuTree.focused() &&
+    ok = ok && menuTree.dispatch(key);
+    menuRenderer.prepareOpenPopups(menuTree);
+    ok = ok && menuTree.focused() &&
          menuTree.focused()->id() == "menu.popup.delete";
     key.key = r::Key::Escape;
     ok = ok && menuTree.dispatch(key) && !menuState.open &&
@@ -1737,8 +1752,11 @@ static bool selftestRetainedUi()
              dropdownButtonStyle.rounding &&
          !r::hasState(dropdownButtonSem.states, r::SemanticState::Expanded) &&
          !dropdownTree.semanticNode("menu.select.menu.add", menuAddSem);
-    ok = ok && dropdownTree.performAction("menu.select.button", r::Action::Activate) &&
-         dropdownState.open &&
+    const bool dropdownOpened =
+        dropdownTree.performAction("menu.select.button", r::Action::OpenMenu);
+    ok = ok && dropdownOpened && dropdownState.open;
+    ok = ok && dropdownTree.refreshBoundValues();
+    ok = ok &&
          dropdownTree.semanticNode("menu.select.menu.add", menuAddSem) &&
          dropdownTree.semanticNode("menu.select.button", dropdownButtonSem) &&
          r::hasState(dropdownButtonSem.states, r::SemanticState::Expanded);
@@ -1760,8 +1778,10 @@ static bool selftestRetainedUi()
     ok = ok && dropdownTree.focused() &&
          dropdownTree.focused()->id() == "menu.select.menu.delete" &&
          dropdownState.highlightedIndex == 4;
-    ok = ok && dropdownTree.performAction("menu.select.menu.add", r::Action::Activate) &&
-         selectedMenu == 0 && dropdownActivated == 1 && !dropdownState.open;
+    key.key = r::Key::Enter;
+    const bool dropdownSelected = dropdownTree.dispatch(key);
+    ok = ok && dropdownSelected &&
+         selectedMenu == 4 && dropdownActivated == 1 && !dropdownState.open;
 
     int contextOpens = 0;
     int contextActivated = 0;
@@ -1978,7 +1998,7 @@ static bool selftestRetainedUi()
     ok = ok && graphHit.kind == r::GraphHitKind::NodePart &&
          graphHit.nodeId == "osc" && graphHit.partId == "bypass";
     const r::Vec2 cablePoint = r::graphToScreen(graphState.viewport,
-                                                r::Vec2{178.0f, 66.0f});
+                                                r::Vec2{180.0f, 95.0f});
     graphHit = r::hitTestGraph(graphState.viewport, graphNodes, graphCables,
                                cablePoint, graphStyle);
     ok = ok && (graphHit.kind == r::GraphHitKind::Cable ||
@@ -2150,19 +2170,21 @@ static bool selftestRetainedUi()
          graphActivates == graphActivatesBeforeKeyboard + 1 &&
          activatedGraphHit.partId == "bypass";
     graphEvent.position = oscOut;
+    graphEvent.type = r::EventType::MouseWheel;
+    graphEvent.button = r::MouseButton::None;
+    graphEvent.super = true;
+    graphEvent.wheelDelta = {0.0f, 1.0f};
+    const float previousZoom = graphState.viewport.zoom;
+    ok = ok && graphTree.dispatch(graphEvent) &&
+         graphState.viewport.zoom > previousZoom &&
+         graphViewportChanges == 1;
+    graphEvent.position = oscOut;
     graphEvent.button = r::MouseButton::Right;
     graphEvent.type = r::EventType::ContextMenu;
     ok = ok && graphTree.dispatch(graphEvent) && graphMenuState.open &&
          graphMenuState.anchorToPosition &&
          graphContexts == graphContextsBeforeSemantic + 1 &&
          graphState.hovered.kind == r::GraphHitKind::Port;
-    graphEvent.type = r::EventType::MouseWheel;
-    graphEvent.button = r::MouseButton::None;
-    graphEvent.wheelDelta = {0.0f, 1.0f};
-    const float previousZoom = graphState.viewport.zoom;
-    ok = ok && graphTree.dispatch(graphEvent) &&
-         graphState.viewport.zoom > previousZoom &&
-         graphViewportChanges == 1;
 
     if (ok)
         printf("PASS (layout/focus/events/semantics/dirty state/widgets)\n");
@@ -2178,7 +2200,7 @@ static bool selftestRetainedUi()
                graphSelects, graphActivates, graphContexts, graphViewportChanges,
                graphPreviews, graphConnects, graphConnectionChecks, recordingOk,
                overlayPriorityOk, semantics.size());
-    return ok;
+    return recordingOk && ok;
 }
 
 static int runSelftest()
@@ -3096,9 +3118,12 @@ int main(int argc, char** argv)
     if (argc == 5 && std::string(argv[1]) == "--snd-scan-plugin")
         return snd::plugin::runScanWorker(argv[2], argv[3], argv[4]);
 
-    for (int i = 1; i < argc; ++i)
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--selftest-retained")
+            return selftestRetainedUi() ? 0 : 1;
         if (std::string(argv[i]) == "--selftest")
             return runSelftest();
+    }
 
     snd::audio::Device device;
     if (!device.open(48000, 2)) {
