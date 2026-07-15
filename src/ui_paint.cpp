@@ -1729,14 +1729,24 @@ void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
                          const ControlState& state,
                          const OutlineButtonStyle& style, float glyphThickness)
 {
+    const bool recArmed =
+        icon == Icon::Record && (state.selected || state.active);
+    // RECORDING: the button itself goes red and the glyph becomes a black
+    // disc; the idle button keeps the plain chrome.
+    OutlineButtonStyle armedStyle;
+    const OutlineButtonStyle* chrome = &style;
+    if (recArmed) {
+        armedStyle = style;
+        armedStyle.activeFill = IM_COL32(180, 32, 28, 255);
+        armedStyle.selectedFill = armedStyle.activeFill;
+        chrome = &armedStyle;
+    }
     // house outline chrome, no text glyph
     drawOutlineButton(surface, draw::FontRef{}, 0.0f, topLeft, size, nullptr,
-                      pal, state, style);
+                      pal, state, *chrome);
     const draw::Vec2 c{topLeft.x + size.x * 0.5f,
                        topLeft.y + size.y * 0.5f + style.labelOffsetY};
     const float r = std::min(size.x, size.y) * 0.30f;
-    const bool recArmed =
-        icon == Icon::Record && (state.selected || state.active);
     // The plain circle fills its whole box while every other glyph is angular,
     // so at equal radius the record ring reads bigger and lays down more ink:
     // pull the idle ring in.
@@ -1744,7 +1754,7 @@ void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
     ImU32 fg = state.disabled ? pal.textDim
                : visible(style.text) ? style.text : pal.text;
     if (recArmed && !state.disabled)
-        fg = pal.meterHot; // recording = the classic solid red disc
+        fg = IM_COL32(0, 0, 0, 255); // the black disc on the red button
     // Play is the solid action key; Record fills to the disc while armed;
     // everything else is the outline shape. thickness 0 = filled.
     const float t =

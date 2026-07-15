@@ -2286,17 +2286,17 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
     case VisualKind::OutlineIconButton: {
-        // outline chrome + a centred glyph at 60% height: drawOutlineButton
-        // already centres any string, so hand it the glyph in the icon font.
-        // 60% matches drawTransportButton's glyph (min(size) * 0.30 radius, so
-        // 0.60 of the height), which keeps an icon button and a transport key
-        // sitting in the same row reading at the same size.
+        // outline chrome + a centred glyph sized to the transport glyph BOX:
+        // drawTransportButton blits its icon into 2.4 * (0.30 * min(size)) =
+        // 0.72 of the height, so the same factor keeps an icon button and a
+        // transport key in one row reading at one size (and, at the 18px house
+        // row, lands near the 16px atlas bake instead of a blurry downscale).
         paint::ControlState st = state;
         st.selected = st.selected || style.lit ||
                       checked(node, sem);
         draw::ImGuiSurface s(drawList);
         paint::drawOutlineButton(s, draw::fontRef(iconFont(style.iconFont)),
-                                 bounds.h * 0.60f, topLeftDraw(bounds),
+                                 bounds.h * 0.72f, topLeftDraw(bounds),
                                  sizeOfDraw(bounds), style.glyph.c_str(), pal,
                                  st, style.outlineButtonStyle);
         break;
@@ -2611,10 +2611,10 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         paint::ControlState st = state;
         st.selected = st.selected || style.lit ||
                       checked(node, sem);
-        // 60% glyph height, matching drawTransportButton (min(size) * 0.30
-        // radius) and the ImGui path above.
+        // 0.72 glyph height = the transport glyph box (2.4 * 0.30 * min(size)),
+        // matching the ImGui path above.
         paint::drawOutlineButton(surface, iconFontRef(style.iconFont, context),
-                                 bounds.h * 0.60f, topLeftDraw(bounds),
+                                 bounds.h * 0.72f, topLeftDraw(bounds),
                                  sizeOfDraw(bounds), style.glyph.c_str(), pal,
                                  st, style.outlineButtonStyle);
         break;
