@@ -1713,13 +1713,21 @@ void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
     const draw::Vec2 c{topLeft.x + size.x * 0.5f,
                        topLeft.y + size.y * 0.5f - 1.0f + style.labelOffsetY};
     const float r = std::min(size.x, size.y) * 0.30f;
-    const ImU32 fg = state.disabled ? pal.textDim
-                     : visible(style.text) ? style.text : pal.text;
-    // Record fills to a solid disc while engaged (armed); every other transport
-    // glyph is the outline shape. thickness 0 = filled.
     const bool recArmed =
         icon == Icon::Record && (state.selected || state.active);
-    drawTransportGlyph(surface, icon, c, r, fg, recArmed ? 0.0f : glyphThickness);
+    // The plain circle fills its whole box while every other glyph is angular,
+    // so at equal radius the record ring reads bigger and lays down more ink:
+    // pull the idle ring in.
+    const float rr = icon == Icon::Record && !recArmed ? r * 0.85f : r;
+    ImU32 fg = state.disabled ? pal.textDim
+               : visible(style.text) ? style.text : pal.text;
+    if (recArmed && !state.disabled)
+        fg = pal.meterHot; // recording = the classic solid red disc
+    // Play is the solid action key; Record fills to the disc while armed;
+    // everything else is the outline shape. thickness 0 = filled.
+    const float t =
+        (icon == Icon::Play || recArmed) ? 0.0f : glyphThickness;
+    drawTransportGlyph(surface, icon, c, rr, fg, t);
 }
 
 void drawTransportButton(ImDrawList* dl, Icon icon, const ImVec2& topLeft,
