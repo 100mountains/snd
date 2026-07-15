@@ -224,6 +224,15 @@ bool checked(const Node& node, const SemanticNode* sem)
         hasState(states, SemanticState::Pressed)) {
         return true;
     }
+    // A combo's index and a slider's quantity are a selection/amount, not an
+    // on/off state. Reading them as "checked" lights the engaged border on any
+    // such control whose value sits in the top half of its range -- a 4/4 time
+    // signature, or a tempo past the middle of 20..300. Toggles, checkboxes and
+    // LEDs do read their value this way, so they are untouched. derivedStates()
+    // already limits its own Checked derivation to Role::Toggle.
+    const Role valueRole = sem && sem->role != Role::None ? sem->role : node.role();
+    if (valueRole == Role::ComboBox || valueRole == Role::Slider)
+        return false;
     if (node.valueBinding())
         return normalizedValue(node, sem) >= 0.5;
     const ValueRange& range = sem ? sem->value : node.semantics().value;
