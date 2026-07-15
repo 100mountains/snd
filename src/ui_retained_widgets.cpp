@@ -2277,14 +2277,17 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         break;
     }
     case VisualKind::OutlineIconButton: {
-        // outline chrome + a centred glyph at 70% height: drawOutlineButton
-        // already centres any string, so hand it the glyph in the icon font
+        // outline chrome + a centred glyph at 60% height: drawOutlineButton
+        // already centres any string, so hand it the glyph in the icon font.
+        // 60% matches drawTransportButton's glyph (min(size) * 0.30 radius, so
+        // 0.60 of the height), which keeps an icon button and a transport key
+        // sitting in the same row reading at the same size.
         paint::ControlState st = state;
         st.selected = st.selected || style.lit ||
                       checked(node, sem);
         draw::ImGuiSurface s(drawList);
         paint::drawOutlineButton(s, draw::fontRef(iconFont(style.iconFont)),
-                                 bounds.h * 0.70f, topLeftDraw(bounds),
+                                 bounds.h * 0.60f, topLeftDraw(bounds),
                                  sizeOfDraw(bounds), style.glyph.c_str(), pal,
                                  st, style.outlineButtonStyle);
         break;
