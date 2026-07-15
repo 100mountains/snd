@@ -642,6 +642,14 @@ void Node::setEnabled(bool enabled)
     markDirty();
 }
 
+void Node::setCursorStyle(CursorStyle style)
+{
+    if (cursorStyle_ == style)
+        return;
+    cursorStyle_ = style;
+    markDirty();
+}
+
 void Node::setFocusable(bool focusable)
 {
     if (focusable_ == focusable)
@@ -1202,7 +1210,13 @@ bool Tree::dispatch(const Event& event)
             focusedId_ = target->id();
             target->setFocused(true, false);
         }
-        target->handleEvent(event);
+        // the press bubbles like the wheel: the deepest hit gets first refusal,
+        // then each ancestor, so a container catches presses that land on space
+        // its children ignored (a title bar stays draggable by the gaps between
+        // its controls). Press/focus stay on the hit node either way.
+        for (Node* n = target; n != nullptr; n = n->parent())
+            if (isInteractive(*n) && n->handleEvent(event))
+                break;
         return true;
     }
 
