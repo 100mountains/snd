@@ -1214,9 +1214,20 @@ bool Tree::dispatch(const Event& event)
         // then each ancestor, so a container catches presses that land on space
         // its children ignored (a title bar stays draggable by the gaps between
         // its controls). Press/focus stay on the hit node either way.
-        for (Node* n = target; n != nullptr; n = n->parent())
-            if (isInteractive(*n) && n->handleEvent(event))
+        //
+        // It only bubbles past nodes that cannot act on a press at all. A
+        // control that fires on release (onActivate) or takes focus reports
+        // nothing here on the way down, but it still owns its click -- without
+        // this a button would run its action AND hand the same press to the
+        // container behind it (window drag + click from one tap).
+        for (Node* n = target; n != nullptr; n = n->parent()) {
+            if (!isInteractive(*n))
+                continue;
+            if (n->handleEvent(event))
                 break;
+            if (n->onActivate_ || n->focusable_)
+                break;
+        }
         return true;
     }
 
