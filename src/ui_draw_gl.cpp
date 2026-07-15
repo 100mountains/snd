@@ -429,7 +429,14 @@ void OpenGLSurface::strokeRect(Vec2 min, Vec2 max, Color color,
                                float rounding, float thickness,
                                CornerFlags corners)
 {
-    const std::vector<Vec2> pts = roundedRectPath(min, max, rounding, corners);
+    // Path inset half a pixel to match ImDrawList::AddRect, so a 1px border's
+    // ink lands inside the rect on both backends. Centred on the edge instead,
+    // the outer half either spills past the box or -- for widgets that clip to
+    // their bounds -- gets shaved off, and the same border reads two different
+    // weights depending on who drew it.
+    const std::vector<Vec2> pts = roundedRectPath(
+        {min.x + 0.5f, min.y + 0.5f}, {max.x - 0.5f, max.y - 0.5f}, rounding,
+        corners);
     polyline(pts.data(), (int)pts.size(), color, true, thickness);
 }
 
