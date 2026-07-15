@@ -2611,8 +2611,10 @@ void PaintRenderer::renderNode(const Node& node, const SemanticMap* semantics,
         paint::ControlState st = state;
         st.selected = st.selected || style.lit ||
                       checked(node, sem);
+        // 60% glyph height, matching drawTransportButton (min(size) * 0.30
+        // radius) and the ImGui path above.
         paint::drawOutlineButton(surface, iconFontRef(style.iconFont, context),
-                                 bounds.h * 0.70f, topLeftDraw(bounds),
+                                 bounds.h * 0.60f, topLeftDraw(bounds),
                                  sizeOfDraw(bounds), style.glyph.c_str(), pal,
                                  st, style.outlineButtonStyle);
         break;
