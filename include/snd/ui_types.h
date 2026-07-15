@@ -63,6 +63,7 @@ enum class Icon {
     Waveform,
     Spectrum,
     Follow,
+    Settings, // the cog: chrome/menu key drawn with the transport vocabulary
 };
 
 struct SvgBitmap {

@@ -1550,6 +1550,8 @@ const char* transportIconSvg(Icon icon)
         return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='19 20 9 12 19 4 19 20'/><line x1='5' x2='5' y1='19' y2='5'/></svg>)SVG";
     case Icon::SkipToEnd: // lucide "skip-forward"
         return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='5 4 15 12 5 20 5 4'/><line x1='19' x2='19' y1='5' y2='19'/></svg>)SVG";
+    case Icon::Settings: // lucide "settings"
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z'/><circle cx='12' cy='12' r='3'/></svg>)SVG";
     default:
         return nullptr;
     }
@@ -1580,8 +1582,9 @@ const SvgTexture* transportIconTexture(Icon icon, bool filled = false)
 void loadTransportIcons()
 {
     auto& cache = transportIconCache();
-    const Icon icons[] = {Icon::Record, Icon::Play,        Icon::Loop,
-                          Icon::Stop,   Icon::SkipToStart, Icon::SkipToEnd};
+    const Icon icons[] = {Icon::Record,      Icon::Play,      Icon::Loop,
+                          Icon::Stop,        Icon::SkipToStart,
+                          Icon::SkipToEnd,   Icon::Settings};
     for (Icon ic : icons) {
         if (cache.count(transportIconKey(ic, false)))
             continue; // idempotent; textures live for the program
@@ -1710,6 +1713,15 @@ void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
             const float h = r * (0.2f + 0.8f * ft);
             surface.line({x, c.y + r * 0.9f},
                          {x, c.y + r * 0.9f - h * 1.8f}, fg, 1.5f);
+        }
+        break;
+    case Icon::Settings: // gear stand-in: hub ring + eight spokes
+        surface.strokeCircle(c, r * 0.4f, fg, 24, t);
+        for (int i = 0; i < 8; ++i) {
+            const float a = (float)i * (kPi / 4.0f);
+            const draw::Vec2 d{std::cos(a), std::sin(a)};
+            surface.line({c.x + d.x * r * 0.6f, c.y + d.y * r * 0.6f},
+                         {c.x + d.x * r * 0.95f, c.y + d.y * r * 0.95f}, fg, t);
         }
         break;
     }
