@@ -1520,6 +1520,21 @@ namespace {
 // the one master to any state colour. Rasterised to a texture once by
 // loadTransportIcons and blitted below -- crisp at small sizes, where a
 // hand-stroked thin polyline's anti-alias fringe would swallow a ~13px icon.
+// Filled variants for the glyphs that draw solid: the play action key and the
+// armed record disc. Rasterised like the outline masters so the filled shapes
+// get the same anti-aliased edge (a raw GL fillTriangle/fillCircle has none).
+const char* transportIconFilledSvg(Icon icon)
+{
+    switch (icon) {
+    case Icon::Play:
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='#fff' stroke='none'><polygon points='6 3 20 12 6 21'/></svg>)SVG";
+    case Icon::Record: // the armed disc, 0.82 of the ring radius
+        return R"SVG(<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='#fff' stroke='none'><circle cx='12' cy='12' r='8.2'/></svg>)SVG";
+    default:
+        return nullptr;
+    }
+}
+
 const char* transportIconSvg(Icon icon)
 {
     switch (icon) {
@@ -1546,10 +1561,16 @@ std::unordered_map<int, SvgTexture>& transportIconCache()
     return cache;
 }
 
-const SvgTexture* transportIconTexture(Icon icon)
+// Outline and filled masters share the cache; filled keys sit in the odd slots.
+int transportIconKey(Icon icon, bool filled)
+{
+    return static_cast<int>(icon) * 2 + (filled ? 1 : 0);
+}
+
+const SvgTexture* transportIconTexture(Icon icon, bool filled = false)
 {
     auto& cache = transportIconCache();
-    auto it = cache.find(static_cast<int>(icon));
+    auto it = cache.find(transportIconKey(icon, filled));
     if (it != cache.end() && it->second.id != 0)
         return &it->second;
     return nullptr;
@@ -1562,11 +1583,13 @@ void loadTransportIcons()
     const Icon icons[] = {Icon::Record, Icon::Play,        Icon::Loop,
                           Icon::Stop,   Icon::SkipToStart, Icon::SkipToEnd};
     for (Icon ic : icons) {
-        if (cache.count(static_cast<int>(ic)))
+        if (cache.count(transportIconKey(ic, false)))
             continue; // idempotent; textures live for the program
         if (const char* svg = transportIconSvg(ic))
-            cache[static_cast<int>(ic)] =
+            cache[transportIconKey(ic, false)] =
                 loadSvgTexture(svg, 40); // 2x-crisp master; tinted+downsampled at draw
+        if (const char* svg = transportIconFilledSvg(ic))
+            cache[transportIconKey(ic, true)] = loadSvgTexture(svg, 40);
     }
 }
 
@@ -1583,18 +1606,17 @@ void drawTransportGlyph(draw::Surface& surface, Icon icon, draw::Vec2 c,
                         float r, ImU32 fg, float thickness)
 {
     const bool outline = thickness > 0.0f;
-    // Crisp path: blit the Lucide SVG rasterised at init (loadTransportIcons).
-    // The full 24-unit viewBox spans 2.4r, matching the procedural P() mapping
-    // below, and the tint recolours the white master to the state colour. Record
-    // armed (!outline) still draws the filled disc in the switch. Falls back to
-    // procedural stroking when no texture is loaded (headless/no GL).
-    if (outline) {
-        if (const SvgTexture* tex = transportIconTexture(icon)) {
-            const float h = 1.2f * r;
-            surface.image((draw::TextureRef)tex->id, {c.x - h, c.y - h},
-                          {c.x + h, c.y + h}, fg);
-            return;
-        }
+    // Crisp path: blit the Lucide SVG rasterised at init (loadTransportIcons) --
+    // the outline master, or the filled one for solid glyphs (play, the armed
+    // record disc). The full 24-unit viewBox spans 2.4r, matching the
+    // procedural P() mapping below, and the tint recolours the white master to
+    // the state colour. Falls back to procedural stroking when no texture is
+    // loaded (headless/no GL).
+    if (const SvgTexture* tex = transportIconTexture(icon, !outline)) {
+        const float h = 1.2f * r;
+        surface.image((draw::TextureRef)tex->id, {c.x - h, c.y - h},
+                      {c.x + h, c.y + h}, fg);
+        return;
     }
     const float t = outline ? thickness : 2.0f;
     // Map Lucide's 24x24 viewBox (origin at its centre 12,12) onto this glyph,
@@ -1711,7 +1733,7 @@ void drawTransportButton(draw::Surface& surface, Icon icon, draw::Vec2 topLeft,
     drawOutlineButton(surface, draw::FontRef{}, 0.0f, topLeft, size, nullptr,
                       pal, state, style);
     const draw::Vec2 c{topLeft.x + size.x * 0.5f,
-                       topLeft.y + size.y * 0.5f - 1.0f + style.labelOffsetY};
+                       topLeft.y + size.y * 0.5f + style.labelOffsetY};
     const float r = std::min(size.x, size.y) * 0.30f;
     const bool recArmed =
         icon == Icon::Record && (state.selected || state.active);
