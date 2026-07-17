@@ -157,6 +157,12 @@ const StbFontAtlas::Glyph* glyphInFont(const StbFontAtlas::Font& font,
 
 } // namespace
 
+void StbFontAtlas::setBaseFont(std::string nameOrPath, float sizePx)
+{
+    baseFontName_ = std::move(nameOrPath);
+    baseFontSize_ = sizePx;
+}
+
 bool StbFontAtlas::build(std::string* error)
 {
     LoadedFont base;
@@ -167,13 +173,19 @@ bool StbFontAtlas::build(std::string* error)
     // size (a thinner face usually wants a point or two more than the 13px the
     // default bitmap face is drawn for). Both exist so a face can be tried
     // without a rebuild; unset = the built-in default.
-    const char* faceEnv = std::getenv("SND_UI_FONT");
-    const char* face = faceEnv && faceEnv[0] ? faceEnv : "ProggyClean.ttf";
+    std::string face = "ProggyClean.ttf";
     float baseSize = kBaseSize;
+    if (const char* faceEnv = std::getenv("SND_UI_FONT"); faceEnv && faceEnv[0])
+        face = faceEnv;
     if (const char* sizeEnv = std::getenv("SND_UI_FONT_SIZE"))
         if (const float parsed = (float)std::atof(sizeEnv); parsed > 0.0f)
             baseSize = parsed;
-    if (!loadFontFile(face, base, error) ||
+    // A runtime setBaseFont() override (the app's font picker) wins over env.
+    if (!baseFontName_.empty())
+        face = baseFontName_;
+    if (baseFontSize_ > 0.0f)
+        baseSize = baseFontSize_;
+    if (!loadFontFile(face.c_str(), base, error) ||
         !loadFontFile(FONT_ICON_FILE_NAME_MD, material, error) ||
         !loadFontFile(FONT_ICON_FILE_NAME_LC, lucide, error)) {
         return false;

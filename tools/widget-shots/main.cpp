@@ -427,6 +427,30 @@ int main(int argc, char** argv)
         }
     });
 
+    // A synth-panel specimen: mixed-case prose and the ALL-CAPS short labels a
+    // module panel is actually built from, so a face can be judged on the words
+    // it will really have to render.
+    reg("specimen", 540, 26, [&pal, uiFont, fs](draw::Surface& s, float w, float h) {
+        (void)w;
+        const float y = (h - fs) * 0.5f;
+        s.text(uiFont, fs, {4.0f, y}, snd::ui::draw::rgba(226, 231, 239),
+               "bob BOB - Filter cutoff 12.4 kHz, resonance 0.62");
+        s.text(uiFont, fs, {320.0f, y}, snd::ui::draw::rgba(226, 231, 239),
+               "OSC LFO ENV VCA CUTOFF RES ATTACK");
+    });
+
+    // A label strip for contact sheets: SND_SHOT_LABEL rendered flush left.
+    // Rendered in a separate run with a known-legible face, so a row stays
+    // identifiable even when the face under test is too faint to read itself.
+    if (const char* labelText = std::getenv("SND_SHOT_LABEL")) {
+        std::string label = labelText;
+        reg("label", 230, 26, [label, &pal, uiFont](draw::Surface& s, float w, float h) {
+            (void)w;
+            s.text(uiFont, 13.0f, {4.0f, (h - 13.0f) * 0.5f},
+                   snd::ui::draw::rgba(210, 216, 228), label.c_str());
+        });
+    }
+
     // ---- render each shot to an FBO and dump RGBA -------------------------
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     GLuint fbo = 0, tex = 0;

@@ -39,6 +39,14 @@ public:
 
     void setTitle(const std::string& title);
     void setClearColor(draw::Color color);
+
+    // Swap the UI text face at runtime: a filename in third_party/fonts or an
+    // absolute path, and a bake size (<=0 keeps the default). Rebuilds the font
+    // atlas and re-uploads the texture; the app should relayout its tree after,
+    // since text metrics change. Returns false if the face could not be loaded
+    // (the previous atlas stays intact). uiFont() reports the current override.
+    bool setUiFont(const std::string& nameOrPath, float sizePx = 0.0f);
+    std::string uiFont() const;
     draw::FrameContext frameContext() const;
     std::vector<std::string> takeDroppedFiles();
 

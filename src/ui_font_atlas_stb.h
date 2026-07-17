@@ -36,6 +36,13 @@ public:
     bool upload();
     void destroyGl();
 
+    // Override the UI text face for the next build(): a filename in
+    // third_party/fonts or an absolute path, and a bake size (<=0 keeps the
+    // default). Empty name clears the override back to the env/default. A live
+    // switch is destroyGl() + build() + upload() with the GL context current.
+    void setBaseFont(std::string nameOrPath, float sizePx);
+    const std::string& baseFont() const { return baseFontName_; }
+
     FontRef defaultFontRef() const;
     FontRef iconFontLucideRef() const;
 
@@ -57,6 +64,8 @@ private:
     Font base_;
     Font material_;
     Font lucide_;
+    std::string baseFontName_; // "" = env/default
+    float baseFontSize_ = 0.0f; // <=0 = default
     int width_ = 0;
     int height_ = 0;
     std::vector<unsigned char> alpha_;

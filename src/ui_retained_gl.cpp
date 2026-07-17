@@ -667,6 +667,29 @@ void GlWindow::setClearColor(draw::Color color)
     impl_->clearColor = color;
 }
 
+bool GlWindow::setUiFont(const std::string& nameOrPath, float sizePx)
+{
+    if (!impl_->window)
+        return false;
+    glfwMakeContextCurrent(impl_->window);
+    // Keep the current atlas usable if the new face fails to load: build into a
+    // fresh atlas, and only swap the live one (and its GL texture) on success.
+    draw::StbFontAtlas probe;
+    probe.setBaseFont(nameOrPath, sizePx);
+    if (!probe.build(nullptr))
+        return false;
+    impl_->fonts.setBaseFont(nameOrPath, sizePx);
+    impl_->fonts.destroyGl();
+    impl_->fonts.build(nullptr);
+    impl_->fonts.upload();
+    return true;
+}
+
+std::string GlWindow::uiFont() const
+{
+    return impl_->fonts.baseFont();
+}
+
 void GlWindow::minimize()
 {
     if (impl_ && impl_->window)
