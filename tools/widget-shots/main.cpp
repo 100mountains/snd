@@ -388,6 +388,45 @@ int main(int argc, char** argv)
     reg("graphNeo", 360, 190, graph(paint::GraphSurfaceStyle::Backdrop::Grid));
     reg("graphAurora", 360, 190, graph(paint::GraphSurfaceStyle::Backdrop::Aurora));
 
+    // The bob3 chrome row, for comparing UI text faces (SND_UI_FONT): transport
+    // keys, the numeric readouts that count live, and the page tabs.
+    reg("chromerow", 560, 26, [&pal, uiFont, fs](draw::Surface& s, float w, float h) {
+        (void)w;
+        paint::ControlState st;
+        paint::OutlineButtonStyle cs;
+        cs.fill = snd::ui::draw::rgba(10, 13, 18);
+        cs.border = snd::ui::draw::rgba(64, 73, 88);
+        cs.text = snd::ui::draw::rgba(226, 231, 239);
+        const float bh = 18.0f;
+        const float y = (h - bh) * 0.5f;
+        float x = 2.0f;
+        auto key = [&](snd::ui::Icon ic) {
+            paint::drawTransportButton(s, ic, {x, y}, {32.0f, bh}, pal, st, cs, 1.6f);
+            x += 36.0f;
+        };
+        key(snd::ui::Icon::Settings);
+        key(snd::ui::Icon::Record);
+        key(snd::ui::Icon::Play);
+        key(snd::ui::Icon::Loop);
+        auto box = [&](const char* text, float bw) {
+            paint::drawOutlineButton(s, uiFont, fs, {x, y}, {bw, bh}, text, pal, st, cs);
+            x += bw + 4.0f;
+        };
+        box("120", 42.0f);
+        box("4/4", 42.0f);
+        box("1.1", 42.0f);
+        x += 6.0f;
+        const char* tabs[] = {"Graph", "Murk", "Perform", "Mixer", "SEQ"};
+        const float tabW[] = {48.0f, 44.0f, 62.0f, 52.0f, 40.0f};
+        for (int i = 0; i < 5; ++i) {
+            paint::ControlState ts;
+            ts.selected = i == 0;
+            paint::drawOutlineButton(s, uiFont, fs, {x, y}, {tabW[i], bh}, tabs[i], pal,
+                                     ts, cs);
+            x += tabW[i] + 4.0f;
+        }
+    });
+
     // ---- render each shot to an FBO and dump RGBA -------------------------
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     GLuint fbo = 0, tex = 0;

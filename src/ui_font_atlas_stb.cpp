@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -40,6 +41,9 @@ std::filesystem::path sourceRoot()
 std::vector<std::filesystem::path> candidateFontPaths(const char* name)
 {
     std::vector<std::filesystem::path> paths;
+    // An absolute path (SND_UI_FONT pointing at a system/user font) wins.
+    if (std::filesystem::path direct(name); direct.is_absolute())
+        paths.push_back(direct);
     paths.push_back(sourceRoot() / "third_party" / "fonts" / name);
     paths.push_back(std::filesystem::current_path() / "third_party" / "fonts" / name);
     paths.push_back(std::filesystem::current_path().parent_path() /
@@ -158,7 +162,18 @@ bool StbFontAtlas::build(std::string* error)
     LoadedFont base;
     LoadedFont material;
     LoadedFont lucide;
-    if (!loadFontFile("ProggyClean.ttf", base, error) ||
+    // SND_UI_FONT overrides the UI text face: a filename in third_party/fonts,
+    // or an absolute path to any .ttf/.otf. SND_UI_FONT_SIZE overrides the bake
+    // size (a thinner face usually wants a point or two more than the 13px the
+    // default bitmap face is drawn for). Both exist so a face can be tried
+    // without a rebuild; unset = the built-in default.
+    const char* faceEnv = std::getenv("SND_UI_FONT");
+    const char* face = faceEnv && faceEnv[0] ? faceEnv : "ProggyClean.ttf";
+    float baseSize = kBaseSize;
+    if (const char* sizeEnv = std::getenv("SND_UI_FONT_SIZE"))
+        if (const float parsed = (float)std::atof(sizeEnv); parsed > 0.0f)
+            baseSize = parsed;
+    if (!loadFontFile(face, base, error) ||
         !loadFontFile(FONT_ICON_FILE_NAME_MD, material, error) ||
         !loadFontFile(FONT_ICON_FILE_NAME_LC, lucide, error)) {
         return false;
@@ -174,10 +189,16 @@ bool StbFontAtlas::build(std::string* error)
             *error = "SND UI font atlas could not initialise stb_truetype packer";
         return false;
     }
+    // Oversample the TEXT face 2x2: stb rasterises it at twice the resolution
+    // per axis and the packed quad carries sub-pixel positioning, which is what
+    // keeps thin stems from smearing to grey at UI sizes. The icon faces stay
+    // at 1x -- they are ~2000-glyph ranges, where 4x the atlas area buys little
+    // (icons are blocky shapes, not hairlines) and risks an atlas overflow.
+    stbtt_PackSetOversampling(&ctx, 2, 2);
+    const bool baseOk = packFont(ctx, base, baseSize, 32, 95, base_, error);
     stbtt_PackSetOversampling(&ctx, 1, 1);
-
     const bool ok =
-        packFont(ctx, base, kBaseSize, 32, 95, base_, error) &&
+        baseOk &&
         packFont(ctx, material, kIconSize, ICON_MIN_MD,
                  ICON_MAX_16_MD - ICON_MIN_MD + 1, material_, error) &&
         packFont(ctx, lucide, kIconSize, ICON_MIN_LC,
