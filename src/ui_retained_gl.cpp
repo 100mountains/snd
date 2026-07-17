@@ -166,6 +166,11 @@ struct GlWindow::Impl {
     double dragStartCursorX = 0.0, dragStartCursorY = 0.0; // window-relative cursor at drag start
     bool fullscreen = false;
     int savedX = 0, savedY = 0, savedW = 0, savedH = 0;    // windowed geometry, for fullscreen restore
+    GLFWcursor* crosshairCursor = nullptr;
+    GLFWcursor* handCursor = nullptr;
+    GLFWcursor* resizeHorizontalCursor = nullptr;
+    CursorStyle activeCursor = CursorStyle::Default;
+    bool mouseCaptured = false;
 
     static Impl* from(GLFWwindow* w)
     {
@@ -211,6 +216,53 @@ struct GlWindow::Impl {
         event.button = button;
         applyMods(event, modifierMask);
         return event;
+    }
+
+    GLFWcursor* cursorFor(CursorStyle style)
+    {
+        if (style == CursorStyle::Crosshair) {
+            if (!crosshairCursor)
+                crosshairCursor = glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+            return crosshairCursor;
+        }
+        if (style == CursorStyle::Hand) {
+            if (!handCursor)
+                handCursor = glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+            return handCursor;
+        }
+        if (style == CursorStyle::ResizeHorizontal) {
+            if (!resizeHorizontalCursor)
+                resizeHorizontalCursor = glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+            return resizeHorizontalCursor;
+        }
+        return nullptr;
+    }
+
+    void updateCursor(const Tree& tree)
+    {
+        if (!window || mouseCaptured)
+            return;
+        const Node* hovered = tree.hovered();
+        const CursorStyle next = hovered ? hovered->cursorStyle()
+                                         : CursorStyle::Default;
+        if (next == activeCursor)
+            return;
+        activeCursor = next;
+        glfwSetCursor(window, cursorFor(next));
+    }
+
+    void destroyCursors()
+    {
+        if (crosshairCursor)
+            glfwDestroyCursor(crosshairCursor);
+        if (handCursor)
+            glfwDestroyCursor(handCursor);
+        if (resizeHorizontalCursor)
+            glfwDestroyCursor(resizeHorizontalCursor);
+        crosshairCursor = nullptr;
+        handCursor = nullptr;
+        resizeHorizontalCursor = nullptr;
+        activeCursor = CursorStyle::Default;
     }
 
     int clickCountFor(int button, Vec2 pos)
@@ -474,6 +526,7 @@ void GlWindow::destroy()
     glfwMakeContextCurrent(impl_->window);
     impl_->surface.destroyGl();
     impl_->fonts.destroyGl();
+    impl_->destroyCursors();
     GLFWwindow* window = impl_->window;
     glfwDestroyWindow(window);
     impl_->window = nullptr;
@@ -558,6 +611,7 @@ bool GlWindow::beginFrame(Tree& tree, PaintRenderer& renderer)
         }
         consumed = tree.dispatch(event) || consumed;
     }
+    impl_->updateCursor(tree);
     impl_->events.clear();
     if (consumed) {
         changed = tree.refreshBoundValues() || changed;
@@ -660,9 +714,15 @@ void GlWindow::toggleFullscreen()
 
 void GlWindow::setMouseCaptured(bool captured)
 {
-    if (impl_ && impl_->window)
+    if (impl_ && impl_->window) {
+        impl_->mouseCaptured = captured;
         glfwSetInputMode(impl_->window, GLFW_CURSOR,
                          captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+        if (!captured) {
+            glfwSetCursor(impl_->window, nullptr);
+            impl_->activeCursor = CursorStyle::Default;
+        }
+    }
 }
 
 void GlWindow::beginNativeDrag()

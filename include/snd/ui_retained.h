@@ -181,6 +181,13 @@ enum class Align {
     Stretch,
 };
 
+enum class CursorStyle {
+    Default,
+    Crosshair,
+    Hand,
+    ResizeHorizontal,
+};
+
 enum class LengthMode {
     Intrinsic,
     Fixed,
@@ -376,6 +383,9 @@ public:
     void setEnabled(bool enabled);
     bool enabled() const { return enabled_; }
 
+    void setCursorStyle(CursorStyle style);
+    CursorStyle cursorStyle() const { return cursorStyle_; }
+
     void setFocusable(bool focusable);
     bool focusable() const { return focusable_; }
     bool focused() const { return focused_; }
@@ -442,6 +452,7 @@ private:
     float contentHeight_ = 0.0f;
     float viewHeight_ = 0.0f;
     bool enabled_ = true;
+    CursorStyle cursorStyle_ = CursorStyle::Default;
     bool focusable_ = false;
     bool focused_ = false;
     bool focusVisible_ = false;
